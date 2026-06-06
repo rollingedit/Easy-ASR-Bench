@@ -33,9 +33,23 @@ It runs every selected ASR model on the same normalized audio and the same chunk
 
 Precision and quantization labels such as INT4, INT5, INT6, INT8, FP4, NF4, NVFP4/NVP4, FP8, BF8, BF16/bfloat16, FP16, FP32, Q4/Q5/Q6/Q8, K_M/K_S variants, and IQ variants are detected for grouping/reporting when the underlying model backend supports them. Easy ASR Bench does not invent a runtime for an unsupported model format; it labels the model accurately and installs the dependency group for the matching backend.
 
+For complete Hugging Face Safetensors folders that do not look like text-generation LLMs, Easy ASR Bench allows a runtime probe through the Transformers ASR pipeline instead of blocking only because the metadata is unfamiliar. If the model cannot actually run, that failure is captured in the report with the traceback and the rest of the batch continues.
+
 ### Blocked By Default
 
 - OpenAI Whisper `.pt` checkpoint files are detected, but blocked by default because `.pt` uses pickle-backed loading. They run only when a checksum is explicitly allowlisted by the app or when you deliberately enable unsafe trusted-file loading in `config.json`.
+
+### Recognized But Not Runnable Yet
+
+The scanner also recognizes common ASR packages that are real model formats but do not have a packaged runtime adapter yet. These are shown with the expected missing files and a recommendation instead of being hidden as unknown files.
+
+- NeMo `.nemo` archives
+- FunASR folders with `model.pt`, `config.yaml`, `am.mvn`, and tokenizer/BPE files
+- sherpa-onnx Whisper packages with matching encoder, decoder, tokens, and optional weights
+- Split Whisper/Transformers.js ONNX, Granite-style split ONNX, Qwen split ONNX, and ORT edge graph packages
+- Core ML / WhisperKit `.mlmodelc` packages, which are not runnable in this Windows-first app
+- Audio/ASR GGUF packages that require a matching `mmproj` file; these are not the same as GGUF text reference LLMs
+- Sharded Hugging Face Safetensors folders, including missing shard detection from `model.safetensors.index.json`
 
 ### GGUF Reference Models
 
@@ -58,6 +72,20 @@ For local LLMs, a `.gguf` file is the required runnable artifact. The tokenizer 
 7. Choose ASR models and precision buckets.
 8. Choose an optional LLM reference workflow.
 9. Open the report folder created under `Output`.
+
+### Hugging Face Model Download
+
+In the interactive model menu, choose `D` to paste a Hugging Face model link or `owner/model` repo id. Repo links, `/tree/main` links, nested folder links, file links, and links with extra trailing slashes are accepted. Easy ASR Bench inspects the repo file list first and walks back to the nearest parent model package when a pasted folder is not itself a model folder.
+
+It downloads the selected runnable package plus required metadata files such as config, tokenizer, processor, ONNX sidecars, Safetensors shard indexes, shard files for the chosen index, or matching GGUF `mmproj` files. It does not download every weight variant in the repo by default.
+
+For large or unknown layouts, Easy ASR Bench shows the file count and asks before downloading. Unknown folders can be downloaded for inspection, but they are not treated as runnable unless the scanner recognizes them after download.
+
+After a download, the app rescans the package. If it still looks incomplete and exact missing-file matches exist in the Hugging Face repo, it lists those files and asks before downloading them. Existing local files are skipped when the same package is downloaded again.
+
+If the missing requirement is ambiguous, the app reports it instead of guessing. It also writes `hf_missing_file_request.json` and `hf_missing_file_prompt.txt` beside the package. Those files can be pasted into a local or external LLM to get structured recommendations, but recommendations must use exact filenames from the repo file list.
+
+The downloader has been stress-checked against representative real Hugging Face repos with GGUF quant folders, split GGUF parts, Safetensors shards, ONNX sidecars, and mixed ASR/LLM layouts. That is not a promise that every future repo layout is known; unknown layouts are handled conservatively and should be reviewed rather than silently treated as runnable.
 
 ## Model Folder Examples
 

@@ -76,3 +76,17 @@ def detect_safetensors_folder_precision(folder: Path) -> tuple[str, str]:
         except Exception:
             pass
     return detect_from_path(folder)
+
+
+def indexed_safetensor_missing_files(folder: Path) -> list[str]:
+    index = folder / "model.safetensors.index.json"
+    if not index.exists():
+        return []
+    try:
+        data = json.loads(index.read_text(encoding="utf-8"))
+    except Exception:
+        return ["model.safetensors.index.json (parseable JSON)"]
+    weight_map = data.get("weight_map", {})
+    if not isinstance(weight_map, dict):
+        return ["model.safetensors.index.json weight_map"]
+    return sorted({name for name in weight_map.values() if isinstance(name, str) and not (folder / name).exists()})

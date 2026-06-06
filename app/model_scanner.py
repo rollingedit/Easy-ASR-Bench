@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .adapters import BUILTIN_ADAPTERS
 from .adapters.base import ModelCandidate
-from .precision_detector import detect_from_path, detect_safetensors_folder_precision
+from .precision_detector import detect_from_path, detect_safetensors_folder_precision, indexed_safetensor_missing_files
 
 
 ADAPTER_PRIORITY = {
@@ -42,6 +42,27 @@ TOKENIZER_FILES = {"tokenizer.json", "tokenizer.model", "tokenizer_config.json",
 
 def candidate_root(candidate: ModelCandidate) -> Path:
     return candidate.path.parent.resolve() if candidate.path.is_file() else candidate.path.resolve()
+
+
+def missing_names(root: Path, names: list[str]) -> list[str]:
+    return [name for name in names if not (root / name).exists()]
+
+
+def any_exists(root: Path, names: set[str]) -> bool:
+    return any((root / name).exists() for name in names)
+
+
+def external_data_missing_for(onnx_file: Path) -> list[Path]:
+    missing: list[Path] = []
+    data = onnx_file.with_name(onnx_file.name + "_data")
+    sidecars = list(onnx_file.parent.glob(onnx_file.name + "_data*"))
+    if not data.exists() and not sidecars and any(marker in onnx_file.name.lower() for marker in ["_fp16", "decoder_model_merged", "audio_encoder"]):
+        missing.append(data)
+    if onnx_file.name.lower().startswith("decoder_model_merged") and "_fp16" in onnx_file.name.lower():
+        extra = onnx_file.with_name(onnx_file.name + "_data_1")
+        if not extra.exists():
+            missing.append(extra)
+    return missing
 
 
 def looks_like_text_llm(config_path: Path) -> bool:
@@ -103,11 +124,310 @@ def unsupported_text_llm_candidate(root: Path) -> ModelCandidate:
     )
 
 
+def unsupported_asr_candidate(
+    root: Path,
+    *,
+    candidate_id: str,
+    display_name: str,
+    backend: str,
+    container_format: str,
+    precision: str = "unknown",
+    quantization_label: str = "Unknown precision",
+    missing_files: list[str] | None = None,
+    warning: str,
+    help_text: str,
+) -> ModelCandidate:
+    return ModelCandidate(
+        candidate_id=candidate_id.lower().replace(" ", "_"),
+        display_name=display_name,
+        family_name=display_name,
+        backend=backend,
+        container_format=container_format,
+        task="automatic-speech-recognition",
+        precision=precision,
+        quantization_label=quantization_label,
+        path=root,
+        adapter_name="none",
+        runnable=False,
+        category="recognized_unsupported_asr",
+        missing_files=missing_files or [],
+        warnings=[warning],
+        help_text=help_text,
+    )
+
+
+def recognize_special_package(path: Path, models_root: Path) -> ModelCandidate | None:
+    if path.is_file() and path.suffix.lower() == ".nemo":
+        raw, bucket = detect_from_path(path)
+        return unsupported_asr_candidate(
+            path,
+            candidate_id=f"nemo__{path.stem}",
+            display_name=path.name,
+            backend="nemo",
+            container_format="nemo",
+            precision=raw,
+            quantization_label=bucket,
+            warning="NeMo ASR archive detected, but NeMo runtime is not packaged in Easy ASR Bench.",
+            help_text="Use a Transformers/safetensors export, CTranslate2, ONNX manifest adapter, or add a dedicated NeMo adapter before this can run.",
+        )
+    if path.is_dir():
+        return (
+            recognize_fun_asr_package(path)
+            or recognize_ort_edge_package(path)
+            or recognize_coreml_package(path)
+            or recognize_sherpa_onnx_package(path)
+            or recognize_asr_gguf_projector_package(path)
+            or recognize_qwen_onnx_package(path)
+            or recognize_granite_split_onnx_package(path, models_root)
+            or recognize_transformersjs_whisper_onnx_package(path, models_root)
+        )
+    return None
+
+
+def recognize_fun_asr_package(root: Path) -> ModelCandidate | None:
+    names = {item.name.lower() for item in root.iterdir() if item.is_file()}
+    signal = {"config.yaml", "am.mvn", "configuration.json"} & names
+    if not signal and not any(name.endswith(".mvn") for name in names):
+        return None
+    token_present = any(name in names for name in {"tokens.txt", "bpe.model", "tokenizer.model", "vocab.txt", "vocab.json"})
+    missing = missing_names(root, ["model.pt", "config.yaml", "am.mvn"])
+    if not token_present:
+        missing.append("tokenizer/BPE file")
+    raw, bucket = detect_from_path(root)
+    return unsupported_asr_candidate(
+        root,
+        candidate_id=f"funasr__{root.name}",
+        display_name=root.name,
+        backend="funasr",
+        container_format="funasr",
+        precision=raw,
+        quantization_label=bucket,
+        missing_files=missing,
+        warning="FunASR-style ASR package detected, but FunASR runtime is not packaged in Easy ASR Bench.",
+        help_text="Keep model.pt, config.yaml, am.mvn, and tokenizer/BPE files together. Add a dedicated FunASR adapter before this can run.",
+    )
+
+
+def recognize_ort_edge_package(root: Path) -> ModelCandidate | None:
+    if not any(root.glob("*.ort")):
+        return None
+    required = ["preprocess.ort", "encode.ort", "uncached_decode.ort", "cached_decode.ort"]
+    missing = missing_names(root, required)
+    raw, bucket = detect_from_path(root)
+    return unsupported_asr_candidate(
+        root,
+        candidate_id=f"ort_edge__{root.name}",
+        display_name=root.name,
+        backend="onnxruntime",
+        container_format="ort",
+        precision=raw,
+        quantization_label=bucket,
+        missing_files=missing,
+        warning="ORT edge ASR package detected, but .ort runtime graphs are not supported by the current adapters.",
+        help_text="Keep preprocess.ort, encode.ort, uncached_decode.ort, and cached_decode.ort together. Add a dedicated ORT adapter before this can run.",
+    )
+
+
+def recognize_coreml_package(root: Path) -> ModelCandidate | None:
+    if not any(item.is_dir() and item.suffix.lower() == ".mlmodelc" for item in root.iterdir()):
+        return None
+    required = [
+        "AudioEncoder.mlmodelc",
+        "MelSpectrogram.mlmodelc",
+        "TextDecoder.mlmodelc",
+        "TextDecoderContextPrefill.mlmodelc",
+        "config.json",
+        "generation_config.json",
+    ]
+    missing = missing_names(root, required)
+    raw, bucket = detect_from_path(root)
+    return unsupported_asr_candidate(
+        root,
+        candidate_id=f"coreml__{root.name}",
+        display_name=root.name,
+        backend="coreml",
+        container_format="mlmodelc",
+        precision=raw,
+        quantization_label=bucket,
+        missing_files=missing,
+        warning="Core ML / WhisperKit ASR package detected, but this Windows-first app does not run Core ML models.",
+        help_text="Use a Windows-supported export such as HF safetensors, faster-whisper, whisper.cpp GGML, or ONNX.",
+    )
+
+
+def recognize_sherpa_onnx_package(root: Path) -> ModelCandidate | None:
+    files = [item.name for item in root.iterdir() if item.is_file()]
+    lower = {name.lower() for name in files}
+    if not any(name.endswith(("-encoder.onnx", "-encoder.int8.onnx", "-decoder.onnx", "-decoder.int8.onnx", "-tokens.txt")) for name in lower):
+        return None
+    prefixes = []
+    for name in files:
+        low = name.lower()
+        for marker in ["-encoder.int8.onnx", "-encoder.onnx", "-decoder.int8.onnx", "-decoder.onnx", "-tokens.txt"]:
+            if low.endswith(marker):
+                prefixes.append(name[: -len(marker)])
+    prefix = prefixes[0] if prefixes else root.name
+    has_encoder = any(name.lower().startswith(prefix.lower() + "-encoder") and name.lower().endswith(".onnx") for name in files)
+    has_decoder = any(name.lower().startswith(prefix.lower() + "-decoder") and name.lower().endswith(".onnx") for name in files)
+    has_tokens = any(name.lower().startswith(prefix.lower() + "-tokens") for name in files)
+    missing = []
+    if not has_encoder:
+        missing.append(f"{prefix}-encoder.onnx")
+    if not has_decoder:
+        missing.append(f"{prefix}-decoder.onnx")
+    if not has_tokens:
+        missing.append(f"{prefix}-tokens.txt")
+    raw, bucket = detect_from_path(root)
+    return unsupported_asr_candidate(
+        root,
+        candidate_id=f"sherpa_onnx__{root.name}",
+        display_name=root.name,
+        backend="sherpa-onnx",
+        container_format="onnx",
+        precision=raw,
+        quantization_label=bucket,
+        missing_files=missing,
+        warning="sherpa-onnx Whisper package detected, but sherpa-onnx runtime is not packaged in Easy ASR Bench.",
+        help_text="Keep matching encoder, decoder, tokens.txt, and any same-prefix .weights files together. Add a sherpa-onnx adapter before this can run.",
+    )
+
+
+def recognize_asr_gguf_projector_package(root: Path) -> ModelCandidate | None:
+    ggufs = [item for item in root.glob("*.gguf") if item.is_file()]
+    if not ggufs:
+        return None
+    projectors = [item for item in ggufs if item.name.lower().startswith(("mmproj", "mmproj-"))]
+    main_models = [item for item in ggufs if item not in projectors]
+    asr_named = any(any(signal in item.name.lower() for signal in ["asr", "audio", "whisper"]) for item in ggufs)
+    if not projectors and not asr_named:
+        return None
+    missing = []
+    if not main_models:
+        missing.append("main ASR/audio model .gguf")
+    if not projectors:
+        missing.append("matching mmproj .gguf")
+    raw, bucket = detect_from_path(main_models[0] if main_models else root)
+    return unsupported_asr_candidate(
+        root,
+        candidate_id=f"asr_gguf_mmproj__{root.name}",
+        display_name=root.name,
+        backend="llama.cpp",
+        container_format="gguf+mmproj",
+        precision=raw,
+        quantization_label=bucket,
+        missing_files=missing,
+        warning="Audio/multimodal ASR GGUF package detected, but current GGUF support is text reference/correction only.",
+        help_text="Keep the main .gguf and matching mmproj .gguf together. Add an ASR-specific llama.cpp/mmproj adapter before this can transcribe audio.",
+    )
+
+
+def recognize_qwen_onnx_package(root: Path) -> ModelCandidate | None:
+    files = {item.name for item in root.iterdir() if item.is_file()}
+    signal = {"encoder.onnx", "decoder_init.onnx", "decoder_step.onnx", "decoder_weights.data", "embed_tokens.bin"} & files
+    signal |= {"encoder.int4.onnx", "decoder_init.int4.onnx", "decoder_step.int4.onnx", "decoder_weights.int4.data"} & files
+    if not signal:
+        return None
+    int4 = any(name.endswith(".int4.onnx") or ".int4." in name for name in files)
+    graph_set = ["encoder.int4.onnx", "decoder_init.int4.onnx", "decoder_step.int4.onnx", "decoder_weights.int4.data"] if int4 else ["encoder.onnx", "decoder_init.onnx", "decoder_step.onnx", "decoder_weights.data"]
+    required = graph_set + ["embed_tokens.bin", "config.json", "preprocessor_config.json"]
+    missing = missing_names(root, required)
+    if not any_exists(root, TOKENIZER_FILES | {"vocab.json", "added_tokens.json"}):
+        missing.append("tokenizer/vocab files")
+    raw, bucket = detect_from_path(root)
+    return unsupported_asr_candidate(
+        root,
+        candidate_id=f"qwen_onnx__{root.name}",
+        display_name=root.name,
+        backend="onnxruntime",
+        container_format="onnx-qwen-asr",
+        precision=raw,
+        quantization_label=bucket,
+        missing_files=missing,
+        warning="Qwen-style autoregressive ONNX ASR package detected, but no adapter for this split decode loop exists yet.",
+        help_text="Keep encoder, decoder_init, decoder_step, decoder_weights data, embed_tokens.bin, config, preprocessor, and tokenizer files together. Add a Qwen ONNX adapter before this can run.",
+    )
+
+
+def recognize_transformersjs_whisper_onnx_package(root: Path, models_root: Path) -> ModelCandidate | None:
+    search_root = root / "onnx" if (root / "onnx").is_dir() else root
+    files = {item.name for item in search_root.iterdir() if item.is_file()}
+    has_encoder = any(name.startswith("encoder_model") and name.endswith(".onnx") for name in files)
+    has_decoder = any(name.startswith("decoder_model") and name.endswith(".onnx") for name in files)
+    has_decoder_with_past = any(name.startswith("decoder_with_past_model") and name.endswith(".onnx") for name in files)
+    if not (has_encoder or has_decoder or has_decoder_with_past):
+        return None
+    required_meta = ["config.json", "preprocessor_config.json", "tokenizer.json"]
+    missing = missing_names(root, required_meta)
+    if not has_encoder:
+        missing.append("encoder_model*.onnx")
+    if not has_decoder and not has_decoder_with_past:
+        missing.append("decoder_model_merged*.onnx or decoder_with_past_model*.onnx")
+    for onnx_file in search_root.glob("*.onnx"):
+        missing.extend(item.relative_to(root).as_posix() for item in external_data_missing_for(onnx_file))
+    raw, bucket = detect_from_path(search_root)
+    rel_root = root.relative_to(models_root) if root.is_relative_to(models_root) else root
+    return unsupported_asr_candidate(
+        root,
+        candidate_id=f"whisper_onnx__{root.name}",
+        display_name=str(rel_root),
+        backend="onnxruntime",
+        container_format="onnx-whisper",
+        precision=raw,
+        quantization_label=bucket,
+        missing_files=missing,
+        warning="Whisper ONNX encoder/decoder package detected, but the current generic ONNX adapter only runs manifest-described CTC models.",
+        help_text="Keep one matching encoder/decoder precision set plus tokenizer/config/preprocessor files. Add a Whisper ONNX adapter or modelbench manifest recipe before this can run.",
+    )
+
+
+def recognize_granite_split_onnx_package(root: Path, models_root: Path) -> ModelCandidate | None:
+    search_root = root / "onnx" if (root / "onnx").is_dir() else root
+    files = {item.name for item in search_root.iterdir() if item.is_file()}
+    has_audio_encoder = any(name.startswith("audio_encoder") and name.endswith(".onnx") for name in files)
+    has_decoder = any(name.startswith("decoder_model_merged") and name.endswith(".onnx") for name in files)
+    has_embed_tokens = any(name.startswith("embed_tokens") and name.endswith(".onnx") for name in files)
+    if not (has_audio_encoder or has_embed_tokens):
+        return None
+    missing = missing_names(root, ["config.json", "preprocessor_config.json", "tokenizer.json"])
+    if not has_audio_encoder:
+        missing.append("audio_encoder*.onnx")
+    if not has_decoder:
+        missing.append("decoder_model_merged*.onnx")
+    if not has_embed_tokens:
+        missing.append("embed_tokens*.onnx")
+    for onnx_file in search_root.glob("*.onnx"):
+        missing.extend(item.relative_to(root).as_posix() for item in external_data_missing_for(onnx_file))
+    raw, bucket = detect_from_path(search_root)
+    rel_root = root.relative_to(models_root) if root.is_relative_to(models_root) else root
+    return unsupported_asr_candidate(
+        root,
+        candidate_id=f"split_onnx_asr__{root.name}",
+        display_name=str(rel_root),
+        backend="onnxruntime",
+        container_format="onnx-split-asr",
+        precision=raw,
+        quantization_label=bucket,
+        missing_files=missing,
+        warning="Split audio-encoder/decoder ONNX ASR package detected, but this layout does not match the current built-in ONNX AR/NAR adapters.",
+        help_text="Keep audio_encoder, decoder_model_merged, embed_tokens, all .onnx_data sidecars, config, preprocessor, and tokenizer files together. Add a dedicated split-ONNX adapter before this can run.",
+    )
+
+
 def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCandidate]]:
     models_root.mkdir(parents=True, exist_ok=True)
     discovered: list[ModelCandidate] = []
     for adapter in BUILTIN_ADAPTERS:
         discovered.extend(adapter.discover(models_root))
+    asr_gguf_roots = {
+        path.resolve()
+        for path in [models_root, *[item for item in models_root.rglob("*") if item.is_dir()]]
+        if recognize_asr_gguf_projector_package(path) is not None
+    }
+    discovered = [
+        candidate
+        for candidate in discovered
+        if not (candidate.adapter_name == "gguf_llm_reference" and candidate.path.parent.resolve() in asr_gguf_roots)
+    ]
 
     known_paths = {candidate.path.resolve() for candidate in discovered}
     known_parent_paths = {candidate_root(candidate) for candidate in discovered}
@@ -183,8 +503,29 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
                     )
                 )
 
+    recognized_package_roots: set[Path] = set()
+    root_asr_gguf = recognize_asr_gguf_projector_package(models_root)
+    if root_asr_gguf is not None:
+        unsupported.append(root_asr_gguf)
+    for folder in [path for path in models_root.rglob("*") if path.is_dir()]:
+        if folder.resolve() in known_parent_paths:
+            continue
+        if any(parent.resolve() in recognized_package_roots for parent in [folder, *folder.parents]):
+            continue
+        special = recognize_special_package(folder, models_root)
+        if special is not None:
+            unsupported.append(special)
+            recognized_package_roots.add(folder.resolve())
+
     for path in models_root.rglob("*"):
         if path.resolve() in known_paths:
+            continue
+        if any(parent.resolve() in recognized_package_roots for parent in [path.parent, *path.parent.parents]):
+            continue
+        special = recognize_special_package(path, models_root)
+        if special is not None:
+            unsupported.append(special)
+            recognized_package_roots.add(candidate_root(special))
             continue
         if path.is_file() and path.suffix.lower() == ".safetensors" and looks_like_text_llm(path.parent / "config.json"):
             unsupported.append(unsupported_text_llm_candidate(path.parent))
@@ -243,8 +584,6 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
             root = path.parent
             raw, bucket = detect_safetensors_folder_precision(root)
             has_config = (root / "config.json").exists()
-            has_safetensors = any(root.glob("*.safetensors"))
-            has_tokenizer = any((root / name).exists() for name in TOKENIZER_FILES)
             if looks_like_text_llm(root / "config.json"):
                 unsupported.append(unsupported_text_llm_candidate(root))
                 continue
@@ -254,6 +593,7 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
                 missing.append("config.json")
             if not has_processor:
                 missing.append("preprocessor_config.json or processor_config.json")
+            missing.extend(indexed_safetensor_missing_files(root))
             unsupported.append(
                 ModelCandidate(
                     candidate_id=f"safetensors__{root.name}".lower(),

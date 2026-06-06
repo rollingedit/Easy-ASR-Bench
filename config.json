@@ -1,6 +1,6 @@
 {
   "app": {
-    "version": "0.2.9",
+    "version": "0.3.0",
     "version_channel": "stable",
     "check_for_updates_on_setup": true,
     "check_for_updates_on_run": false

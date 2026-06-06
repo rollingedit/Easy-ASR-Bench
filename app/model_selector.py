@@ -4,7 +4,11 @@ import re
 from pathlib import Path
 
 from .adapters.base import ModelCandidate
+from .console_style import key, prompt_label
+from .hf_model_downloader import download_hf_model_interactive
+from .interactive_menu import MenuAction, choose_many, choose_one
 from .llm_reference import merge_reference_llms, print_external_llm_guide, save_custom_reference_path, scan_custom_reference_llms
+from .model_scanner import scan_models
 
 
 def parse_selection(raw: str, max_index: int) -> list[int]:
@@ -72,7 +76,24 @@ def choose_candidates(
     unsupported: list[ModelCandidate],
     config: dict | None = None,
     config_path: Path | None = None,
+    models_root: Path | None = None,
 ) -> tuple[list[ModelCandidate], ModelCandidate | None]:
+    while True:
+        selected, reference_llm, should_rescan = _choose_candidates_once(candidates, unsupported, config, config_path, models_root)
+        if not should_rescan:
+            return selected, reference_llm
+        if models_root is None:
+            return [], None
+        candidates, unsupported = scan_models(models_root)
+
+
+def _choose_candidates_once(
+    candidates: list[ModelCandidate],
+    unsupported: list[ModelCandidate],
+    config: dict | None = None,
+    config_path: Path | None = None,
+    models_root: Path | None = None,
+) -> tuple[list[ModelCandidate], ModelCandidate | None, bool]:
     candidates = [candidate for candidate in candidates if candidate.category == "asr"]
     saved_reference_llms = scan_custom_reference_llms(config) if config is not None else []
     reference_llms = merge_reference_llms([candidate for candidate in unsupported if candidate.category == "reference_llm"], saved_reference_llms)
@@ -85,7 +106,7 @@ def choose_candidates(
         print("  None")
     for index, candidate in enumerate(candidates, 1):
         print(
-            f"[{index}] {candidate.display_name:<30} backend: {candidate.backend:<12} "
+            f"[{key(str(index))}] {candidate.display_name:<30} backend: {candidate.backend:<12} "
             f"precision: {candidate.precision:<8} bucket: {candidate.quantization_label}"
         )
         print(f"    Path: {candidate.path}")
@@ -95,24 +116,76 @@ def choose_candidates(
             print("Detected reference/correction LLMs:")
             print()
             for index, candidate in enumerate(reference_llms, 1):
-                print(f"[L{index}] {candidate.display_name}    {candidate.backend}    {candidate.precision}    {candidate.quantization_label}")
+                print(f"[{key('L' + str(index))}] {candidate.display_name}    {candidate.backend}    {candidate.precision}    {candidate.quantization_label}")
                 print(f"     Use: optional LLM-corrected reference generation, not direct transcription.")
         print()
         print("Detected non-ASR, incomplete, or unsupported candidates:")
         print()
         for index, candidate in enumerate(unsupported, 1):
             reason = "; ".join(candidate.warnings + ([f"Missing: {', '.join(candidate.missing_files)}"] if candidate.missing_files else []))
-            print(f"[U{index}] {candidate.display_name}")
+            print(f"[{key('U' + str(index))}] {candidate.display_name}")
             print(f"     Reason: {reason or 'Unsupported by current adapters.'}")
+    if models_root is not None:
+        print()
+        print(f"[{key('D')}] Paste a Hugging Face model link/repo id to download a model package")
     if not candidates:
-        return [], None
+        if models_root is None:
+            return [], None, False
+        menu_choice = choose_one(
+            "No runnable ASR models were found.",
+            ["Download a Hugging Face model package", "Stop for now"],
+        )
+        if menu_choice == 0:
+            if download_hf_model_interactive(models_root) is not None:
+                return [], None, True
+        elif menu_choice == 1:
+            return [], None, False
+        while True:
+            raw = input(prompt_label("Models> ")).strip().lower()
+            if raw in {"d", "download", "hf", "huggingface"}:
+                if download_hf_model_interactive(models_root) is not None:
+                    return [], None, True
+                continue
+            if raw in {"", "q", "quit", "exit"}:
+                return [], None, False
+            print(f"No runnable models yet. Choose {key('D')} to download from Hugging Face, or press {key('Enter')} to stop.")
     print()
     if len(candidates) > 9:
-        print("Choose models with spaces, commas, or ranges: 1 2 10, 1,2,10, 1-4. Compact digits are disabled for 10+ models.")
+        print(f"Choose models with spaces, commas, or ranges: {key('1 2 10')}, {key('1,2,10')}, {key('1-4')}. Compact digits are disabled for 10+ models. Use {key('D')} to download from Hugging Face.")
     else:
-        print("Choose models: numbers like 1 2 4, 1,2,4, 1-4, 1234, A for all, R for recommended.")
+        print(f"Choose models: numbers like {key('1 2 4')}, {key('1,2,4')}, {key('1-4')}, {key('1234')}, {key('A')} for all, {key('R')} for recommended, {key('D')} to download from Hugging Face.")
+    menu_result = choose_many(
+        "Choose ASR models",
+        [f"{candidate.display_name} | {candidate.backend} | {candidate.precision} | {candidate.quantization_label}" for candidate in candidates],
+        actions=[
+            MenuAction("A", "select all"),
+            MenuAction("R", "recommended"),
+            *([MenuAction("D", "download from Hugging Face")] if models_root is not None else []),
+        ],
+    )
+    if menu_result == "d" and models_root is not None:
+        if download_hf_model_interactive(models_root) is not None:
+            return [], None, True
+    elif menu_result == "a":
+        indexes = list(range(1, len(candidates) + 1))
+        selected = choose_precision_buckets([candidates[index - 1] for index in indexes])
+        reference_llm = choose_reference_llm(reference_llms, config, config_path)
+        return selected, reference_llm, False
+    elif menu_result == "r":
+        indexes = recommended_candidates(candidates)
+        selected = choose_precision_buckets([candidates[index - 1] for index in indexes])
+        reference_llm = choose_reference_llm(reference_llms, config, config_path)
+        return selected, reference_llm, False
+    elif isinstance(menu_result, list):
+        selected = choose_precision_buckets([candidates[index] for index in menu_result])
+        reference_llm = choose_reference_llm(reference_llms, config, config_path)
+        return selected, reference_llm, False
     while True:
-        raw = input("Models> ").strip()
+        raw = input(prompt_label("Models> ")).strip()
+        if raw.lower() in {"d", "download", "hf", "huggingface"} and models_root is not None:
+            if download_hf_model_interactive(models_root) is not None:
+                return [], None, True
+            continue
         if raw.lower() in {"r", "recommended"}:
             indexes = recommended_candidates(candidates)
         else:
@@ -122,7 +195,7 @@ def choose_candidates(
         print("No valid runnable models selected.")
     selected = choose_precision_buckets([candidates[index - 1] for index in indexes])
     reference_llm = choose_reference_llm(reference_llms, config, config_path)
-    return selected, reference_llm
+    return selected, reference_llm, False
 
 
 def choose_precision_buckets(candidates: list[ModelCandidate]) -> list[ModelCandidate]:
@@ -131,10 +204,16 @@ def choose_precision_buckets(candidates: list[ModelCandidate]) -> list[ModelCand
     print("Available precision buckets in selected models:")
     print()
     for index, bucket in enumerate(buckets, 1):
-        print(f"[{index}] {bucket}")
-    print("[A] All available precisions")
+        print(f"[{key(str(index))}] {bucket}")
+    print(f"[{key('A')}] All available precisions")
+    menu_result = choose_many("Choose precision buckets", buckets, actions=[MenuAction("A", "all available precisions")])
+    if menu_result == "a":
+        return candidates
+    if isinstance(menu_result, list):
+        chosen = {buckets[index] for index in menu_result}
+        return [candidate for candidate in candidates if candidate.quantization_label in chosen]
     while True:
-        raw = input("Precisions> ").strip()
+        raw = input(prompt_label("Precisions> ")).strip()
         if raw.lower() in {"a", "all", ""}:
             return candidates
         indexes = parse_selection(raw, len(buckets))
@@ -151,12 +230,32 @@ def choose_reference_llm(
 ) -> ModelCandidate | None:
     print()
     print("LLM-corrected reference options:")
-    print("[1] Use detected local GGUF reference LLM" + ("" if reference_llms else " (none detected yet)"))
-    print("[2] Paste a GGUF file path or folder and save it for next run")
-    print("[3] Use ChatGPT, Claude, or another external LLM manually")
-    print("[4] Skip LLM reference for now")
+    print(f"[{key('1')}] Use detected local GGUF reference LLM" + ("" if reference_llms else " (none detected yet)"))
+    print(f"[{key('2')}] Paste a GGUF file path or folder and save it for next run")
+    print(f"[{key('3')}] Use ChatGPT, Claude, or another external LLM manually")
+    print(f"[{key('4')}] Skip LLM reference for now")
+    menu_result = choose_one(
+        "Choose LLM-corrected reference option",
+        [
+            "Use detected local GGUF reference LLM" + ("" if reference_llms else " (none detected yet)"),
+            "Paste a GGUF file path or folder and save it for next run",
+            "Use ChatGPT, Claude, or another external LLM manually",
+            "Skip LLM reference for now",
+        ],
+    )
+    if menu_result == 0:
+        choice = "1"
+    elif menu_result == 1:
+        choice = "2"
+    elif menu_result == 2:
+        choice = "3"
+    elif menu_result == 3:
+        return None
+    else:
+        choice = None
     while True:
-        choice = input("Reference option> ").strip().lower()
+        if choice is None:
+            choice = input(prompt_label("Reference option> ")).strip().lower()
         if choice in {"", "4", "s", "skip", "n", "no"}:
             return None
         if choice in {"3", "manual", "external", "chatgpt", "claude"}:
@@ -165,9 +264,11 @@ def choose_reference_llm(
         if choice in {"2", "path", "paste", "import", "manual import"}:
             if config is None or config_path is None:
                 print("Custom LLM paths require config.json to be writable.")
+                choice = None
                 continue
-            raw_path = input("GGUF file or folder path> ").strip()
+            raw_path = input(prompt_label("GGUF file or folder path> ")).strip()
             if not raw_path:
+                choice = None
                 continue
             try:
                 new_candidates = save_custom_reference_path(config_path, config, raw_path)
@@ -180,17 +281,25 @@ def choose_reference_llm(
         if choice in {"1", "local", "detected", "gguf", "y", "yes"}:
             if not reference_llms:
                 print("No GGUF reference LLMs were detected. Choose option 2 to paste a path, option 3 for external LLM instructions, or option 4 to skip.")
+                choice = None
                 continue
             print()
             print("Detected GGUF reference/correction LLMs:")
             for index, candidate in enumerate(reference_llms, 1):
-                print(f"[{index}] {candidate.display_name} | {candidate.precision} | {candidate.path}")
+                print(f"[{key(str(index))}] {candidate.display_name} | {candidate.precision} | {candidate.path}")
+            menu_llm = choose_one(
+                "Choose local GGUF reference LLM",
+                [f"{candidate.display_name} | {candidate.precision} | {candidate.path}" for candidate in reference_llms],
+            )
+            if isinstance(menu_llm, int):
+                return reference_llms[menu_llm]
             while True:
-                raw = input("Reference LLM> ").strip()
+                raw = input(prompt_label("Reference LLM> ")).strip()
                 indexes = parse_selection(raw, len(reference_llms))
                 if len(indexes) == 1:
                     return reference_llms[indexes[0] - 1]
                 if raw.lower() in {"", "s", "skip"}:
                     return None
                 print("Choose one reference LLM number, or press Enter to skip.")
-        print("Choose 1, 2, 3, or 4.")
+        print(f"Choose {key('1')}, {key('2')}, {key('3')}, or {key('4')}.")
+        choice = None

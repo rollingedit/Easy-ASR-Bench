@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.3.0
+
+- Added a smart Hugging Face downloader to the interactive model menu. Choose `D`, paste a Hugging Face model URL or `owner/model` repo id, pick one detected package/weight variant, and the app downloads it into `Models` before rescanning.
+- Accepted forgiving Hugging Face URL shapes: repo root links, `/tree/<revision>` links, nested folder links, file/blob/resolve links, links with extra trailing slashes, and folders that need parent-walking to find the nearest actual model package.
+- Added package-level download choices so repositories with many weights or quantizations do not download the whole repo by default.
+- Added failsafes for large and unknown download choices: the app shows the selected file count, asks before downloading large/unknown packages, and treats unknown folders as inspection-only until the scanner recognizes the downloaded files.
+- Added post-download missing-file repair: if a downloaded package rescans as incomplete and exact missing files exist in the Hugging Face repo, the app lists those files and asks before downloading them. Ambiguous missing files are reported instead of guessed.
+- Added a structured LLM/file-audit request package for ambiguous incomplete downloads. When exact repair matches are not available, the app writes `hf_missing_file_request.json` and `hf_missing_file_prompt.txt` beside the package so a local or external LLM can recommend exact repo filenames without the downloader inventing files.
+- Existing files in the target model package folder are skipped during Hugging Face downloads and repair downloads, so rerunning the same choice does not overwrite files that are already present.
+- Added one-local-folder packaging for selected downloads so nested HF folders such as `BF16/...gguf` become one clean local model folder instead of duplicating the remote folder layout.
+- Added GGUF package grouping for quantized LLM repos, including split GGUF files such as `00001-of-00002`, so all required parts are selected together.
+- Added GGUF ASR/audio distinction for packages with ASR/audio signals or matching `mmproj` files. Qwen-style ASR GGUF packages are not treated as text reference LLMs when they require a projector; ordinary GGUF models remain reference/correction LLM choices.
+- Added Safetensors download grouping for standalone weights, sharded indexes, unusual index names such as `model.safetensors.index.fp32.json`, split Safetensors parts, and missing-shard expansion from downloaded index files.
+- Added ONNX package grouping by variant inside shared `onnx/` folders: default, FP16, Q4, Q4F16, quantized, INT8, and related sidecars are separated so one selected precision/quant path does not pull every ONNX variant.
+- Added shared metadata selection for downloaded packages, including tokenizer, processor, preprocessor, config, generation config, chat templates, Tekken tokenizer files, token files, and parent-folder metadata when the selected weight package is nested.
+- Added real-world no-weight-download stress checks for representative HF repos: Unsloth Qwen/Gemma/Qwopus GGUF repos, OpenAI Whisper, Voxtral, Fun-ASR, NVIDIA Canary, Cohere Transcribe, Granite speech GGUF/ONNX, ONNX Community variants, and Cohere/Granite multi-variant ONNX folders. These are representative edge cases, not a claim that every future HF layout is known; the downloader still uses conservative confirmation and inspection-only fallbacks for unknown layouts.
+- Added arrow-key interactive menus on real Windows terminals for model selection, precision buckets, LLM reference choices, and local reference LLM selection, with the existing typed prompts kept as a fallback for non-interactive or captured terminals.
+- Added colored action keys and prompt labels for typed fallback prompts so `D`, `R`, `A`, numeric choices, `Y/n`, `q`, and other required input markers are harder to miss.
+- Added broader ASR package recognition for known but not-yet-runnable packages: NeMo `.nemo`, FunASR folders, ORT edge graphs, Core ML / WhisperKit `.mlmodelc`, sherpa-onnx packages, split Whisper/Transformers.js ONNX, Granite-style split ONNX, Qwen split ONNX, and ASR GGUF+`mmproj`.
+- Added partial-package recognition and missing-file reporting so incomplete known layouts list expected sibling files instead of falling into generic ONNX or unknown-file noise.
+- Added runtime-probe behavior for complete non-text-generation Hugging Face Safetensors folders when metadata is unfamiliar, so plausible ASR folders are allowed to run and report real runtime errors instead of being blocked only by weak scanner signals.
+- Added sharded Safetensors missing-file validation to Hugging Face ASR adapters and unsupported scanner output.
+- Added faster-whisper `vocabulary.txt` discovery support.
+- Updated README and supported-model docs with the Hugging Face downloader flow, recognized-but-not-runnable model families, large-download confirmation behavior, unknown-folder inspection behavior, and GGUF ASR-vs-reference-LLM distinction.
+- Updated the external audit prompt to require web-backed edge-case review of the smart downloader, smart detector, large-download safeguards, arrow-key menus, typed fallbacks, and real HF package layouts.
+- Added regression coverage for Hugging Face URL parsing, parent-folder fallback, package-level download grouping, split GGUF/Safetensors, sharded Safetensors indexes, ONNX variant sidecars, unknown-folder failsafes, large-choice cancellation, scanner recognition for researched ASR layouts, runtime-probe behavior, and menu rescan after download.
+
 ## v0.2.9
 
 - Made the runtime GPU-first by default while keeping explicit CPU fallback reporting when an accelerator path cannot safely run.
