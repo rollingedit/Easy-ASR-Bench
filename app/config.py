@@ -29,6 +29,7 @@ MEDIA_EXTENSIONS = [
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "app": {
+        "version": "0.2.0",
         "version_channel": "stable",
         "check_for_updates_on_setup": True,
         "check_for_updates_on_run": False,
@@ -69,6 +70,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "allow_model_folder_scripts": False,
         "allow_pickle_or_pt_files": False,
         "scan_only_safe_formats_by_default": True,
+        "allow_manifest_custom_python": False,
     },
     "input": {
         "watch_input_folder": True,
@@ -103,7 +105,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "reports": {
         "write_txt": True,
         "write_json": True,
-        "write_html": False,
+        "write_html": True,
         "embed_results_json_in_html": True,
         "include_llm_reference_instructions": True,
     },

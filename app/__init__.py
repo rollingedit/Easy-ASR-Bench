@@ -1,1 +1,3 @@
-"""Granite Speech ONNX Windows transcription comparator."""
+"""Easy ASR Bench."""
+
+__version__ = "0.2.0"

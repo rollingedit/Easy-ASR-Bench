@@ -3,7 +3,8 @@ setlocal
 cd /d "%~dp0"
 
 set APP_NAME=Easy ASR Bench
-set REPO_ZIP=https://github.com/rollingedit/Easy-ASR-Bench/archive/refs/tags/v0.1.zip
+set APP_VERSION=v0.2
+set REPO_ZIP=https://github.com/rollingedit/Easy-ASR-Bench/archive/refs/tags/%APP_VERSION%.zip
 set INSTALL_DIR=%LOCALAPPDATA%\Easy-ASR-Bench
 
 if /I "%~1"=="--local" goto local_setup
@@ -17,11 +18,13 @@ echo.
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop';" ^
-  "$install='%INSTALL_DIR%'; $zip=Join-Path $env:TEMP 'Easy-ASR-Bench-v0.1.zip'; $extract=Join-Path $env:TEMP 'Easy-ASR-Bench-v0.1';" ^
+  "$install='%INSTALL_DIR%'; $logDir=Join-Path $install 'Logs'; New-Item -ItemType Directory -Force -Path $logDir | Out-Null; $log=Join-Path $logDir 'setup.log';" ^
+  "'Starting setup at ' + (Get-Date) | Tee-Object -FilePath $log -Append;" ^
+  "$zip=Join-Path $env:TEMP 'Easy-ASR-Bench-%APP_VERSION%.zip'; $extract=Join-Path $env:TEMP 'Easy-ASR-Bench-%APP_VERSION%';" ^
   "Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue;" ^
   "Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue;" ^
   "New-Item -ItemType Directory -Force -Path $install | Out-Null;" ^
-  "Invoke-WebRequest -Uri '%REPO_ZIP%' -OutFile $zip;" ^
+  "Invoke-WebRequest -Uri '%REPO_ZIP%' -OutFile $zip; $hash=(Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash; 'Downloaded source archive SHA256: ' + $hash | Tee-Object -FilePath $log -Append;" ^
   "Expand-Archive -LiteralPath $zip -DestinationPath $extract -Force;" ^
   "$src=Get-ChildItem -LiteralPath $extract -Directory | Select-Object -First 1;" ^
   "Copy-Item -Path (Join-Path $src.FullName '*') -Destination $install -Recurse -Force;" ^

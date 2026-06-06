@@ -1,106 +1,167 @@
 # Easy ASR Bench
 
-Easy ASR Bench is a Windows drag-and-drop tool for comparing local speech-to-text models on your own audio and video files.
+Easy ASR Bench is a Windows drag-and-drop benchmark app for comparing local speech-to-text models on your own audio and video files.
 
-The pitch is simple: drop ASR models into `Models/`, drop media into `Input/`, choose the models from a menu, and get a readable benchmark report showing transcripts, speed, memory use, errors, and model-to-model differences.
+Drop models into `Models`, drop media into `Input` or onto the launcher, choose the models from a numbered menu, and get a complete report folder with:
 
-This first public review release focuses on the product shell and Granite Speech ONNX adapters. It also scans `.onnx`, `.safetensors`, and `.gguf` files and explains what is runnable, incomplete, or unsupported instead of pretending every model file can transcribe audio.
+- `results.txt`: readable transcript and benchmark report
+- `results.json`: canonical machine-readable run data
+- `benchmark.csv`: spreadsheet-friendly performance rows
+- `compare.html`: offline visual comparison page with LLM-corrected reference scoring
 
-## Who it is for
+## What It Does
 
-- People testing local transcription models on Windows
-- Reviewers comparing 8-bit, 16-bit-family, and other model precision choices
-- Builders who want an adapter-based ASR benchmark app they can extend
+Easy ASR Bench gives you a practical answer to:
 
-## What v0.1 can do
+```text
+Which local transcription model is best for my files, on my machine?
+```
 
-- Scan `Models/` for local model folders and files
-- Detect runnable Granite Speech ONNX AR/NAR model folders
-- Recognize incomplete or unsupported ONNX, Safetensors, and GGUF candidates
-- Normalize audio/video with FFmpeg through `imageio-ffmpeg`
-- Reuse the same chunk plan for every selected model
-- Write transcript and benchmark reports under `Output/`
-- Run on CPU by default
+It runs every selected ASR model on the same normalized audio and the same chunk boundaries, then compares transcript differences, speed, memory, and errors.
 
-## Current limits
+## Supported Model Types
 
-- Hugging Face Safetensors ASR, generic ONNX manifests, and GGUF reference/correction adapters are planned but not runnable yet.
-- Word-level timestamps are not produced. Report timestamps are chunk timestamps.
-- You must provide model files locally in `Models/`; v0.1 does not auto-download models.
+### Runnable ASR Models
+
+- Granite Speech ONNX AR folders with `int8`, `fp16w`, or `fp32` precision folders
+- Granite Speech ONNX NAR folders with `int8`, `fp16w`, or `fp32` precision folders
+- Hugging Face Transformers ASR folders using `.safetensors` weights
+- Generic ONNX ASR models with a valid `modelbench.json` manifest using the built-in CTC recipe
+
+### GGUF Reference Models
+
+GGUF text LLMs are supported as local reference/correction models, not direct transcription models.
+
+That means a GGUF LLM can be used to help create an LLM-corrected reference transcript from multiple ASR outputs. The product never labels that as human ground truth.
 
 ## Quick Start
 
 1. Download `setup.bat` from the latest release.
 2. Double-click `setup.bat`.
-3. Drop ASR model folders into `Models/`.
-4. Drop audio/video files into `Input/` or onto `Drop_Audio_Or_Folders_Here.bat`.
-5. Run `Run.bat`.
-6. Choose models and precision buckets from the menu.
-7. Open the generated report in `Output/`.
+3. Open the installed folder.
+4. Put local ASR model folders or files in `Models`.
+5. Put audio/video files in `Input`, or drag them onto `Drop_Audio_Or_Folders_Here.bat`.
+6. Double-click `Run.bat`.
+7. Choose ASR models and precision buckets.
+8. Open the report folder created under `Output`.
 
-Setup installs the app to `%LOCALAPPDATA%\Easy-ASR-Bench` when run as a standalone release BAT. When run inside a checkout, it sets up that checkout directly.
+## Model Folder Examples
 
-## Model Folder
+```text
+Models/
+  granite-ar/
+    int8/
+      encoder.onnx
+      encoder.onnx_data
+      prompt_encode.onnx
+      prompt_encode.onnx_data
+      decode_step.onnx
+      decode_step.onnx_data
+      embed_tokens.onnx
+      embed_tokens.onnx_data
+    fp16w/
+      ...
+    tokenizer.json
+    tokenizer_config.json
+    preprocessor_config.json
 
-Drop local model folders into `Models/`.
+  whisper-large-v3/
+    config.json
+    model.safetensors
+    tokenizer.json
+    preprocessor_config.json
 
-Runnable in this build:
+  custom-ctc-onnx/
+    model.onnx
+    modelbench.json
 
-- Granite Speech AR ONNX folders with `int8/`, `fp16w/`, or `fp32/`
-- Granite Speech NAR ONNX folders with `int8/`, `fp16w/`, or `fp32/`
+  local-reference-llm.Q4_K_M.gguf
+```
 
-Here, "8-bit" means the repo's `int8` folder. "16-bit" means `fp16w`: FP16-stored weights with FP32 compute/I/O, not a pure FP16 runtime graph.
+## Generic ONNX Manifest
 
-`Run.bat` scans `Models/` and lets you choose models from a numbered menu.
+Generic ONNX ASR models need `modelbench.json` so Easy ASR Bench knows how to preprocess and decode them safely.
 
-## Transcribe Files
+Minimal CTC manifest:
 
-Drag audio/video files or folders onto `Drop_Audio_Or_Folders_Here.bat`, or put files in `Input/` and run `Run.bat`.
+```json
+{
+  "schema": "easy_asr_bench.model_manifest.v1",
+  "display_name": "Custom ONNX CTC ASR",
+  "task": "automatic-speech-recognition",
+  "backend": "onnxruntime",
+  "precision": "int8",
+  "files": {
+    "model": "model.onnx"
+  },
+  "audio": {
+    "sample_rate": 16000,
+    "channels": 1
+  },
+  "preprocessing": {
+    "type": "granite_log_mel"
+  },
+  "decoding": {
+    "type": "ctc",
+    "blank_token_id": 0,
+    "vocab": {
+      "0": "",
+      "1": "a",
+      "2": "b"
+    }
+  }
+}
+```
 
-`Run.bat` opens the model scanner, lets you choose runnable ASR models and precision buckets, then prompts for input files.
+## LLM-Corrected Reference Workflow
 
-## Folder Input Mode
+Every `results.txt` includes an instruction block for creating an LLM-corrected reference transcript.
 
-Put files in `Input/` and run `Run.bat`.
+Workflow:
 
-The app prompts for input after model selection. Press Enter at the input prompt to process supported files currently in `Input/`.
+1. Open `results.txt`.
+2. Give the LLM-corrected reference instruction block to an LLM.
+3. The LLM returns JSON with schema `easy_asr_bench.llm_reference.v1`.
+4. Open `compare.html`.
+5. Paste that JSON into the reference box.
+6. Click **Validate Reference and Score Models**.
 
-## Output
+The HTML report scores all models against that LLM-corrected reference and shows strict WER, normalized WER, CER, timing, memory, and pairwise differences.
 
-See `Output/`. Each input gets one consolidated `.txt` report by default, plus CSV benchmark rows in `Output/benchmark_results.csv`.
+This is a useful benchmark reference, not human ground truth.
 
-## Performance Comparison
+## Output Report Folder
 
-The report shows model load time, inference time, total wall time, speed versus real time, generated token throughput, RAM, errors, and transcript difference metrics.
+For each input file:
 
-All selected variants use the same normalized WAV and identical chunk boundaries.
+```text
+Output/
+  meeting__20260606_142231/
+    results.txt
+    results.json
+    benchmark.csv
+    compare.html
+```
 
-## Timestamp Note
+## Windows Launchers
 
-Timestamps are chunk timestamps. They are not word-level timestamps.
+- `setup.bat`: install or repair the app
+- `Run.bat`: scan models, choose models, process inputs
+- `Drop_Audio_Or_Folders_Here.bat`: drag files/folders directly onto the app
+- `Open_Models_Folder.bat`: open the model drop folder
+- `Open_Input_Folder.bat`: open the input folder
+- `Open_Output_Folder.bat`: open the report folder
+- `Edit_Config.bat`: edit configuration
+
+## Safety
+
+Easy ASR Bench does not execute arbitrary Python files from model folders. Safetensors are used for Hugging Face ASR folders because they avoid pickle-style checkpoint execution. Generic ONNX models run only through built-in manifest recipes. GGUF files are treated as local text LLMs for reference/correction unless a dedicated ASR adapter is added.
 
 ## Troubleshooting
 
-- Not enough disk space: remove unused local model folders from `Models/`.
-- Model folder is incomplete: make sure the tokenizer/config files and model sidecar files are present.
-- CUDA unavailable: set `runtime.provider` to `cpu` or leave `auto` to fall back to CPU.
-- Unsupported/corrupt media file: the error is written to `Logs/` and the app continues with the next file.
-
-## Repository Layout
-
-```text
-app/                         Python application
-app/adapters/                ASR adapter interface and Granite ONNX adapters
-Models/                      Drop model folders/files here
-Input/                       Drop audio/video here
-Output/                      Reports
-Logs/                        Run logs
-Temp/                        Temporary normalized audio
-setup.bat                    Standalone installer or local setup
-Run.bat                      Main app launcher
-Drop_Audio_Or_Folders_Here.bat
-```
-
-## Safety Notes
-
-Easy ASR Bench does not execute Python code from model folders by default. Standalone `.safetensors`, arbitrary `.onnx`, and `.gguf` files are scanned and reported, but only known ASR adapters are run.
+- **No runnable ASR models:** put a complete supported model folder in `Models`.
+- **Standalone `.safetensors` file:** use the complete Hugging Face model folder, not only the weights file.
+- **Generic `.onnx` file:** add `modelbench.json`.
+- **CUDA unavailable:** use CPU or install a compatible ONNX Runtime GPU stack.
+- **Media conversion failed:** check that the file opens normally and that there is enough disk space in `Temp`.
+- **GGUF dependency missing:** install the `llama_cpp` dependency group when prompted.

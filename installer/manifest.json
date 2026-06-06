@@ -1,0 +1,11 @@
+{
+  "schema": "easy_asr_bench.installer_manifest.v1",
+  "version": "0.2.0",
+  "tag": "v0.2",
+  "install_dir": "%LOCALAPPDATA%\\Easy-ASR-Bench",
+  "entrypoints": [
+    "setup.bat",
+    "Run.bat",
+    "Drop_Audio_Or_Folders_Here.bat"
+  ]
+}

@@ -1,0 +1,7 @@
+﻿{
+  "schema": "easy_asr_bench.checksums.v1",
+  "version": "0.2.0",
+  "files": {
+    "setup.bat": "sha256:4b46d9d8b81b827ae205c3821155a1e41aedfcff83b9a1adc622d56fc32f93ce"
+  }
+}

@@ -17,7 +17,12 @@ def model_family_for_variant(variant: str) -> str:
 
 def choose_providers(provider: str) -> list[str]:
     available = set(ort.get_available_providers())
-    if provider == "cuda" or (provider == "auto" and "CUDAExecutionProvider" in available):
+    if provider == "cuda":
+        if "CUDAExecutionProvider" in available:
+            return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        print("CUDA was requested but ONNX Runtime CUDAExecutionProvider is not available. Falling back to CPU.")
+        return ["CPUExecutionProvider"]
+    if provider == "auto" and "CUDAExecutionProvider" in available:
         return ["CUDAExecutionProvider", "CPUExecutionProvider"]
     return ["CPUExecutionProvider"]
 

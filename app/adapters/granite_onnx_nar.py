@@ -90,16 +90,21 @@ class GraniteOnnxNARAdapter:
         inference_seconds = 0.0
         peak_ram = process_memory_mb()
         for chunk, metadata in zip(chunks, chunk_metadata):
-            result = self.runner.transcribe_array(chunk.samples)
-            tokens += int(result.get("tokens_generated", 0))
-            inference_seconds += float(result.get("inference_seconds", 0.0))
+            try:
+                result = self.runner.transcribe_array(chunk.samples)
+                text = str(result.get("text", ""))
+                tokens += int(result.get("tokens_generated", 0))
+                inference_seconds += float(result.get("inference_seconds", 0.0))
+            except Exception as exc:
+                result = {"error": str(exc)}
+                text = f"[ERROR: chunk failed: {exc}]"
             peak_ram = max(peak_ram, process_memory_mb())
             transcript_chunks.append(
                 ChunkTranscript(
                     chunk_id=str(metadata["chunk_id"]),
                     start_seconds=float(metadata["start_seconds"]),
                     end_seconds=float(metadata["end_seconds"]),
-                    text=str(result.get("text", "")),
+                    text=text,
                     raw=result,
                 )
             )

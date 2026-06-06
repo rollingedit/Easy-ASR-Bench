@@ -1,5 +1,6 @@
 {
   "app": {
+    "version": "0.2.0",
     "version_channel": "stable",
     "check_for_updates_on_setup": true,
     "check_for_updates_on_run": false
@@ -39,7 +40,8 @@
     "trust_remote_code": false,
     "allow_model_folder_scripts": false,
     "allow_pickle_or_pt_files": false,
-    "scan_only_safe_formats_by_default": true
+    "scan_only_safe_formats_by_default": true,
+    "allow_manifest_custom_python": false
   },
   "input": {
     "watch_input_folder": true,
@@ -91,7 +93,7 @@
   "reports": {
     "write_txt": true,
     "write_json": true,
-    "write_html": false,
+    "write_html": true,
     "embed_results_json_in_html": true,
     "include_llm_reference_instructions": true
   },
