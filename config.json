@@ -1,0 +1,101 @@
+{
+  "app": {
+    "version_channel": "stable",
+    "check_for_updates_on_setup": true,
+    "check_for_updates_on_run": false
+  },
+  "folders": {
+    "models": "Models",
+    "input": "Input",
+    "output": "Output",
+    "temp": "Temp",
+    "logs": "Logs",
+    "cache": "Cache"
+  },
+  "runtime": {
+    "execution": "sequential",
+    "provider": "auto",
+    "prefer_gpu": false,
+    "fallback_to_cpu": true,
+    "unload_between_models": true,
+    "continue_after_model_error": true,
+    "cpu_threads": 0,
+    "gpu_device_id": 0
+  },
+  "dependency_install": {
+    "auto_install_missing_runtime_dependencies": true,
+    "prefer_cpu_safe_defaults": true,
+    "allow_cuda_install": false
+  },
+  "model_scan": {
+    "recursive": true,
+    "recognize_safetensors": true,
+    "recognize_onnx": true,
+    "recognize_gguf": true,
+    "recognize_ggml_bin": true,
+    "show_unsupported_candidates": true
+  },
+  "security": {
+    "trust_remote_code": false,
+    "allow_model_folder_scripts": false,
+    "allow_pickle_or_pt_files": false,
+    "scan_only_safe_formats_by_default": true
+  },
+  "input": {
+    "watch_input_folder": true,
+    "recursive_folders": true,
+    "file_stability_wait_seconds": 5,
+    "extensions": [
+      ".wav",
+      ".mp3",
+      ".m4a",
+      ".flac",
+      ".ogg",
+      ".opus",
+      ".aac",
+      ".wma",
+      ".mp4",
+      ".mov",
+      ".mkv",
+      ".avi",
+      ".webm",
+      ".m4v",
+      ".mpeg",
+      ".mpg"
+    ]
+  },
+  "transcription": {
+    "task": "transcribe",
+    "ar_prompt": "transcribe the speech with proper punctuation and capitalization.",
+    "ar_max_new_tokens": 1024,
+    "language": "auto",
+    "temperature": 0.0
+  },
+  "chunking": {
+    "mode": "auto_smart",
+    "target_chunk_seconds": 240,
+    "hard_max_chunk_seconds": 480,
+    "boundary_search_seconds": 20,
+    "min_silence_ms": 350,
+    "silence_threshold_db": -35,
+    "rms_fallback_window_ms": 250,
+    "allow_overlap": false,
+    "fallback": "lowest_rms_boundary"
+  },
+  "benchmark": {
+    "repeat_runs": 1,
+    "warmup_first_chunk": true,
+    "measure_peak_ram": true,
+    "measure_peak_vram_if_available": true
+  },
+  "reports": {
+    "write_txt": true,
+    "write_json": true,
+    "write_html": false,
+    "embed_results_json_in_html": true,
+    "include_llm_reference_instructions": true
+  },
+  "advanced": {
+    "keep_temp_wavs": false
+  }
+}

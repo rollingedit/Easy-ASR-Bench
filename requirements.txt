@@ -1,0 +1,14 @@
+onnxruntime>=1.17,<1.26
+numpy
+soundfile
+librosa
+huggingface_hub
+tokenizers
+jinja2
+psutil
+tqdm
+pandas
+jiwer
+imageio-ffmpeg
+watchdog
+transformers>=4.52.1
