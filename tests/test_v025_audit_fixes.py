@@ -17,6 +17,7 @@ def test_release_gate_verifies_committed_metadata():
     assert "--update-metadata" not in build_step
     assert "release:" in workflow
     assert "types: [published]" in workflow
+    assert "release_tag" in workflow
     assert "github.event_name == 'release'" in workflow
     assert "actions/upload-artifact" in workflow
     assert "gh release download" in workflow
