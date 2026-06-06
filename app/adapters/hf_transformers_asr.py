@@ -87,7 +87,9 @@ class HFTransformersASRAdapter:
             from transformers import pipeline
         except ModuleNotFoundError as exc:
             raise RuntimeError("Transformers ASR support requires the transformers_cpu dependency group. Run setup.bat repair or install requirements/transformers_cpu.txt.") from exc
-        device = 0 if runtime_config.get("provider") == "cuda" and torch.cuda.is_available() else -1
+        wants_cuda = runtime_config.get("provider") == "cuda" or bool(runtime_config.get("prefer_gpu", False))
+        device = 0 if wants_cuda and torch.cuda.is_available() else -1
+        self.device = "cuda" if device >= 0 else "cpu"
         self.pipe = pipeline(
             "automatic-speech-recognition",
             model=str(candidate.path),
@@ -127,6 +129,7 @@ class HFTransformersASRAdapter:
             transcript_chunks=transcript_chunks,
             metrics={
                 "provider": "transformers",
+                "device": getattr(self, "device", "cpu"),
                 "audio_seconds": audio_seconds,
                 "chunk_count": len(chunks),
                 "inference_seconds": inference_seconds,

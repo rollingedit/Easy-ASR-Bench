@@ -28,7 +28,7 @@ class FasterWhisperASRAdapter:
                 continue
             label = "unknown"
             name_lower = folder.name.lower()
-            for value in ["int8_float16", "int8", "float16", "float32"]:
+            for value in ["int8_float16", "int8", "float16", "fp16", "f16", "float32", "fp32", "f32"]:
                 if value in name_lower:
                     label = value
                     break
@@ -61,8 +61,10 @@ class FasterWhisperASRAdapter:
         except ModuleNotFoundError as exc:
             raise RuntimeError("faster-whisper support requires requirements/faster_whisper.txt.") from exc
         self.candidate = candidate
-        device = "cuda" if runtime_config.get("provider") == "cuda" else "cpu"
-        compute_type = candidate.precision if candidate.precision in {"int8", "int8_float16", "float16", "float32"} else "default"
+        device = "cuda" if runtime_config.get("provider") == "cuda" or bool(runtime_config.get("prefer_gpu", False)) else "cpu"
+        compute_aliases = {"fp16": "float16", "f16": "float16", "fp32": "float32", "f32": "float32"}
+        compute_type = compute_aliases.get(candidate.precision.lower(), candidate.precision)
+        compute_type = compute_type if compute_type in {"int8", "int8_float16", "float16", "float32"} else "default"
         effective_compute_type = compute_type
         warnings = []
         if device == "cpu" and compute_type in {"float16", "int8_float16"}:

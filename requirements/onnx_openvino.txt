@@ -1,0 +1,5 @@
+onnxruntime-openvino
+openvino
+onnx
+tokenizers
+jinja2

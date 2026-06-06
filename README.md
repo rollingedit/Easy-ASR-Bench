@@ -23,13 +23,15 @@ It runs every selected ASR model on the same normalized audio and the same chunk
 
 ### Runnable ASR Models
 
-- Granite Speech ONNX AR folders with `int8`, `fp16w`, or `fp32` precision folders
-- Granite Speech ONNX NAR folders with `int8`, `fp16w`, or `fp32` precision folders
-- Hugging Face Transformers ASR folders using `.safetensors` weights
-- Hugging Face Whisper Safetensors folders
+- Known multi-file ONNX ASR layouts, including AR folders with `int8`, `fp16w`, `fp32`, `f32`, or `float32` precision folders
+- Known multi-file ONNX ASR layouts, including NAR folders with `int8`, `fp16w`, `fp32`, `f32`, or `float32` precision folders
+- Hugging Face Transformers ASR folders using `.safetensors` weights, including native FP32/float32 weights
+- Hugging Face Whisper Safetensors folders, including native FP32/float32 weights
 - faster-whisper / CTranslate2 folders
 - whisper.cpp GGML `.bin` models
 - Generic ONNX ASR models with a valid `modelbench.json` manifest using the built-in CTC recipe
+
+Precision and quantization labels such as INT4, INT5, INT6, INT8, FP4, NF4, NVFP4/NVP4, FP8, BF8, BF16/bfloat16, FP16, FP32, Q4/Q5/Q6/Q8, K_M/K_S variants, and IQ variants are detected for grouping/reporting when the underlying model backend supports them. Easy ASR Bench does not invent a runtime for an unsupported model format; it labels the model accurately and installs the dependency group for the matching backend.
 
 ### Blocked By Default
 
@@ -40,6 +42,10 @@ It runs every selected ASR model on the same normalized audio and the same chunk
 GGUF text LLMs are supported as local reference/correction models, not direct transcription models.
 
 That means a GGUF LLM can be used to help create an LLM-corrected reference transcript from multiple ASR outputs. The product never labels that as human ground truth.
+
+Local reference/correction LLM loading currently supports `.gguf` through llama.cpp. Hugging Face `.safetensors` folders are supported for ASR models, not as local text LLMs in this app. Other LLM package formats such as GPTQ/AWQ safetensors, EXL2, ONNX LLMs, TensorRT-LLM engines, or raw PyTorch checkpoints are not loaded as local reference LLMs; use a GGUF export or the manual ChatGPT/Claude workflow.
+
+For local LLMs, a `.gguf` file is the required runnable artifact. The tokenizer and metadata are normally embedded in the GGUF. If the scanner sees a Hugging Face text-generation safetensors folder, it reports that a GGUF export is needed for local reference/correction instead of treating the folder as runnable.
 
 ## Quick Start
 
@@ -57,7 +63,7 @@ That means a GGUF LLM can be used to help create an LLM-corrected reference tran
 
 ```text
 Models/
-  granite-ar/
+  known-onnx-ar/
     int8/
       encoder.onnx
       encoder.onnx_data
@@ -159,10 +165,25 @@ Output/
 - `setup.bat --doctor`: run environment checks
 - `Run.bat`: scan models, choose models, process inputs
 - `Drop_Audio_Or_Folders_Here.bat`: drag files/folders directly onto the app
+- `Open_Latest_Report.bat`: open the newest `compare.html` report
 - `Open_Models_Folder.bat`: open the model drop folder
 - `Open_Input_Folder.bat`: open the input folder
 - `Open_Output_Folder.bat`: open the report folder
 - `Edit_Config.bat`: edit configuration
+
+## Dependencies And GPU Support
+
+Setup installs the core runtime first. Model-specific packages are installed only when a selected model needs them, and the app prompts before installing those optional dependency groups.
+
+If an optional dependency install fails, Easy ASR Bench skips only the affected model and continues with any other runnable models. `setup.bat --doctor` lists each dependency group, what it enables, what is missing, and the manual repair command.
+
+GPU acceleration is detected, not assumed. If `config.json` requests or prefers GPU but the selected runtime cannot use the requested provider, the console warns that the run may fall back to CPU. Reports also include provider diagnostics so a user can tell whether GPU support was actually available.
+
+Easy ASR Bench is GPU-first. The default config prefers GPU and allows accelerator package installation when a supported provider is detected. CPU is a fallback, not the goal.
+
+When GPU setup is possible, ONNX models use CUDA on NVIDIA, OpenVINO on Intel, or DirectML on Windows GPUs including AMD, Intel, and NVIDIA. Hugging Face/OpenAI Whisper models use the PyTorch CUDA helper on NVIDIA. AMD's native Windows PyTorch ROCm path is currently limited to AMD's supported Python/GPU matrix, so the packaged flow does not silently install it for every AMD system. faster-whisper installs CUDA cuBLAS/cuDNN Python runtime wheels on NVIDIA; AMD ROCm CTranslate2 requires a ROCm build path and is not treated as a simple Windows pip install. GGUF reference LLMs use llama-cpp-python CUDA wheels on NVIDIA and expose a Vulkan build path for AMD/Intel/NVIDIA systems when the Vulkan runtime and Vulkan SDK build tools are detected.
+
+`whisper.cpp` via `pywhispercpp` remains CPU-only in the packaged dependency flow because current GPU support requires source/build flags rather than a stable simple wheel install. Use faster-whisper or HF/OpenAI Whisper for GPU ASR.
 
 ## Safety
 
@@ -171,9 +192,11 @@ Easy ASR Bench does not execute arbitrary Python files from model folders. Safet
 ## Troubleshooting
 
 - **No runnable ASR models:** put a complete supported model folder in `Models`.
+- **Dependency missing:** accept the install prompt when a selected model needs an optional dependency group, or run `setup.bat --doctor` and use the printed repair command.
 - **Standalone `.safetensors` file:** use the complete Hugging Face model folder, not only the weights file.
 - **Generic `.onnx` file:** add `modelbench.json` with CTC decoding metadata and a vocab file.
-- **CUDA unavailable:** use CPU, or manually install a compatible CUDA Torch/ONNX Runtime GPU stack and confirm the report shows CUDA availability.
+- **GPU unavailable:** run `setup.bat --doctor`. It reports NVIDIA, AMD, Intel, Vulkan, Torch CUDA, ONNX Runtime providers, and dependency repair commands. If setup cannot make GPU work, CPU fallback is reported explicitly.
+- **Cannot find `compare.html`:** run a benchmark first, then open `Open_Latest_Report.bat` or go to the newest folder under `Output`.
 - **Media conversion failed:** check that the file opens normally and that there is enough disk space in `Temp`.
 - **GGUF dependency missing:** install the `llama_cpp` dependency group when prompted, or choose the manual ChatGPT/Claude workflow.
 - **GGUF model lives in another app folder:** choose the paste-path option in the LLM reference menu. The path is saved in `config.json` and scanned again on the next run.

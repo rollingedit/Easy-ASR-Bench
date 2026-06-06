@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .html_report_builder import build_html_report
 from . import __version__
+from .dependency_manager import cuda_diagnostics
 from .llm_reference_prompt import build_llm_reference_prompt
 from .scoring import pairwise_metrics
 from .utils import format_timestamp, now_stamp, safe_stem, sha256_file
@@ -87,6 +88,7 @@ def runtime_environment() -> dict:
         environment["onnxruntime_providers"] = ort.get_available_providers()
     except Exception:
         environment["onnxruntime_providers"] = []
+    environment["cuda_diagnostics"] = cuda_diagnostics()
     return environment
 
 

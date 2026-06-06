@@ -2,10 +2,10 @@
 
 ## ASR
 
-- Granite Speech ONNX AR: `int8`, `fp16w`, `fp32`
-- Granite Speech ONNX NAR: `int8`, `fp16w`, `fp32`
-- Hugging Face Transformers ASR folders with `.safetensors`
-- Hugging Face Whisper Safetensors folders
+- Known multi-file ONNX AR layouts: `int8`, `fp16w`, `fp32`, `f32`, `float32`
+- Known multi-file ONNX NAR layouts: `int8`, `fp16w`, `fp32`, `f32`, `float32`
+- Hugging Face Transformers ASR folders with `.safetensors`, including native FP32/float32 weights
+- Hugging Face Whisper Safetensors folders, including native FP32/float32 weights
 - faster-whisper / CTranslate2 folders
 - whisper.cpp GGML `.bin` files
 - Generic ONNX CTC ASR with `modelbench.json`
@@ -19,6 +19,10 @@
 - GGUF text LLMs through llama.cpp dependencies
 
 GGUF text LLMs are not shown as direct ASR models. They are used for LLM-corrected reference workflows.
+
+Local reference/correction LLM loading is GGUF-only. Hugging Face `.safetensors` folders are supported for ASR adapters, not as local text LLMs. GPTQ/AWQ safetensors, EXL2, ONNX LLMs, TensorRT-LLM engines, raw PyTorch checkpoints, and similar text-generation formats are not loaded as local reference LLMs by this app. Use a GGUF export or the external/manual LLM workflow.
+
+A `.gguf` file is treated as the complete local LLM artifact for llama.cpp because tokenizer/model metadata is normally embedded. If a Hugging Face text LLM safetensors folder is found, the scanner reports that a GGUF export is required for local reference/correction.
 
 Reference LLM discovery:
 

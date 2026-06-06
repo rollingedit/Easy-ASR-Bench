@@ -29,7 +29,7 @@ MEDIA_EXTENSIONS = [
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "app": {
-        "version": "0.2.8",
+        "version": "0.2.9",
         "version_channel": "stable",
         "check_for_updates_on_setup": True,
         "check_for_updates_on_run": False,
@@ -45,7 +45,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "runtime": {
         "execution": "sequential",
         "provider": "auto",
-        "prefer_gpu": False,
+        "prefer_gpu": True,
         "fallback_to_cpu": True,
         "unload_between_models": True,
         "continue_after_model_error": True,
@@ -54,8 +54,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "dependency_install": {
         "auto_install_missing_runtime_dependencies": True,
-        "prefer_cpu_safe_defaults": True,
-        "allow_cuda_install": False,
+        "prefer_cpu_safe_defaults": False,
+        "allow_cuda_install": True,
+        "allow_accelerator_install": True,
     },
     "model_scan": {
         "recursive": True,

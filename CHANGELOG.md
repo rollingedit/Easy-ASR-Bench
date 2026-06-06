@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.2.9
+
+- Made the runtime GPU-first by default while keeping explicit CPU fallback reporting when an accelerator path cannot safely run.
+- Added accelerator-aware dependency repair/install decisions instead of only CPU-safe package suggestions.
+- Added NVIDIA CUDA dependency paths for ONNX Runtime, Hugging Face/Transformers ASR, OpenAI Whisper `.pt`, faster-whisper/CTranslate2, and GGUF llama.cpp reference LLMs.
+- Added ONNX DirectML dependency support for broad Windows GPU acceleration, including AMD, Intel, and NVIDIA DirectX 12-capable hardware.
+- Added ONNX OpenVINO dependency support and changed automatic ONNX routing to prefer OpenVINO on Intel hardware before generic DirectML.
+- Added GGUF llama.cpp Vulkan build support for AMD/Intel/NVIDIA systems, gated on detectable Vulkan runtime and Vulkan SDK build tooling so setup does not offer a known-bad source build.
+- Added `cmake` and `ninja` to the Vulkan llama.cpp requirements so source builds bootstrap more of their Python-side build chain.
+- Added accelerator diagnostics to `setup.bat --doctor`: NVIDIA, AMD, Intel, Windows GPU, Vulkan runtime, Vulkan SDK, Torch CUDA, and ONNX Runtime provider state.
+- Added dependency status checks that repair CPU-only Torch, missing ONNX providers, missing faster-whisper NVIDIA CUDA runtime wheels, and llama.cpp builds without GPU offload when a GPU path is selected.
+- Added CUDA/provider diagnostics into result environment metadata so reports show whether GPU support was actually available.
+- Added provider fallback metadata for CUDA, DirectML, and OpenVINO ONNX runs.
+- Added runtime warnings when requested/preferred GPU execution will fall back to CPU.
+- Added `Open_Latest_Report.bat` and included it in installer manifests, release ZIP entrypoints, and uninstall cleanup.
+- Made `Run.bat` print the `compare.html` path after report generation so users can find the HTML report immediately.
+- Expanded required dependency groups for ASR/LLM runtimes: Transformers now includes `accelerate`, `tokenizers`, `sentencepiece`, `protobuf`, `torchaudio`, and `torchcodec`; faster-whisper CUDA includes NVIDIA cuBLAS/cuDNN wheels; CUDA Torch uses the PyTorch CUDA 12.8 wheel index.
+- Improved optional dependency failure handling so a failed optional install skips only the affected model and prints the exact manual repair command.
+- Added broad precision and quantization label detection for INT2/3/4/5/6/8, FP4/8/16/32, BF8, BF16/bfloat16, NF4, NVFP4/NVP4, Q2-Q8, K_M/K_S/K_L, and IQ variants.
+- Added native 32-bit support throughout model discovery and reporting: `fp32`, `f32`, `float32`, and safetensors `torch_dtype: "float32"` now map to `32-bit / FP32`.
+- Fixed safetensors `torch_dtype: "bfloat16"` so it maps to `16-bit / BF16` instead of an unknown transformed label.
+- Added multi-file ONNX AR/NAR support for `fp32`, `f32`, and `float32` precision folders.
+- Renamed user-facing multi-file ONNX AR/NAR labels so they no longer imply Granite/IBM is the only ONNX path; internal adapter names remain unchanged for compatibility.
+- Added faster-whisper precision alias detection for `fp32`, `f32`, `float32`, `fp16`, `f16`, and `float16`, with CTranslate2 compute-type normalization.
+- Added whisper.cpp precision detection from filenames such as `ggml-large-f32.bin`.
+- Clarified GGUF local LLM support: `.gguf` is treated as the complete local reference/correction LLM artifact because tokenizer/model metadata is normally embedded.
+- Added scanner handling for Hugging Face text/non-ASR safetensors folders: they are reported as unsupported local LLMs with a clear requirement for a GGUF export or the manual ChatGPT/Claude workflow.
+- Replaced brittle text-LLM family-only scanning with structural detection for unknown/custom Hugging Face text models, including `*ForCausalLM` architectures and generic transformer configs with vocab/hidden/layer/head fields.
+- Kept ASR safetensors folders from being misclassified as LLMs by recognizing ASR config signals such as Whisper, Wav2Vec2, HuBERT, CTC, speech, Seamless, Moonshine, and ASR metadata.
+- Improved unsupported-model explanations for standalone safetensors, GGUF typo files, generic ONNX files without `modelbench.json`, incomplete multi-file ONNX folders, and unsupported local LLM formats.
+- Updated README and supported-model docs to separate ASR safetensors support from local LLM support, and to state that local text LLM loading is GGUF-only in this app.
+- Updated setup documentation with the actual dependency groups, accelerator package paths, hardware routing rules, and remaining CPU-only packaged paths.
+- Added regression coverage for accelerator routing, CUDA/DirectML/OpenVINO/Vulkan install decisions, doctor diagnostics, runtime fallback warnings, dependency repair commands, GGUF discovery, text-LLM safetensors explanations, broad quant labels, native FP32, BF16/BF8/NF4/NVFP4 labels, and report environment diagnostics.
+
 ## v0.2.8
 
 - Added HTML visual word-diff rendering for LLM-corrected reference scoring.

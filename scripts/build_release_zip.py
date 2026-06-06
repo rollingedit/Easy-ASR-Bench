@@ -63,7 +63,7 @@ def build(version: str, update_metadata: bool, strict_checksums: bool = False) -
         "version": plain,
         "app_zip": zip_name,
         "install_dir": "%LOCALAPPDATA%\\Easy-ASR-Bench",
-        "entrypoints": ["setup.bat", "Run.bat", "Drop_Audio_Or_Folders_Here.bat"],
+        "entrypoints": ["setup.bat", "Run.bat", "Drop_Audio_Or_Folders_Here.bat", "Open_Latest_Report.bat"],
     }
     if update_metadata:
         write_json(ROOT / "installer" / "manifest.json", manifest)

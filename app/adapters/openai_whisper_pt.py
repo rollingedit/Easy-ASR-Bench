@@ -19,6 +19,7 @@ class OpenAIWhisperPTAdapter:
     def __init__(self) -> None:
         self.model = None
         self.candidate: ModelCandidate | None = None
+        self.runtime_config: dict = {}
 
     def discover(self, models_root: Path) -> list[ModelCandidate]:
         candidates: list[ModelCandidate] = []
@@ -59,11 +60,15 @@ class OpenAIWhisperPTAdapter:
         if not is_verified_official_checkpoint(candidate.path) and not security.get("allow_pickle_or_pt_files", False):
             raise RuntimeError("Blocked .pt checkpoint. Filename is not a safety check; set security.allow_pickle_or_pt_files=true only for files you trust.")
         try:
+            import torch
             import whisper
         except ModuleNotFoundError as exc:
             raise RuntimeError("OpenAI Whisper .pt support requires requirements/openai_whisper.txt.") from exc
         self.candidate = candidate
-        self.model = whisper.load_model(str(candidate.path))
+        self.runtime_config = runtime_config
+        wants_cuda = runtime_config.get("provider") == "cuda" or bool(runtime_config.get("prefer_gpu", False))
+        device = "cuda" if wants_cuda and torch.cuda.is_available() else None
+        self.model = whisper.load_model(str(candidate.path), device=device) if device else whisper.load_model(str(candidate.path))
         return self
 
     def transcribe_chunks(self, chunks: Sequence, chunk_metadata: list[dict]) -> ModelRunResult:
@@ -74,7 +79,8 @@ class OpenAIWhisperPTAdapter:
         for chunk, metadata in zip(chunks, chunk_metadata):
             started = time.perf_counter()
             try:
-                result = self.model.transcribe(chunk.samples, fp16=False)
+                use_fp16 = str(getattr(self.model, "device", "")).startswith("cuda")
+                result = self.model.transcribe(chunk.samples, fp16=use_fp16)
                 text = result.get("text", "")
             except Exception as exc:
                 text = f"[ERROR: chunk failed: {exc}]"
@@ -83,7 +89,8 @@ class OpenAIWhisperPTAdapter:
             peak_ram = max(peak_ram, process_memory_mb())
             out.append(ChunkTranscript(str(metadata["chunk_id"]), float(metadata["start_seconds"]), float(metadata["end_seconds"]), text.strip()))
         audio_seconds = sum(float(item["end_seconds"]) - float(item["start_seconds"]) for item in chunk_metadata)
-        return ModelRunResult(self.candidate, out, {"provider": "openai-whisper", "audio_seconds": audio_seconds, "chunk_count": len(chunks), "inference_seconds": inference_seconds, "total_wall_seconds": inference_seconds, "peak_process_memory_mb": peak_ram, "audio_seconds_per_wall_second": audio_seconds / max(0.001, inference_seconds)}, errors)
+        device = str(getattr(self.model, "device", "cpu")) if self.model is not None else "cpu"
+        return ModelRunResult(self.candidate, out, {"provider": "openai-whisper", "device": device, "audio_seconds": audio_seconds, "chunk_count": len(chunks), "inference_seconds": inference_seconds, "total_wall_seconds": inference_seconds, "peak_process_memory_mb": peak_ram, "audio_seconds_per_wall_second": audio_seconds / max(0.001, inference_seconds)}, errors)
 
     def unload(self) -> None:
         self.model = None

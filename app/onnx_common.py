@@ -22,8 +22,20 @@ def choose_providers(provider: str) -> list[str]:
             return ["CUDAExecutionProvider", "CPUExecutionProvider"]
         print("CUDA was requested but ONNX Runtime CUDAExecutionProvider is not available. Falling back to CPU.")
         return ["CPUExecutionProvider"]
-    if provider == "auto" and "CUDAExecutionProvider" in available:
-        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    if provider == "directml":
+        if "DmlExecutionProvider" in available:
+            return ["DmlExecutionProvider", "CPUExecutionProvider"]
+        print("DirectML was requested but ONNX Runtime DmlExecutionProvider is not available. Falling back to CPU.")
+        return ["CPUExecutionProvider"]
+    if provider == "openvino":
+        if "OpenVINOExecutionProvider" in available:
+            return ["OpenVINOExecutionProvider", "CPUExecutionProvider"]
+        print("OpenVINO was requested but ONNX Runtime OpenVINOExecutionProvider is not available. Falling back to CPU.")
+        return ["CPUExecutionProvider"]
+    if provider == "auto":
+        for accelerated in ["CUDAExecutionProvider", "DmlExecutionProvider", "OpenVINOExecutionProvider"]:
+            if accelerated in available:
+                return [accelerated, "CPUExecutionProvider"]
     return ["CPUExecutionProvider"]
 
 
@@ -43,6 +55,10 @@ def session_provider_summary(session: ort.InferenceSession, requested: list[str]
         "cuda_requested": "CUDAExecutionProvider" in requested,
         "cuda_active": "CUDAExecutionProvider" in actual,
         "provider_fallback": "CUDAExecutionProvider" in requested and "CUDAExecutionProvider" not in actual,
+        "directml_requested": "DmlExecutionProvider" in requested,
+        "directml_active": "DmlExecutionProvider" in actual,
+        "openvino_requested": "OpenVINOExecutionProvider" in requested,
+        "openvino_active": "OpenVINOExecutionProvider" in actual,
     }
 
 
