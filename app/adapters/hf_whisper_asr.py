@@ -70,6 +70,7 @@ class HFWhisperASRAdapter:
         except ModuleNotFoundError as exc:
             raise RuntimeError("HF Whisper requires the transformers_cpu dependency group.") from exc
         device = 0 if runtime_config.get("provider") == "cuda" and torch.cuda.is_available() else -1
+        whisper_config = runtime_config.get("whisper", {})
         generate_kwargs = {}
         language = runtime_config.get("language", "auto")
         if language and language != "auto":
@@ -77,11 +78,15 @@ class HFWhisperASRAdapter:
         task = runtime_config.get("task", "transcribe")
         if task:
             generate_kwargs["task"] = task
+        model_kwargs = {}
+        if device >= 0:
+            model_kwargs["torch_dtype"] = torch.float16
         self.pipe = pipeline(
             "automatic-speech-recognition",
             model=str(candidate.path),
             device=device,
             trust_remote_code=False,
+            model_kwargs=model_kwargs or None,
             generate_kwargs=generate_kwargs or None,
         )
         return self
@@ -96,7 +101,14 @@ class HFWhisperASRAdapter:
         for chunk, metadata in zip(chunks, chunk_metadata):
             started = time.perf_counter()
             try:
-                result = self.pipe({"array": chunk.samples, "sampling_rate": 16000})
+                whisper_config = self.runtime_config.get("whisper", {})
+                call_kwargs = {
+                    "chunk_length_s": int(whisper_config.get("chunk_length_s", 30)),
+                    "stride_length_s": int(whisper_config.get("stride_length_s", 5)),
+                    "batch_size": int(whisper_config.get("batch_size", 1)),
+                    "return_timestamps": bool(whisper_config.get("return_timestamps", False)),
+                }
+                result = self.pipe({"array": chunk.samples, "sampling_rate": 16000}, **call_kwargs)
                 text = result.get("text", "") if isinstance(result, dict) else str(result)
             except Exception as exc:
                 text = f"[ERROR: chunk failed: {exc}]"

@@ -24,8 +24,10 @@ Easy ASR Bench does not guess arbitrary ONNX preprocessing and decoding. The man
   },
   "outputs": {"logits": "logits"},
   "preprocessing": {"type": "raw_waveform", "normalize": true},
-  "decoding": {"type": "ctc", "blank_token_id": 0}
+  "decoding": {"type": "ctc", "blank_token_id": 0, "vocab_file": "vocab.json"}
 }
 ```
+
+CTC manifests must include either `decoding.vocab` or `decoding.vocab_file`. Without a vocab, the app cannot produce text and the model is shown as incomplete instead of emitting numeric token IDs.
 
 Unsupported manifests are shown in the model scanner with exact missing fields.

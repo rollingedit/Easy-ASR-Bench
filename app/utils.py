@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shlex
 import time
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +22,17 @@ def sanitize_windows_drag_drop_path(raw: str) -> Path:
                 text = text[1:]
             text = text.replace("/", "\\")
     return Path(text)
+
+
+def parse_windows_path_list(raw: str) -> list[Path]:
+    text = raw.strip()
+    if not text:
+        return []
+    lexer = shlex.shlex(text, posix=False)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    parts = list(lexer)
+    return [sanitize_windows_drag_drop_path(part) for part in parts]
 
 
 def safe_stem(path: Path) -> str:

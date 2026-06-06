@@ -170,7 +170,8 @@ def render_text_report(results: dict) -> str:
 
 
 def write_benchmark_csv(path: Path, results: dict) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
+    partial = path.with_suffix(path.suffix + ".partial")
+    with partial.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(
             handle,
             fieldnames=[
@@ -209,6 +210,7 @@ def write_benchmark_csv(path: Path, results: dict) -> None:
                     "errors": len(run.get("errors", [])),
                 }
             )
+    partial.replace(path)
 
 
 def _atomic_write_text(path: Path, text: str) -> None:

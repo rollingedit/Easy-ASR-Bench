@@ -29,7 +29,7 @@ It runs every selected ASR model on the same normalized audio and the same chunk
 - Hugging Face Whisper Safetensors folders
 - faster-whisper / CTranslate2 folders
 - whisper.cpp GGML `.bin` models
-- official-name OpenAI Whisper `.pt` files, with unsafe pickle restrictions
+- SHA256-allowlisted OpenAI Whisper `.pt` files, or explicitly trusted `.pt` files when unsafe pickle loading is enabled
 - Generic ONNX ASR models with a valid `modelbench.json` manifest using the built-in CTC recipe
 
 ### GGUF Reference Models
@@ -107,7 +107,7 @@ Minimal CTC manifest:
   "inputs": {"waveform": {"name": "input_values", "dtype": "float32"}},
   "outputs": {"logits": "logits"},
   "preprocessing": {"type": "raw_waveform", "normalize": true},
-  "decoding": {"type": "ctc", "blank_token_id": 0}
+  "decoding": {"type": "ctc", "blank_token_id": 0, "vocab_file": "vocab.json"}
 }
 ```
 
@@ -169,7 +169,7 @@ Easy ASR Bench does not execute arbitrary Python files from model folders. Safet
 
 - **No runnable ASR models:** put a complete supported model folder in `Models`.
 - **Standalone `.safetensors` file:** use the complete Hugging Face model folder, not only the weights file.
-- **Generic `.onnx` file:** add `modelbench.json`.
+- **Generic `.onnx` file:** add `modelbench.json` with CTC decoding metadata and a vocab file.
 - **CUDA unavailable:** use CPU or install a compatible ONNX Runtime GPU stack.
 - **Media conversion failed:** check that the file opens normally and that there is enough disk space in `Temp`.
 - **GGUF dependency missing:** install the `llama_cpp` dependency group when prompted, or choose the manual ChatGPT/Claude workflow.

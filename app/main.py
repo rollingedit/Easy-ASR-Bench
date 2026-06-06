@@ -12,7 +12,7 @@ from .adapters.base import ModelCandidate, ModelRunResult
 from .config import load_config
 from .model_scanner import scan_models
 from .model_selector import choose_candidates
-from .utils import expand_inputs, sanitize_windows_drag_drop_path, wait_for_stable_file
+from .utils import expand_inputs, parse_windows_path_list, sanitize_windows_drag_drop_path, wait_for_stable_file
 
 
 def print_scan_summary(runnable: list[ModelCandidate], unsupported: list[ModelCandidate]) -> None:
@@ -67,33 +67,68 @@ def adapter_for(candidate: ModelCandidate):
     raise ValueError(f"No adapter registered for {candidate.adapter_name}")
 
 
-def ensure_dependencies(candidates: list[ModelCandidate], config: dict, reference_llm: ModelCandidate | None = None) -> bool:
+def ensure_dependencies(candidates: list[ModelCandidate], config: dict, reference_llm: ModelCandidate | None = None) -> tuple[list[ModelCandidate], ModelCandidate | None]:
     from .dependency_manager import install_group, missing_modules
 
     project_root = Path(__file__).resolve().parent.parent
+    candidate_groups: dict[str, list[str]] = {}
+    all_candidates = [*candidates, *([reference_llm] if reference_llm else [])]
     groups: list[str] = []
-    for candidate in [*candidates, *([reference_llm] if reference_llm else [])]:
+    for candidate in all_candidates:
         adapter = adapter_for(candidate)
+        candidate_groups[candidate.candidate_id] = adapter.required_dependency_groups(candidate)
         for group in adapter.required_dependency_groups(candidate):
             if group not in groups:
                 groups.append(group)
     missing = {group: missing_modules(group) for group in groups if missing_modules(group)}
     if not missing:
-        return True
+        return candidates, reference_llm
     print()
     print("Some selected models need additional runtime packages:")
     for group, modules in missing.items():
         print(f"  {group}: missing {', '.join(modules)}")
     if not config.get("dependency_install", {}).get("auto_install_missing_runtime_dependencies", True):
         print("Automatic dependency repair is disabled in config.json.")
-        return False
+        failed_groups = set(missing)
+        return _drop_candidates_for_failed_dependency_groups(candidates, reference_llm, candidate_groups, failed_groups)
     answer = input("Install missing dependency groups now? [Y/n] ").strip().lower()
     if answer in {"n", "no"}:
-        return False
+        failed_groups = set(missing)
+        return _drop_candidates_for_failed_dependency_groups(candidates, reference_llm, candidate_groups, failed_groups)
+    failed_groups: set[str] = set()
     for group in missing:
         print(f"Installing {group}...")
-        install_group(group, project_root)
-    return True
+        try:
+            install_group(group, project_root)
+        except Exception as exc:
+            print(f"Install failed for {group}: {exc}")
+            failed_groups.add(group)
+            continue
+        still_missing = missing_modules(group)
+        if still_missing:
+            print(f"Install finished but {group} is still missing: {', '.join(still_missing)}")
+            failed_groups.add(group)
+    return _drop_candidates_for_failed_dependency_groups(candidates, reference_llm, candidate_groups, failed_groups)
+
+
+def _drop_candidates_for_failed_dependency_groups(
+    candidates: list[ModelCandidate],
+    reference_llm: ModelCandidate | None,
+    candidate_groups: dict[str, list[str]],
+    failed_groups: set[str],
+) -> tuple[list[ModelCandidate], ModelCandidate | None]:
+    if not failed_groups:
+        return candidates, reference_llm
+    kept: list[ModelCandidate] = []
+    for candidate in candidates:
+        if failed_groups & set(candidate_groups.get(candidate.candidate_id, [])):
+            print(f"Skipping {candidate.display_name}: dependency install failed for {', '.join(sorted(failed_groups & set(candidate_groups.get(candidate.candidate_id, []))))}.")
+        else:
+            kept.append(candidate)
+    if reference_llm and failed_groups & set(candidate_groups.get(reference_llm.candidate_id, [])):
+        print(f"Skipping {reference_llm.display_name}: dependency install failed for {', '.join(sorted(failed_groups & set(candidate_groups.get(reference_llm.candidate_id, []))))}.")
+        reference_llm = None
+    return kept, reference_llm
 
 
 def runtime_config_for_candidate(config: dict) -> dict:
@@ -139,8 +174,14 @@ def process_file_with_candidates(
             logging.info("Running %s", candidate.candidate_id)
             adapter = adapter_for(candidate)
             try:
+                load_started = time.perf_counter()
                 adapter.load(candidate, runtime_config_for_candidate(config))
+                model_load_seconds = time.perf_counter() - load_started
                 result = adapter.transcribe_chunks(chunks, chunk_metadata)
+                result.metrics["model_load_seconds"] = model_load_seconds
+                result.metrics["total_wall_seconds"] = model_load_seconds + float(result.metrics.get("inference_seconds", 0))
+                audio_seconds_metric = float(result.metrics.get("audio_seconds", audio_seconds))
+                result.metrics["audio_seconds_per_wall_second"] = audio_seconds_metric / max(0.001, float(result.metrics["total_wall_seconds"]))
             except Exception:
                 logging.error("%s failed", candidate.candidate_id)
                 logging.exception("Model failed")
@@ -217,7 +258,7 @@ def interactive_prompt_for_files(config: dict) -> list[Path]:
     if raw.lower() in {"q", "quit", "exit"}:
         return []
     if raw:
-        paths = [sanitize_windows_drag_drop_path(raw)]
+        paths = parse_windows_path_list(raw)
     else:
         paths = [folder_config(config, "input")]
     extensions = {ext.lower() for ext in config["input"]["extensions"]}
@@ -254,7 +295,8 @@ def main() -> None:
     if not selected:
         print("No runnable ASR models selected.")
         return
-    if not ensure_dependencies(selected, config, reference_llm):
+    selected, reference_llm = ensure_dependencies(selected, config, reference_llm)
+    if not selected:
         print("Cannot run selected models until their dependency groups are installed.")
         return
     while True:
@@ -284,9 +326,9 @@ def main() -> None:
         state = queue_state(config)
         for file_path in files:
             from .queue_manager import QueueItem
-            from .utils import sha256_file
+            from .utils import file_key, sha256_file
 
-            state.upsert(QueueItem(str(file_path.resolve()), sha256_file(file_path)))
+            state.upsert(QueueItem(str(file_path.resolve()), sha256_file(file_path), file_key(file_path)))
             output = process_file_with_candidates(file_path, selected, config, unsupported, reference_llm)
             state.mark(file_path.resolve(), "done" if output else "failed", str(output or ""))
         if not args.interactive:

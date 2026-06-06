@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 import json
-import py_compile
 import sys
 from pathlib import Path
 
@@ -62,8 +61,24 @@ def validate_formats() -> None:
             json.loads(path.read_text(encoding="utf-8"))
     for path in ROOT.rglob("*.py"):
         if not (SKIP_DIRS & set(path.parts)):
-            py_compile.compile(str(path), doraise=True)
-            ast.parse(path.read_text(encoding="utf-8"))
+            source = path.read_text(encoding="utf-8")
+            ast.parse(source)
+            compile(source, str(path), "exec")
+
+
+def validate_requirements() -> None:
+    for path in (ROOT / "requirements").glob("*.txt"):
+        lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip() and not line.strip().startswith("#")]
+        for line in lines:
+            if " " in line and not line.startswith(("--", "-")):
+                raise AssertionError(f"{path} contains a space-separated requirement line: {line}")
+
+
+def validate_installer_safety() -> None:
+    installer = ROOT / "installer" / "install.ps1"
+    text = installer.read_text(encoding="utf-8")
+    if "python (Join-Path" in text or "\n  python " in text or "\npython " in text:
+        raise AssertionError("installer/install.ps1 must not call bare python")
 
 
 def validate_endings() -> None:
@@ -81,6 +96,8 @@ def main() -> int:
     try:
         validate_line_counts()
         validate_formats()
+        validate_requirements()
+        validate_installer_safety()
         validate_endings()
     except Exception as exc:
         print(f"release validation failed: {exc}", file=sys.stderr)

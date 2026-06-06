@@ -7,7 +7,7 @@ Supported local formats:
 - Hugging Face Whisper folders with Safetensors weights
 - faster-whisper / CTranslate2 folders with `model.bin`
 - whisper.cpp GGML files such as `ggml-base.bin`
-- OpenAI Whisper `.pt` files with official model filenames
+- OpenAI Whisper `.pt` files only when SHA256-allowlisted or explicitly trusted with unsafe pickle loading enabled
 
 Security note: unknown `.pt` files are blocked by default because PyTorch pickle checkpoints can execute unsafe data. Keep `allow_pickle_or_pt_files` disabled unless you fully trust the file.
 

@@ -1,6 +1,6 @@
 {
   "app": {
-    "version": "0.2.2",
+    "version": "0.2.3",
     "version_channel": "stable",
     "check_for_updates_on_setup": true,
     "check_for_updates_on_run": false
@@ -40,7 +40,7 @@
     "trust_remote_code": false,
     "allow_model_folder_scripts": false,
     "allow_pickle_or_pt_files": false,
-    "allow_known_official_whisper_pt": true,
+    "allow_known_official_whisper_pt": false,
     "scan_only_safe_formats_by_default": true,
     "allow_manifest_custom_python": false
   },

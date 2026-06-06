@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import time
 from pathlib import Path
 from typing import Sequence
@@ -10,6 +9,7 @@ from ..benchmark import process_memory_mb
 from ..precision_detector import normalize_precision_label
 
 
+KNOWN_OFFICIAL_SHA256: dict[str, str] = {}
 KNOWN_OFFICIAL_NAMES = {"tiny.pt", "base.pt", "small.pt", "medium.pt", "large.pt", "large-v1.pt", "large-v2.pt", "large-v3.pt"}
 
 
@@ -23,8 +23,14 @@ class OpenAIWhisperPTAdapter:
     def discover(self, models_root: Path) -> list[ModelCandidate]:
         candidates: list[ModelCandidate] = []
         for path in models_root.rglob("*.pt"):
-            is_known_name = path.name.lower() in KNOWN_OFFICIAL_NAMES
+            verified = is_verified_official_checkpoint(path)
+            known_name = path.name.lower() in KNOWN_OFFICIAL_NAMES
             raw, bucket = normalize_precision_label("unknown")
+            warnings = []
+            if not verified:
+                warnings.append("Local .pt checkpoints use pickle and are blocked unless their SHA256 is allowlisted or unsafe loading is explicitly enabled.")
+                if known_name:
+                    warnings.append("The filename matches an OpenAI Whisper checkpoint name, but filenames are not trusted.")
             candidates.append(
                 ModelCandidate(
                     candidate_id=f"openai_whisper_pt__{path.stem}".lower().replace(" ", "_"),
@@ -37,10 +43,10 @@ class OpenAIWhisperPTAdapter:
                     quantization_label=bucket,
                     path=path,
                     adapter_name=self.name,
-                    runnable=is_known_name,
-                    runnable_after_dependency_install=is_known_name,
-                    warnings=[] if is_known_name else ["Unknown .pt files are blocked by default because pickle checkpoints can be unsafe."],
-                    help_text="Official Whisper .pt filenames are allowed; unknown .pt files require explicit unsafe loading in config.",
+                    runnable=verified,
+                    runnable_after_dependency_install=verified,
+                    warnings=warnings,
+                    help_text="OpenAI Whisper .pt files are runnable only when SHA256-verified or when security.allow_pickle_or_pt_files is explicitly enabled.",
                 )
             )
         return candidates
@@ -50,8 +56,8 @@ class OpenAIWhisperPTAdapter:
 
     def load(self, candidate: ModelCandidate, runtime_config: dict):
         security = runtime_config.get("security", {})
-        if candidate.path.name.lower() not in KNOWN_OFFICIAL_NAMES and not security.get("allow_pickle_or_pt_files", False):
-            raise RuntimeError("Unknown .pt model is blocked by security settings.")
+        if not is_verified_official_checkpoint(candidate.path) and not security.get("allow_pickle_or_pt_files", False):
+            raise RuntimeError("Blocked .pt checkpoint. Filename is not a safety check; set security.allow_pickle_or_pt_files=true only for files you trust.")
         try:
             import whisper
         except ModuleNotFoundError as exc:
@@ -82,3 +88,23 @@ class OpenAIWhisperPTAdapter:
     def unload(self) -> None:
         self.model = None
         self.candidate = None
+
+
+def sha256_path(path: Path) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def is_verified_official_checkpoint(path: Path) -> bool:
+    expected = KNOWN_OFFICIAL_SHA256.get(path.name.lower())
+    if not expected:
+        return False
+    try:
+        return sha256_path(path).lower() == expected.lower()
+    except OSError:
+        return False

@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.2.3
+
+- Hardened installer updates to preserve `Models`, `Input`, `Output`, `Logs`, `Cache`, `Temp`, and `config.json` across installs and updates.
+- Added installer rollback handling if the atomic directory swap fails.
+- Removed bare `python` usage from the PowerShell installer staging validator.
+- Added a repeatable release ZIP builder and CI ZIP validation.
+- Blocked local OpenAI Whisper `.pt` files by default unless SHA256-allowlisted or explicitly trusted with unsafe pickle loading enabled.
+- Passed HF Whisper long-form chunking options through the Transformers pipeline call.
+- Required vocab metadata for generic ONNX CTC manifests so numeric token IDs are not emitted as transcripts.
+- Made recommended model selection family-balanced instead of Granite-only.
+- Improved Unicode-aware scoring normalization and multi-path paste parsing.
+- Made dependency install failures skip only affected models instead of crashing the whole run.
+- Made `benchmark.csv` writes atomic and watch queue skip completed files by fast size/mtime key before hashing.
+
 ## v0.2.2
 
 - Added a complete LLM reference menu for detected GGUF models, saved external GGUF paths, manual ChatGPT/Claude workflows, and skipping reference scoring.

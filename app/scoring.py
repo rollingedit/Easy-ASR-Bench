@@ -1,13 +1,24 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 
 
 def normalize_words(text: str) -> list[str]:
-    text = text.lower()
-    text = re.sub(r"[^a-z0-9\s]+", " ", text)
-    return re.sub(r"\s+", " ", text).strip().split()
+    text = unicodedata.normalize("NFKC", text.casefold())
+    chars: list[str] = []
+    for char in text:
+        category = unicodedata.category(char)
+        if char.isspace():
+            chars.append(" ")
+        elif category[0] in {"L", "N", "M"}:
+            chars.append(char)
+        elif char in {"'", "’"}:
+            chars.append(char)
+        else:
+            chars.append(" ")
+    return re.sub(r"\s+", " ", "".join(chars)).strip().split()
 
 
 def strict_words(text: str) -> list[str]:
