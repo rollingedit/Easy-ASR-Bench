@@ -61,6 +61,8 @@ def build(version: str, update_metadata: bool) -> Path:
             if path.is_file():
                 info = zipfile.ZipInfo(path.relative_to(dist).as_posix(), fixed_time)
                 info.compress_type = zipfile.ZIP_STORED
+                info.create_system = 0
+                info.external_attr = 0
                 archive.writestr(info, path.read_bytes())
 
     manifest = {
@@ -86,8 +88,16 @@ def build(version: str, update_metadata: bool) -> Path:
         committed_manifest = json.loads((ROOT / "installer" / "manifest.json").read_text(encoding="utf-8"))
         committed_checksums = json.loads((ROOT / "installer" / "checksums.json").read_text(encoding="utf-8"))
         if committed_manifest != manifest:
+            print("Generated manifest:")
+            print(json.dumps(manifest, indent=2))
+            print("Committed manifest:")
+            print(json.dumps(committed_manifest, indent=2))
             raise SystemExit("installer/manifest.json does not match generated release metadata")
         if committed_checksums != checksums:
+            print("Generated checksums:")
+            print(json.dumps(checksums, indent=2))
+            print("Committed checksums:")
+            print(json.dumps(committed_checksums, indent=2))
             raise SystemExit("installer/checksums.json does not match generated release checksums")
 
     verify_dir = dist / f"verify-{tag}"
