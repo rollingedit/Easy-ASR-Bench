@@ -465,7 +465,7 @@ def test_offer_missing_file_repair_downloads_exact_repo_matches(tmp_path: Path, 
 def test_offer_missing_file_repair_writes_structured_llm_audit_request_when_ambiguous(tmp_path: Path, monkeypatch):
     destination = tmp_path / "model"
     destination.mkdir()
-    repo_files = ["model.safetensors", "config.json", "tokenizer.json"]
+    repo_files = ["model.safetensors", "notes/custom.file"]
     choice = DownloadChoice(
         label="Safetensors",
         kind="safetensors",
@@ -506,3 +506,174 @@ def test_offer_missing_file_repair_writes_structured_llm_audit_request_when_ambi
     assert payload["scanner_missing_files"] == ["tokenizer/vocab file"]
     assert payload["required_response_schema"]["schema"] == "easy_asr_bench.hf_missing_file_recommendation.v1"
     assert "Return only JSON" in prompt_path.read_text(encoding="utf-8")
+
+
+def test_offer_missing_file_repair_offers_conservative_same_package_sidecars(tmp_path: Path, monkeypatch):
+    destination = tmp_path / "model"
+    destination.mkdir()
+    repo_files = [
+        "onnx/encoder.onnx",
+        "onnx/encoder.onnx_data",
+        "onnx/encoder_fp16.onnx",
+        "onnx/encoder_fp16.onnx_data",
+        "config.json",
+    ]
+    choice = DownloadChoice(
+        label="ONNX package",
+        kind="onnx",
+        primary_files=("onnx/encoder.onnx",),
+        files=("onnx/encoder.onnx",),
+        task_hint="metadata_required",
+    )
+    downloaded: list[str] = []
+
+    def fake_download(repo_id: str, revision: str | None, filename: str, destination: Path, relative_name: str | None = None) -> Path:
+        downloaded.append(filename)
+        path = destination / (relative_name or filename)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+        return path
+
+    missing_candidate = ModelCandidate(
+        candidate_id="incomplete",
+        display_name="Incomplete",
+        family_name="Incomplete",
+        backend="onnx",
+        container_format="onnx",
+        task="unknown",
+        precision="unknown",
+        quantization_label="Unknown precision",
+        path=destination,
+        adapter_name="onnx",
+        runnable=False,
+        missing_files=["sidecar files"],
+    )
+    monkeypatch.setattr("app.hf_model_downloader._download_file", fake_download)
+    monkeypatch.setattr("app.model_scanner.scan_models", lambda root: ([], [missing_candidate]))
+
+    answers = iter(["y"])
+    offer_missing_file_repair(
+        HFModelRef("owner/asr"),
+        choice,
+        repo_files,
+        destination,
+        input_func=lambda prompt: next(answers),
+        print_func=lambda text: None,
+    )
+
+    assert "onnx/encoder.onnx_data" in downloaded
+    assert "config.json" in downloaded
+    assert "onnx/encoder_fp16.onnx" not in downloaded
+    assert "onnx/encoder_fp16.onnx_data" not in downloaded
+
+
+def test_offer_missing_file_repair_imports_validated_llm_recommendation_json(tmp_path: Path, monkeypatch):
+    destination = tmp_path / "model"
+    destination.mkdir()
+    repo_files = ["model.safetensors", "special_processor.json", "tokenizer.json"]
+    choice = DownloadChoice(
+        label="Safetensors",
+        kind="safetensors",
+        primary_files=("model.safetensors",),
+        files=("model.safetensors",),
+        task_hint="metadata_required",
+    )
+    downloaded: list[str] = []
+
+    def fake_download(repo_id: str, revision: str | None, filename: str, destination: Path, relative_name: str | None = None) -> Path:
+        downloaded.append(filename)
+        path = destination / (relative_name or filename)
+        path.write_text("", encoding="utf-8")
+        return path
+
+    missing_candidate = ModelCandidate(
+        candidate_id="incomplete",
+        display_name="Incomplete",
+        family_name="Incomplete",
+        backend="transformers",
+        container_format="safetensors",
+        task="unknown",
+        precision="unknown",
+        quantization_label="Unknown precision",
+        path=destination,
+        adapter_name="hf_transformers_asr",
+        runnable=False,
+        missing_files=["custom processor sidecar"],
+    )
+    recommendation = json.dumps(
+        {
+            "schema": "easy_asr_bench.hf_missing_file_recommendation.v1",
+            "recommended_files": ["special_processor.json"],
+            "reason": "same model package metadata",
+            "confidence": "medium",
+        }
+    )
+    monkeypatch.setattr("app.hf_model_downloader._download_file", fake_download)
+    monkeypatch.setattr("app.model_scanner.scan_models", lambda root: ([], [missing_candidate]))
+
+    answers = iter(["n", "y", recommendation, "y"])
+    offer_missing_file_repair(
+        HFModelRef("owner/asr"),
+        choice,
+        repo_files,
+        destination,
+        input_func=lambda prompt: next(answers),
+        print_func=lambda text: None,
+    )
+
+    assert downloaded == ["special_processor.json"]
+
+
+def test_offer_missing_file_repair_rejects_llm_recommendation_with_invented_files(tmp_path: Path, monkeypatch):
+    destination = tmp_path / "model"
+    destination.mkdir()
+    repo_files = ["model.safetensors", "tokenizer.json"]
+    choice = DownloadChoice(
+        label="Safetensors",
+        kind="safetensors",
+        primary_files=("model.safetensors",),
+        files=("model.safetensors",),
+        task_hint="metadata_required",
+    )
+    downloaded: list[str] = []
+
+    def fake_download(repo_id: str, revision: str | None, filename: str, destination: Path, relative_name: str | None = None) -> Path:
+        downloaded.append(filename)
+        return destination / (relative_name or filename)
+
+    missing_candidate = ModelCandidate(
+        candidate_id="incomplete",
+        display_name="Incomplete",
+        family_name="Incomplete",
+        backend="transformers",
+        container_format="safetensors",
+        task="unknown",
+        precision="unknown",
+        quantization_label="Unknown precision",
+        path=destination,
+        adapter_name="hf_transformers_asr",
+        runnable=False,
+        missing_files=["custom metadata"],
+    )
+    recommendation = json.dumps(
+        {
+            "schema": "easy_asr_bench.hf_missing_file_recommendation.v1",
+            "recommended_files": ["invented.json"],
+            "reason": "guess",
+            "confidence": "low",
+        }
+    )
+    monkeypatch.setattr("app.hf_model_downloader._download_file", fake_download)
+    monkeypatch.setattr("app.model_scanner.scan_models", lambda root: ([], [missing_candidate]))
+
+    answers = iter(["n", "y", recommendation])
+    offer_missing_file_repair(
+        HFModelRef("owner/asr"),
+        choice,
+        repo_files,
+        destination,
+        input_func=lambda prompt: next(answers),
+        print_func=lambda text: None,
+    )
+
+    assert downloaded == []

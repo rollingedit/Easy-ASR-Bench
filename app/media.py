@@ -21,6 +21,16 @@ class AudioChunk:
     rms_db: float = -120.0
 
 
+@dataclass(frozen=True)
+class MediaProbeResult:
+    ok: bool
+    has_audio: bool
+    ffprobe_available: bool
+    error: str | None = None
+    raw_stdout: str = ""
+    raw_stderr: str = ""
+
+
 def ffmpeg_exe() -> str:
     return imageio_ffmpeg.get_ffmpeg_exe()
 
@@ -31,7 +41,7 @@ def ffprobe_exe() -> str:
     return str(candidate if candidate.exists() else "ffprobe")
 
 
-def has_audio_stream(input_path: Path) -> bool:
+def probe_audio_stream(input_path: Path) -> MediaProbeResult:
     command = [
         ffprobe_exe(),
         "-v",
@@ -46,17 +56,27 @@ def has_audio_stream(input_path: Path) -> bool:
     ]
     try:
         completed = subprocess.run(command, capture_output=True, text=True)
-    except OSError:
-        return True
+    except OSError as exc:
+        return MediaProbeResult(False, True, False, f"ffprobe was not available: {exc}")
     if completed.returncode != 0:
-        return True
-    return bool(completed.stdout.strip())
+        stderr = completed.stderr.strip()
+        return MediaProbeResult(False, True, True, stderr or "ffprobe could not inspect this file.", completed.stdout, completed.stderr)
+    return MediaProbeResult(True, bool(completed.stdout.strip()), True, None, completed.stdout, completed.stderr)
+
+
+def has_audio_stream(input_path: Path) -> bool:
+    return probe_audio_stream(input_path).has_audio
 
 
 def normalize_to_wav(input_path: Path, temp_dir: Path) -> Path:
     temp_dir.mkdir(parents=True, exist_ok=True)
-    if input_path.suffix.lower() in {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".mpeg", ".mpg"} and not has_audio_stream(input_path):
-        raise RuntimeError(f"This video has no audio track: {input_path}")
+    if input_path.suffix.lower() in {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".mpeg", ".mpg"}:
+        probe = probe_audio_stream(input_path)
+        if probe.ok and not probe.has_audio:
+            raise RuntimeError(f"No audio stream found in video: {input_path}")
+        if not probe.ok:
+            detail = f" {probe.error}" if probe.error else ""
+            raise RuntimeError(f"Could not inspect audio streams before conversion: {input_path}.{detail}")
     output = temp_dir / f"{input_path.stem}_{uuid.uuid4().hex[:10]}_16k_mono.wav"
     command = [
         ffmpeg_exe(),
@@ -74,7 +94,10 @@ def normalize_to_wav(input_path: Path, temp_dir: Path) -> Path:
     ]
     completed = subprocess.run(command, capture_output=True, text=True)
     if completed.returncode != 0:
-        raise RuntimeError(completed.stderr.strip() or "FFmpeg conversion failed")
+        stderr = completed.stderr.strip()
+        if len(stderr) > 1200:
+            stderr = stderr[-1200:]
+        raise RuntimeError(f"FFmpeg conversion failed for {input_path}: {stderr or 'no stderr was captured'}")
     return output
 
 

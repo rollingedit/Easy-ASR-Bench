@@ -11,6 +11,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+INSTALLER_SHA_PATTERN = r"set INSTALLER_SHA256=sha256:[0-9a-fA-F]+"
 
 
 def sha256(path: Path) -> str:
@@ -50,6 +51,21 @@ def write_json(path: Path, data: dict) -> None:
         handle.write("\n")
 
 
+def update_setup_installer_hash(expected_hash: str, update_metadata: bool) -> None:
+    setup = ROOT / "setup.bat"
+    text = setup.read_text(encoding="utf-8")
+    replacement = f"set INSTALLER_SHA256=sha256:{expected_hash}"
+    import re
+
+    updated, count = re.subn(INSTALLER_SHA_PATTERN, replacement, text)
+    if count != 1:
+        raise SystemExit("setup.bat must contain exactly one INSTALLER_SHA256 placeholder")
+    if update_metadata:
+        setup.write_text(updated, encoding="utf-8", newline="\r\n")
+    elif updated != text:
+        raise SystemExit("setup.bat INSTALLER_SHA256 does not match installer/install.ps1")
+
+
 def build(version: str, update_metadata: bool, strict_checksums: bool = False) -> Path:
     tag = version if version.startswith("v") else f"v{version}"
     plain = tag[1:]
@@ -57,11 +73,14 @@ def build(version: str, update_metadata: bool, strict_checksums: bool = False) -
     dist = ROOT / "dist"
     stage = dist / f"Easy-ASR-Bench-{tag}"
     zip_path = dist / zip_name
+    installer_hash = sha256(ROOT / "installer" / "install.ps1")
+    update_setup_installer_hash(installer_hash, update_metadata)
     manifest = {
-        "schema": "easy_asr_bench.installer_manifest.v1",
+        "schema": "easy_asr_bench.installer_manifest.v2",
         "tag": tag,
         "version": plain,
         "app_zip": zip_name,
+        "installer_asset": "install.ps1",
         "install_dir": "%LOCALAPPDATA%\\Easy-ASR-Bench",
         "entrypoints": ["setup.bat", "Run.bat", "Drop_Audio_Or_Folders_Here.bat", "Open_Latest_Report.bat"],
     }
@@ -113,6 +132,8 @@ def build(version: str, update_metadata: bool, strict_checksums: bool = False) -
         "files": {
             zip_name: f"sha256:{sha256(zip_path)}",
             "setup.bat": f"sha256:{sha256(ROOT / 'setup.bat')}",
+            "install.ps1": f"sha256:{installer_hash}",
+            "manifest.json": f"sha256:{sha256(ROOT / 'installer' / 'manifest.json')}",
         },
     }
     if update_metadata:

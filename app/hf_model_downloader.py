@@ -33,6 +33,7 @@ METADATA_NAMES = {
 }
 
 LARGE_CHOICE_FILE_COUNT = 20
+SAME_PACKAGE_REPAIR_LIMIT = 12
 
 
 @dataclass(frozen=True)
@@ -461,6 +462,95 @@ def _remote_missing_candidates(missing: str, files: list[str], choice: DownloadC
     return sorted(set(candidates))
 
 
+def _safe_repair_relative_files(choice: DownloadChoice, files: list[str]) -> list[str]:
+    selected = set(choice.files)
+    candidates: set[str] = set()
+    primary_dirs = {_dirname(name) for name in choice.primary_files}
+    parent_dirs = {""}
+    for folder in primary_dirs:
+        while folder:
+            parent_dirs.add(folder)
+            folder = folder.rsplit("/", 1)[0] if "/" in folder else ""
+    for name in files:
+        if name in selected or _known_auxiliary(name):
+            continue
+        folder = _dirname(name)
+        base = _basename(name)
+        if folder in parent_dirs and base in METADATA_NAMES:
+            candidates.add(name)
+            continue
+        if choice.kind == "gguf" and choice.task_hint == "asr_audio":
+            for primary in choice.primary_files:
+                if name in _matching_projectors(files, primary):
+                    candidates.add(name)
+            continue
+        if choice.kind != "onnx" or folder not in primary_dirs:
+            continue
+        lower = base.lower()
+        if lower.endswith(".onnx"):
+            continue
+        selected_variants = {_onnx_variant(primary) for primary in choice.primary_files}
+        if (
+            _is_shared_onnx_companion(name)
+            or lower.endswith((".onnx_data", ".data", ".bin"))
+            and _onnx_companion_variant(name) in {*selected_variants, "default"}
+        ):
+            candidates.add(name)
+    return sorted(candidates)
+
+
+def _download_validated_files(
+    ref: HFModelRef,
+    choice: DownloadChoice,
+    filenames: list[str],
+    destination: Path,
+    print_func=print,
+) -> list[Path]:
+    downloaded: list[Path] = []
+    for filename in filenames:
+        target = destination / local_relative_name(choice, filename)
+        if target.exists():
+            print_func(f"Already exists, skipping {local_relative_name(choice, filename)}")
+            continue
+        print_func(f"Downloading {filename}")
+        downloaded.append(_download_file(ref.repo_id, ref.revision, filename, destination, local_relative_name(choice, filename)))
+    return downloaded
+
+
+def _parse_llm_recommendation(raw: str, repo_files: list[str], already_selected: set[str]) -> tuple[list[str], str | None]:
+    text = raw.strip()
+    if not text:
+        return [], "No recommendation JSON was provided."
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        return [], f"Recommendation JSON could not be parsed: {exc}"
+    if data.get("schema") != "easy_asr_bench.hf_missing_file_recommendation.v1":
+        return [], "Recommendation JSON used the wrong schema."
+    recommended = data.get("recommended_files")
+    if not isinstance(recommended, list):
+        return [], "Recommendation JSON must include a recommended_files list."
+    repo_set = set(repo_files)
+    validated: list[str] = []
+    invalid: list[str] = []
+    for item in recommended:
+        if not isinstance(item, str):
+            invalid.append(str(item))
+            continue
+        if item not in repo_set:
+            invalid.append(item)
+            continue
+        if item in already_selected:
+            continue
+        validated.append(item)
+    if invalid:
+        return [], "Recommendation included files that are not exact paths in the repo file list: " + ", ".join(invalid)
+    return sorted(set(validated)), None
+
+
 def offer_missing_file_repair(
     ref: HFModelRef,
     choice: DownloadChoice,
@@ -489,26 +579,61 @@ def offer_missing_file_repair(
     for item in missing:
         repair_files.extend(_remote_missing_candidates(item, repo_files, choice))
     repair_files = sorted(set(repair_files) - set(choice.files))
-    if not repair_files:
-        print_func("No exact missing-file match was found in the Hugging Face repo, so no automatic repair download was attempted.")
-        write_llm_file_audit_request(ref, choice, repo_files, destination, missing)
-        print_func(f"Wrote structured LLM/file-audit request to {destination / 'hf_missing_file_request.json'}")
+    if repair_files:
+        print_func("")
+        print_func("Exact missing-file matches are available in the repo:")
+        for index, filename in enumerate(repair_files, 1):
+            print_func(f"[{key(str(index))}] {filename}")
+        answer = input_func(f"Download these missing files now? [{key('Y')}/{key('n')}] ").strip().lower()
+        if answer not in {"n", "no"}:
+            _download_validated_files(ref, choice, repair_files, destination, print_func=print_func)
+            return
+        print_func("Skipped exact missing-file repair download.")
+
+    same_package_files = [
+        filename
+        for filename in _safe_repair_relative_files(choice, repo_files)
+        if filename not in {*choice.files, *repair_files} and not (destination / local_relative_name(choice, filename)).exists()
+    ]
+    if same_package_files:
+        print_func("")
+        print_func("Conservative same-package repair files are available:")
+        for index, filename in enumerate(same_package_files, 1):
+            print_func(f"[{key(str(index))}] {filename}")
+        if len(same_package_files) > SAME_PACKAGE_REPAIR_LIMIT:
+            print_func(f"This repair set has {len(same_package_files)} file(s). Review before downloading.")
+        answer = input_func(f"Download these same-package repair files now? [{key('y')}/{key('N')}] ").strip().lower()
+        if answer in {"y", "yes"}:
+            _download_validated_files(ref, choice, same_package_files, destination, print_func=print_func)
+            return
+        print_func("Skipped same-package repair download.")
+
+    print_func("No automatic repair download was attempted for the remaining ambiguous requirements.")
+    write_llm_file_audit_request(ref, choice, repo_files, destination, missing)
+    print_func(f"Wrote structured LLM/file-audit request to {destination / 'hf_missing_file_request.json'}")
+    answer = input_func(f"Paste validated LLM recommendation JSON now? [{key('y')}/{key('N')}] ").strip().lower()
+    if answer not in {"y", "yes"}:
+        return
+    raw_recommendation = input_func(prompt_label("Recommendation JSON or file path> ")).strip()
+    if raw_recommendation:
+        path_text = raw_recommendation.strip('"').strip("'")
+        maybe_path = Path(path_text)
+        if maybe_path.exists() and maybe_path.is_file():
+            raw_recommendation = maybe_path.read_text(encoding="utf-8")
+    recommended_files, error = _parse_llm_recommendation(raw_recommendation, repo_files, set(choice.files))
+    if error:
+        print_func(error)
+        return
+    if not recommended_files:
+        print_func("LLM recommendation did not include any new exact repo files to download.")
         return
     print_func("")
-    print_func("Exact missing-file matches are available in the repo:")
-    for index, filename in enumerate(repair_files, 1):
+    print_func("Validated LLM-recommended repo files:")
+    for index, filename in enumerate(recommended_files, 1):
         print_func(f"[{key(str(index))}] {filename}")
-    answer = input_func(f"Download these missing files now? [{key('Y')}/{key('n')}] ").strip().lower()
-    if answer in {"n", "no"}:
-        print_func("Skipped missing-file repair download.")
-        return
-    for filename in repair_files:
-        target = destination / local_relative_name(choice, filename)
-        if target.exists():
-            print_func(f"Already exists, skipping {local_relative_name(choice, filename)}")
-            continue
-        print_func(f"Downloading {filename}")
-        _download_file(ref.repo_id, ref.revision, filename, destination, local_relative_name(choice, filename))
+    answer = input_func(f"Download these recommended files now? [{key('y')}/{key('N')}] ").strip().lower()
+    if answer in {"y", "yes"}:
+        _download_validated_files(ref, choice, recommended_files, destination, print_func=print_func)
 
 
 def write_llm_file_audit_request(

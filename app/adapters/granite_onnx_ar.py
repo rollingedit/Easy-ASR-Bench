@@ -95,6 +95,7 @@ class GraniteOnnxARAdapter:
         tokens = 0
         inference_seconds = 0.0
         peak_ram = process_memory_mb()
+        errors: list[str] = []
         for chunk, metadata in zip(chunks, chunk_metadata):
             try:
                 result = self.runner.transcribe_array(chunk.samples, prompt)
@@ -104,6 +105,7 @@ class GraniteOnnxARAdapter:
             except Exception as exc:
                 result = {"error": str(exc)}
                 text = f"[ERROR: chunk failed: {exc}]"
+                errors.append(f"{metadata['chunk_id']}: {exc}")
             peak_ram = max(peak_ram, process_memory_mb())
             transcript_chunks.append(
                 ChunkTranscript(
@@ -126,7 +128,7 @@ class GraniteOnnxARAdapter:
             tokens_generated=tokens,
             peak_process_memory_mb=peak_ram,
         )
-        return ModelRunResult(self.candidate, transcript_chunks, metrics.__dict__, [])
+        return ModelRunResult(self.candidate, transcript_chunks, metrics.__dict__, errors)
 
     def unload(self) -> None:
         self.runner = None

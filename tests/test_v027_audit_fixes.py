@@ -14,10 +14,12 @@ def test_publish_release_workflow_builds_assets_on_github_from_draft():
     assert "workflow_dispatch" in text
     assert "python scripts/build_release_zip.py --version" in text
     assert "--update-metadata" in text
+    assert "python scripts/validate_physical_files.py --repo ." in text
     assert "python scripts/write_release_notes.py" in text
     assert "gh release create" in text
     assert "--draft" in text
     assert "gh release upload" in text
+    assert "install.ps1" in text
     assert "gh release edit $tag --draft=false --latest" in text
 
 
@@ -46,6 +48,7 @@ def test_release_validator_parses_workflow_yaml():
 
     assert "yaml.safe_load" in text
     assert "workflows" in text
+    assert "validate_root(ROOT)" in text
 
 
 def test_reference_validation_rejects_source_hash_mismatch():

@@ -29,8 +29,16 @@ jobs:
       - name: Validate release files
         run: python scripts/validate_release_files.py
 
+      - name: Validate physical source files
+        run: python scripts/validate_physical_files.py --repo .
+
       - name: Build release ZIP
         run: python scripts/build_release_zip.py --version ${{ inputs.tag }} --update-metadata
+
+      - name: Stage release bootstrap assets
+        shell: pwsh
+        run: |
+          Copy-Item installer/install.ps1 install.ps1
 
       - name: Write release notes
         run: python scripts/write_release_notes.py ${{ inputs.tag }} --output release_notes/${{ inputs.tag }}.md
@@ -49,5 +57,5 @@ jobs:
           } else {
             gh release create $tag --title "Easy ASR Bench $tag" --notes-file $notes --draft
           }
-          gh release upload $tag $zip setup.bat installer/manifest.json installer/checksums.json --clobber
+          gh release upload $tag $zip setup.bat install.ps1 installer/manifest.json installer/checksums.json --clobber
           gh release edit $tag --draft=false --latest

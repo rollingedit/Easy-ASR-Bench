@@ -83,7 +83,7 @@ For large or unknown layouts, Easy ASR Bench shows the file count and asks befor
 
 After a download, the app rescans the package. If it still looks incomplete and exact missing-file matches exist in the Hugging Face repo, it lists those files and asks before downloading them. Existing local files are skipped when the same package is downloaded again.
 
-If the missing requirement is ambiguous, the app reports it instead of guessing. It also writes `hf_missing_file_request.json` and `hf_missing_file_prompt.txt` beside the package. Those files can be pasted into a local or external LLM to get structured recommendations, but recommendations must use exact filenames from the repo file list.
+If the missing requirement is ambiguous, the app reports it instead of guessing. For tightly scoped same-package files, such as selected ONNX sidecars, parent metadata, or a matching ASR GGUF projector, it can offer a separate repair prompt without pulling alternate weight variants. It also writes `hf_missing_file_request.json` and `hf_missing_file_prompt.txt` beside the package. Those files can be pasted into a local or external LLM to get structured recommendations; the app accepts only exact filenames from the repo file list and asks again before downloading them.
 
 The downloader has been stress-checked against representative real Hugging Face repos with GGUF quant folders, split GGUF parts, Safetensors shards, ONNX sidecars, and mixed ASR/LLM layouts. That is not a promise that every future repo layout is known; unknown layouts are handled conservatively and should be reviewed rather than silently treated as runnable.
 
@@ -189,7 +189,8 @@ Output/
 ## Windows Launchers
 
 - `setup.bat`: install or repair the app
-- `setup.bat --dry-run`: verify setup command structure without changing files
+- `setup.bat --dry-run`: verify setup command structure without changing files or network access
+- `setup.bat --dry-run --verify-release`: download release assets to temp, verify hashes and ZIP layout, and exit without installing
 - `setup.bat --doctor`: run environment checks
 - `Run.bat`: scan models, choose models, process inputs
 - `Drop_Audio_Or_Folders_Here.bat`: drag files/folders directly onto the app
@@ -230,3 +231,4 @@ Easy ASR Bench does not execute arbitrary Python files from model folders. Safet
 - **GGUF model lives in another app folder:** choose the paste-path option in the LLM reference menu. The path is saved in `config.json` and scanned again on the next run.
 - **Whisper model not detected:** check `docs/whisper_models.md`.
 - **Setup details:** see `docs/what_setup_installs.md`.
+- **Release verification:** see `docs/release_verification.md`.

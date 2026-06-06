@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.3.1 candidate
+
+Release and installer safety:
+- Hardened standalone setup bootstrap: public setup now downloads `install.ps1` from the versioned GitHub release asset path instead of raw GitHub content and verifies its SHA256 before executing PowerShell.
+- Added `setup.bat --dry-run --verify-release` to download and validate release manifest, checksums, app ZIP hash, ZIP layout, and release-file validators without installing.
+- Extended `--verify-release` for v2 manifests so it also verifies uploaded `manifest.json`, `setup.bat`, and `install.ps1` assets, while keeping legacy validation compatible with the already-published `v0.3.0` assets.
+- Updated GitHub release publishing to upload `install.ps1` as a release asset and verify uploaded release asset hashes after publication.
+- Added a public `scripts/verify_github_release.py` verifier for downloaded GitHub release assets, including annotated-tag handling for expected-commit checks.
+- Added release physical-file validation for repo and ZIP bytes, including CRLF launcher checks, LF source/docs/config checks, YAML/JSON/Python parsing, requirements formatting, and minimum physical line counts for critical files.
+- Kept checksum validation scoped to release/bootstrap artifacts and unsafe checkpoint allowlists; normal user-supplied ASR/LLM models are still structure/runtime validated rather than hash-policed.
+- Hardened uninstall behavior: standalone `setup.bat --uninstall` can locate the installed uninstaller, and destructive user-data removal requires an explicit confirmation string.
+
+Runtime and report correctness:
+- Improved media error reporting for no-audio videos, ffprobe failures, and FFmpeg conversion failures.
+- Reported Granite AR/NAR chunk exceptions in structured run errors instead of only embedding them in transcript text.
+- Configured ONNX Runtime DirectML sessions with DirectML-safe session options: memory pattern disabled and sequential execution.
+- Fixed faster-whisper CPU fallback so requested FP16 uses the effective CPU-safe compute type when constructing the model.
+- Improved Unicode scoring normalization and long HTML report guards.
+
+Validation and documentation:
+- Added `docs/release_verification.md` with local gates, GitHub release asset verification, and manual Windows QA rows that must not be claimed as verified unless actually run.
+- Added regression coverage for release bootstrap assets, annotated Git tag verification, Unicode scoring edge cases, long HTML report pagination guards, LLM reference validation guards, Windows pasted path parsing, and queue fast-key skipping.
+
 ## v0.3.0
 
 - Added a smart Hugging Face downloader to the interactive model menu. Choose `D`, paste a Hugging Face model URL or `owner/model` repo id, pick one detected package/weight variant, and the app downloads it into `Models` before rescanning.
