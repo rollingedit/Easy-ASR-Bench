@@ -1,6 +1,6 @@
 {
   "app": {
-    "version": "0.2.4",
+    "version": "0.2.5",
     "version_channel": "stable",
     "check_for_updates_on_setup": true,
     "check_for_updates_on_run": false
@@ -29,12 +29,7 @@
     "allow_cuda_install": false
   },
   "model_scan": {
-    "recursive": true,
-    "recognize_safetensors": true,
-    "recognize_onnx": true,
-    "recognize_gguf": true,
-    "recognize_ggml_bin": true,
-    "show_unsupported_candidates": true
+    "recursive": true
   },
   "security": {
     "trust_remote_code": false,
@@ -45,7 +40,6 @@
     "allow_manifest_custom_python": false
   },
   "input": {
-    "watch_input_folder": true,
     "recursive_folders": true,
     "file_stability_wait_seconds": 5,
     "extensions": [
@@ -94,10 +88,7 @@
     "fallback": "lowest_rms_boundary"
   },
   "benchmark": {
-    "repeat_runs": 1,
-    "warmup_first_chunk": true,
-    "measure_peak_ram": true,
-    "measure_peak_vram_if_available": true
+    "measure_peak_ram": true
   },
   "reports": {
     "write_txt": true,

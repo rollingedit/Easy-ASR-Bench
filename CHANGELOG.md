@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.2.5
+
+- Fixed release packaging so ZIP bytes come from the working tree, manifest metadata is written before ZIP hashing, and CI verifies committed release metadata instead of regenerating it.
+- Added CI artifact upload and tag-only published asset checksum verification.
+- Hardened installer downloads for Windows PowerShell 5.1 by forcing TLS 1.2 and using `-UseBasicParsing`.
+- Moved OpenAI Whisper `.pt` out of runnable README claims unless a checksum is allowlisted or unsafe trusted loading is explicitly enabled.
+- Removed the misleading `transformers_cuda` dependency group until a real CUDA wheel strategy is implemented.
+- Dedupe scanner output so HF Whisper folders and incomplete Granite folders are not reported twice.
+- Added real chunk `cut_reason` and `rms_db` metadata plus non-stub environment and dependency version reporting.
+- Updated HTML scoring to use Unicode-aware normalization and escape interpolated model metadata.
+- Removed unused config keys that were not consumed by runtime code.
+
 ## v0.2.4
 
 - Fixed Generic ONNX CTC inference using an undefined `candidate` variable when loading vocab files.

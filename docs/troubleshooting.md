@@ -27,7 +27,7 @@ Check the format:
 - HF Whisper folders need `config.json`, Safetensors weights, tokenizer files, and preprocessor/processor files.
 - faster-whisper folders need `model.bin`, `config.json`, and tokenizer/vocabulary files.
 - whisper.cpp files usually look like `ggml-base.bin`.
-- OpenAI Whisper `.pt` files must use official model filenames unless unsafe loading is enabled.
+- OpenAI Whisper `.pt` files are blocked by default unless their SHA256 is allowlisted by the app or unsafe trusted-file loading is explicitly enabled. A trusted filename is not enough.
 
 ## CUDA Fails
 

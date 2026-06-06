@@ -17,6 +17,8 @@ class AudioChunk:
     start_seconds: float
     end_seconds: float
     samples: np.ndarray
+    cut_reason: str = "end_of_audio"
+    rms_db: float = -120.0
 
 
 def ffmpeg_exe() -> str:
@@ -74,11 +76,12 @@ def _best_boundary(
     search_samples: int,
     window_samples: int,
     silence_threshold_db: float,
-) -> int:
+) -> tuple[int, str, float]:
     start = max(window_samples, target_sample - search_samples)
     end = min(len(audio) - window_samples, target_sample + search_samples)
     if end <= start:
-        return min(max(target_sample, 1), len(audio) - 1)
+        boundary = min(max(target_sample, 1), len(audio) - 1)
+        return boundary, "hard_max", _db_rms(audio, boundary - window_samples // 2, boundary + window_samples // 2)
     step = max(1, window_samples // 2)
     best_index = target_sample
     best_db = 999.0
@@ -89,7 +92,8 @@ def _best_boundary(
             best_index = index
             if db <= silence_threshold_db:
                 break
-    return min(max(best_index, 1), len(audio) - 1)
+    reason = "silence" if best_db <= silence_threshold_db else "rms_fallback"
+    return min(max(best_index, 1), len(audio) - 1), reason, best_db
 
 
 def plan_chunks(samples: np.ndarray, config: dict, sr: int = 16000) -> list[AudioChunk]:
@@ -106,7 +110,7 @@ def plan_chunks(samples: np.ndarray, config: dict, sr: int = 16000) -> list[Audi
 
     total_seconds = audio_duration_seconds(samples, sr)
     if total_seconds <= max(1.0, hard_max_seconds):
-        return [AudioChunk(0, 0.0, total_seconds, samples)]
+        return [AudioChunk(0, 0.0, total_seconds, samples, "end_of_audio", _db_rms(samples, 0, len(samples)))]
 
     target_samples = int(target_seconds * sr)
     hard_max_samples = int(hard_max_seconds * sr)
@@ -117,13 +121,19 @@ def plan_chunks(samples: np.ndarray, config: dict, sr: int = 16000) -> list[Audi
     start = 0
     while start < len(samples):
         remaining = len(samples) - start
+        cut_reason = "end_of_audio"
+        rms_db = _db_rms(samples, start, len(samples))
         if remaining <= hard_max_samples:
             end = len(samples)
         else:
             target = start + min(target_samples, hard_max_samples)
-            end = _best_boundary(samples, target, search_samples, window_samples, silence_threshold)
+            end, cut_reason, rms_db = _best_boundary(samples, target, search_samples, window_samples, silence_threshold)
             if end <= start:
                 end = min(start + hard_max_samples, len(samples))
+                cut_reason = "hard_max"
+                rms_db = _db_rms(samples, end - window_samples // 2, end + window_samples // 2)
+            elif end - start >= hard_max_samples:
+                cut_reason = "hard_max"
         chunk_samples = samples[start:end]
         chunks.append(
             AudioChunk(
@@ -131,6 +141,8 @@ def plan_chunks(samples: np.ndarray, config: dict, sr: int = 16000) -> list[Audi
                 start_seconds=start / sr,
                 end_seconds=end / sr,
                 samples=np.asarray(chunk_samples, dtype=np.float32),
+                cut_reason=cut_reason,
+                rms_db=float(rms_db),
             )
         )
         start = end

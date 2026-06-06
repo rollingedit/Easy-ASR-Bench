@@ -81,7 +81,7 @@ let latestScores = null;
 function tab(id) {{ for (const s of document.querySelectorAll('section')) s.classList.toggle('active', s.id===id); }}
 function words(s, normalized=true) {{
   s = String(s || '');
-  if (normalized) s = s.toLowerCase().replace(/[^a-z0-9\\s]+/g, ' ');
+  if (normalized) s = s.normalize('NFKC').toLocaleLowerCase().replace(/[^\\p{{L}}\\p{{N}}\\p{{M}}'\\s]+/gu, ' ');
   return s.trim().replace(/\\s+/g, ' ').split(' ').filter(Boolean);
 }}
 function edit(a,b) {{
@@ -93,6 +93,27 @@ function edit(a,b) {{
   }}
   return dp[a.length][b.length];
 }}
+function editCounts(a,b) {{
+  const dp = Array(a.length+1).fill(null).map(()=>Array(b.length+1).fill(0));
+  const op = Array(a.length+1).fill(null).map(()=>Array(b.length+1).fill(''));
+  for (let i=1;i<=a.length;i++) {{ dp[i][0]=i; op[i][0]='delete'; }}
+  for (let j=1;j<=b.length;j++) {{ dp[0][j]=j; op[0][j]='insert'; }}
+  for (let i=1;i<=a.length;i++) for (let j=1;j<=b.length;j++) {{
+    const choices = a[i-1]===b[j-1] ? [[dp[i-1][j-1], 'equal']] : [[dp[i-1][j-1]+1, 'replace']];
+    choices.push([dp[i-1][j]+1, 'delete'], [dp[i][j-1]+1, 'insert']);
+    choices.sort((x,y)=>x[0]-y[0]);
+    dp[i][j]=choices[0][0]; op[i][j]=choices[0][1];
+  }}
+  let i=a.length, j=b.length, substitutions=0, insertions=0, deletions=0;
+  while (i>0 || j>0) {{
+    const action = op[i][j];
+    if (action === 'equal') {{ i--; j--; }}
+    else if (action === 'replace') {{ substitutions++; i--; j--; }}
+    else if (action === 'delete') {{ deletions++; i--; }}
+    else {{ insertions++; j--; }}
+  }}
+  return {{substitutions, insertions, deletions, edits: dp[a.length][b.length]}};
+}}
 function wer(ref,hyp,norm=true) {{ const r=words(ref,norm), h=words(hyp,norm); return edit(r,h)/Math.max(1,r.length); }}
 function fullText(run) {{ return (run.transcript_chunks || []).map(c=>c.text || '').join('\\n'); }}
 function fmt(n) {{ return Number.isFinite(n) ? n.toFixed(3) : 'n/a'; }}
@@ -102,34 +123,35 @@ function renderOverview() {{
   const fastest = [...runs].sort((a,b)=>(b.metrics?.audio_seconds_per_wall_second||0)-(a.metrics?.audio_seconds_per_wall_second||0))[0];
   const lowRam = [...runs].sort((a,b)=>(a.metrics?.peak_process_memory_mb||Infinity)-(b.metrics?.peak_process_memory_mb||Infinity))[0];
   document.getElementById('overview').innerHTML = `<h2>Overview</h2><div class="grid">
-    <div class="card"><div class="label">Source</div><div class="value">${{source.name || ''}}</div></div>
+    <div class="card"><div class="label">Source</div><div class="value">${{safe(source.name || '')}}</div></div>
     <div class="card"><div class="label">Duration</div><div class="value">${{fmt(source.duration_seconds || 0)}}s</div></div>
     <div class="card"><div class="label">Models Tested</div><div class="value">${{runs.length}}</div></div>
     <div class="card"><div class="label">Chunks</div><div class="value">${{(results.chunk_plan?.chunks || []).length}}</div></div>
-    <div class="card"><div class="label">Fastest</div><div class="value">${{fastest?.model?.display_name || 'n/a'}}</div></div>
-    <div class="card"><div class="label">Lowest RAM</div><div class="value">${{lowRam?.model?.display_name || 'n/a'}}</div></div>
+    <div class="card"><div class="label">Fastest</div><div class="value">${{safe(fastest?.model?.display_name || 'n/a')}}</div></div>
+    <div class="card"><div class="label">Lowest RAM</div><div class="value">${{safe(lowRam?.model?.display_name || 'n/a')}}</div></div>
   </div>`;
 }}
+function safe(s) {{ return escapeHtml(s); }}
 function renderScoreboard(scores=null) {{
   const rows = (results.runs || []).map(run => {{
     const m = run.metrics || {{}};
     const s = scores?.[run.model.candidate_id] || {{}};
-    return `<tr><td>${{run.model.display_name}}<br><span class="badge">${{run.model.precision}}</span></td><td>${{run.model.backend}}</td><td>${{fmt(s.normalized_wer)}}</td><td>${{fmt(s.strict_wer)}}</td><td>${{fmt(s.cer)}}</td><td>${{fmt(m.audio_seconds_per_wall_second)}}</td><td>${{fmt(m.total_wall_seconds)}}</td><td>${{fmt(m.peak_process_memory_mb)}}</td><td>${{run.errors?.length || 0}}</td></tr>`;
+    return `<tr><td>${{safe(run.model.display_name)}}<br><span class="badge">${{safe(run.model.precision)}}</span></td><td>${{safe(run.model.backend)}}</td><td>${{fmt(s.normalized_wer)}}</td><td>${{fmt(s.strict_wer)}}</td><td>${{fmt(s.cer)}}</td><td>${{s.substitutions ?? 'n/a'}}</td><td>${{s.insertions ?? 'n/a'}}</td><td>${{s.deletions ?? 'n/a'}}</td><td>${{fmt(m.audio_seconds_per_wall_second)}}</td><td>${{fmt(m.total_wall_seconds)}}</td><td>${{fmt(m.peak_process_memory_mb)}}</td><td>${{fmt(m.peak_vram_mb)}}</td><td>${{run.errors?.length || 0}}</td></tr>`;
   }}).join('');
-  document.getElementById('scoreboard').innerHTML = `<table><thead><tr><th>Model</th><th>Backend</th><th>Norm WER</th><th>Strict WER</th><th>CER</th><th>x Real-time</th><th>Wall s</th><th>RAM MB</th><th>Errors</th></tr></thead><tbody>${{rows}}</tbody></table>`;
+  document.getElementById('scoreboard').innerHTML = `<table><thead><tr><th>Model</th><th>Backend</th><th>Norm WER</th><th>Strict WER</th><th>CER</th><th>Sub</th><th>Ins</th><th>Del</th><th>x Real-time</th><th>Wall s</th><th>RAM MB</th><th>VRAM MB</th><th>Errors</th></tr></thead><tbody>${{rows}}</tbody></table>`;
 }}
 function renderPairwise() {{
-  const rows = Object.entries(results.pairwise_differences || {{}}).map(([k,v]) => `<tr><td>${{k}}</td><td>${{fmt(v.normalized_wer_like_difference)}}</td><td>${{fmt(v.cer_difference)}}</td></tr>`).join('');
+  const rows = Object.entries(results.pairwise_differences || {{}}).map(([k,v]) => `<tr><td>${{safe(k)}}</td><td>${{fmt(v.normalized_wer_like_difference)}}</td><td>${{fmt(v.cer_difference)}}</td></tr>`).join('');
   document.getElementById('pairwiseBody').innerHTML = rows ? `<table><thead><tr><th>Pair</th><th>Norm WER-like Difference</th><th>CER Difference</th></tr></thead><tbody>${{rows}}</tbody></table>` : '<p>No pairwise differences available.</p>';
 }}
 function renderTranscripts() {{
-  document.getElementById('transcriptsBody').innerHTML = (results.runs || []).map(run => `<h3>${{run.model.display_name}} <span class="badge">${{run.model.precision}}</span></h3><pre>${{escapeHtml(fullText(run))}}</pre>`).join('');
+  document.getElementById('transcriptsBody').innerHTML = (results.runs || []).map(run => `<h3>${{safe(run.model.display_name)}} <span class="badge">${{safe(run.model.precision)}}</span></h3><pre>${{escapeHtml(fullText(run))}}</pre>`).join('');
 }}
 function renderChunks() {{
   const chunks = results.chunk_plan?.chunks || [];
-  document.getElementById('chunksBody').innerHTML = chunks.map(c => `<h3>${{c.chunk_id}} [${{c.start_timestamp}} - ${{c.end_timestamp}}]</h3>` + (results.runs||[]).map(run => {{
+  document.getElementById('chunksBody').innerHTML = chunks.map(c => `<h3>${{safe(c.chunk_id)}} [${{safe(c.start_timestamp)}} - ${{safe(c.end_timestamp)}}]</h3>` + (results.runs||[]).map(run => {{
     const t = (run.transcript_chunks||[]).find(x=>x.chunk_id===c.chunk_id);
-    return `<div class="card"><b>${{run.model.display_name}}</b><pre>${{escapeHtml(t?.text || '')}}</pre></div>`;
+    return `<div class="card"><b>${{safe(run.model.display_name)}}</b><pre>${{escapeHtml(t?.text || '')}}</pre></div>`;
   }}).join('')).join('');
 }}
 function escapeHtml(s) {{ return String(s).replace(/[&<>]/g, c=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[c])); }}
@@ -148,17 +170,29 @@ function scoreReference() {{
   try {{ ref = extractJson(document.getElementById('referenceInput').value); }}
   catch(e) {{ document.getElementById('referenceStatus').innerHTML = '<p class="warn">Reference JSON could not be parsed.</p>'; return; }}
   const expected = new Set((results.chunk_plan?.chunks || []).map(c=>c.chunk_id));
-  const refMap = new Map((ref.segments || []).map(s=>[s.chunk_id, s]));
+  const seen = new Set();
+  const duplicates = [];
+  const refMap = new Map();
+  for (const segment of ref.segments || []) {{
+    if (seen.has(segment.chunk_id)) duplicates.push(segment.chunk_id);
+    seen.add(segment.chunk_id);
+    refMap.set(segment.chunk_id, segment);
+  }}
   const missing = [...expected].filter(id=>!refMap.has(id));
-  if (ref.schema !== 'easy_asr_bench.llm_reference.v1' || ref.reference_type !== 'llm_corrected_reference' || missing.length) {{
-    document.getElementById('referenceStatus').innerHTML = `<p class="warn">Invalid reference. Missing chunks: ${{missing.join(', ') || 'none'}}.</p>`;
+  const extra = [...refMap.keys()].filter(id=>!expected.has(id));
+  const sourceMismatch = ref.source_sha256 && results.source?.sha256 && ref.source_sha256 !== results.source.sha256;
+  if (ref.schema !== 'easy_asr_bench.llm_reference.v1' || ref.reference_type !== 'llm_corrected_reference' || missing.length || extra.length || duplicates.length || sourceMismatch) {{
+    document.getElementById('referenceStatus').innerHTML = `<p class="warn">Invalid reference. Missing chunks: ${{safe(missing.join(', ') || 'none')}}. Extra chunks: ${{safe(extra.join(', ') || 'none')}}. Duplicate chunks: ${{safe(duplicates.join(', ') || 'none')}}. Source hash mismatch: ${{sourceMismatch ? 'yes' : 'no'}}.</p>`;
     return;
   }}
   const referenceText = (results.chunk_plan?.chunks || []).map(c=>refMap.get(c.chunk_id)?.text || '').join('\\n');
   const scores = {{}};
   for (const run of results.runs || []) {{
     const hyp = fullText(run);
-    scores[run.model.candidate_id] = {{ normalized_wer: wer(referenceText,hyp,true), strict_wer: wer(referenceText,hyp,false), cer: edit(referenceText,hyp)/Math.max(1,referenceText.length) }};
+    const refWords = words(referenceText, true);
+    const hypWords = words(hyp, true);
+    const counts = editCounts(refWords, hypWords);
+    scores[run.model.candidate_id] = {{ normalized_wer: counts.edits/Math.max(1,refWords.length), strict_wer: wer(referenceText,hyp,false), cer: edit(referenceText,hyp)/Math.max(1,referenceText.length), substitutions: counts.substitutions, insertions: counts.insertions, deletions: counts.deletions }};
   }}
   scored = {{ results, reference: ref, scores }};
   latestScores = scores;
