@@ -56,11 +56,11 @@ def build(version: str, update_metadata: bool) -> Path:
         shutil.copy2(source, target)
 
     fixed_time = (2026, 1, 1, 0, 0, 0)
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_STORED) as archive:
         for path in sorted(stage.rglob("*")):
             if path.is_file():
                 info = zipfile.ZipInfo(path.relative_to(dist).as_posix(), fixed_time)
-                info.compress_type = zipfile.ZIP_DEFLATED
+                info.compress_type = zipfile.ZIP_STORED
                 archive.writestr(info, path.read_bytes())
 
     manifest = {
