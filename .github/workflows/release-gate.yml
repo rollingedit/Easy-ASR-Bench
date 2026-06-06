@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional release tag to verify uploaded assets, for example v0.2.7"
+        required: false
+        type: string
   release:
     types: [published]
 
@@ -38,12 +43,15 @@ jobs:
           path: dist/Easy-ASR-Bench-*-win.zip
 
       - name: Verify published release asset
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || inputs.release_tag != ''
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "${{ github.event.release.tag_name }}"
+          if ("${{ inputs.release_tag }}" -ne "") {
+            $tag = "${{ inputs.release_tag }}"
+          }
           gh release download $tag --pattern manifest.json --pattern checksums.json --dir release-asset
           $manifest = Get-Content -Raw release-asset/manifest.json | ConvertFrom-Json
           $checksums = Get-Content -Raw release-asset/checksums.json | ConvertFrom-Json
