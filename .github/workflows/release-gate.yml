@@ -21,7 +21,10 @@ jobs:
         run: python scripts/validate_release_files.py
 
       - name: Build and validate release ZIP
-        run: python scripts/build_release_zip.py --version v0.2.3
+        shell: pwsh
+        run: |
+          $version = python -c "import app; print('v' + app.__version__)"
+          python scripts/build_release_zip.py --version $version --update-metadata
 
       - name: Compile Python
         run: python -m compileall app tests

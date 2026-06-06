@@ -1,9 +1,10 @@
 param(
   [string]$InstallDir = "$env:LOCALAPPDATA\Easy-ASR-Bench",
-  [string]$Version = "v0.2.3",
+  [string]$Version = "v0.2.4",
   [switch]$DryRun,
   [switch]$Repair,
   [switch]$Uninstall,
+  [switch]$RemoveUserData,
   [switch]$Doctor
 )
 
@@ -54,20 +55,69 @@ function Invoke-PythonFile($Python, $ScriptPath) {
   }
 }
 
+function Get-TreeStats($Path) {
+  $files = @(Get-ChildItem -LiteralPath $Path -File -Recurse -Force -ErrorAction Stop)
+  $bytes = 0
+  foreach ($file in $files) { $bytes += $file.Length }
+  return @{ file_count = $files.Count; byte_count = $bytes }
+}
+
 function Copy-PreservedUserData($From, $To) {
+  $report = @{
+    schema = "easy_asr_bench.install_preservation_report.v1"
+    created = (Get-Date -Format s)
+    source = $From
+    destination = $To
+    items = @()
+  }
   foreach ($name in @("Models", "Input", "Output", "Logs", "Cache", "Temp")) {
     $source = Join-Path $From $name
     $dest = Join-Path $To $name
     if (Test-Path $source) {
       New-Item -ItemType Directory -Force -Path $dest | Out-Null
-      Copy-Item -LiteralPath (Join-Path $source "*") -Destination $dest -Recurse -Force -ErrorAction SilentlyContinue
+      $children = @(Get-ChildItem -LiteralPath $source -Force -ErrorAction Stop)
+      foreach ($child in $children) {
+        Copy-Item -LiteralPath $child.FullName -Destination $dest -Recurse -Force -ErrorAction Stop
+      }
+      $stats = Get-TreeStats $dest
+      $report.items += @{
+        name = $name
+        status = "preserved"
+        file_count = $stats.file_count
+        byte_count = $stats.byte_count
+      }
+    }
+    else {
+      $report.items += @{
+        name = $name
+        status = "not_present"
+        file_count = 0
+        byte_count = 0
+      }
     }
   }
   $sourceConfig = Join-Path $From "config.json"
   $destConfig = Join-Path $To "config.json"
   if (Test-Path $sourceConfig) {
-    Copy-Item -LiteralPath $sourceConfig -Destination $destConfig -Force
+    Copy-Item -LiteralPath $sourceConfig -Destination $destConfig -Force -ErrorAction Stop
+    $report.items += @{
+      name = "config.json"
+      status = "preserved"
+      file_count = 1
+      byte_count = (Get-Item -LiteralPath $destConfig).Length
+    }
   }
+  else {
+    $report.items += @{
+      name = "config.json"
+      status = "not_present"
+      file_count = 0
+      byte_count = 0
+    }
+  }
+  $reportPath = Join-Path $To "Logs\install-preservation-report.json"
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $reportPath) | Out-Null
+  $report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $reportPath -Encoding UTF8
 }
 
 if ($Doctor) {
@@ -83,10 +133,31 @@ if ($Doctor) {
 if ($Uninstall) {
   Write-SetupLog "Uninstall requested for $InstallDir"
   if ($DryRun) {
-    Write-SetupLog "Dry run: would remove app files and local user data under $InstallDir"
+    if ($RemoveUserData) {
+      Write-SetupLog "Dry run: would remove app files and user data under $InstallDir"
+    }
+    else {
+      Write-SetupLog "Dry run: would remove app/runtime files while preserving user data under $InstallDir"
+    }
     exit 0
   }
-  Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
+  if ($RemoveUserData) {
+    Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction Stop
+    exit 0
+  }
+  foreach ($name in @("app", "requirements", "scripts", "installer", ".github", ".venv")) {
+    $path = Join-Path $InstallDir $name
+    if (Test-Path $path) {
+      Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
+    }
+  }
+  foreach ($name in @("Run.bat", "Drop_Audio_Or_Folders_Here.bat", "Open_Models_Folder.bat", "Open_Input_Folder.bat", "Open_Output_Folder.bat", "Edit_Config.bat", "setup.bat", "README.md", "CHANGELOG.md", "SECURITY.md", "SUPPORT.md", "pyproject.toml", "requirements.txt", "pytest.ini")) {
+    $path = Join-Path $InstallDir $name
+    if (Test-Path $path) {
+      Remove-Item -LiteralPath $path -Force -ErrorAction Stop
+    }
+  }
+  Write-SetupLog "Uninstall complete. User data was preserved. Use -RemoveUserData to delete it explicitly."
   exit 0
 }
 

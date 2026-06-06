@@ -26,6 +26,29 @@ def git_files() -> list[str]:
     return [line.strip() for line in completed.stdout.splitlines() if line.strip()]
 
 
+def git_blob(rel: str) -> bytes:
+    completed = subprocess.run(["git", "show", f"HEAD:{rel}"], cwd=ROOT, capture_output=True, check=True)
+    return completed.stdout
+
+
+def file_bytes(rel: str, update_metadata: bool) -> bytes:
+    del update_metadata
+    data = git_blob(rel)
+    if b"\0" in data:
+        return data
+    suffix = Path(rel).suffix.lower()
+    name = Path(rel).name.lower()
+    crlf_suffixes = {".bat", ".cmd", ".ps1"}
+    lf_suffixes = {".py", ".json", ".md", ".toml", ".ini", ".yml", ".yaml", ".html", ".css", ".js", ".txt"}
+    if suffix in crlf_suffixes:
+        text = data.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        return text.replace("\n", "\r\n").encode("utf-8")
+    if suffix in lf_suffixes or name in {".gitattributes", ".gitignore"}:
+        text = data.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        return text.encode("utf-8")
+    return data
+
+
 def write_json(path: Path, data: dict) -> None:
     with path.open("w", encoding="utf-8", newline="\n") as handle:
         handle.write(json.dumps(data, indent=2))
@@ -44,8 +67,9 @@ def build(version: str, update_metadata: bool) -> Path:
     if zip_path.exists():
         zip_path.unlink()
     stage.mkdir(parents=True)
+    files = [rel for rel in git_files() if rel.replace("\\", "/") != "installer/checksums.json"]
 
-    for rel in git_files():
+    for rel in files:
         if rel.replace("\\", "/") == "installer/checksums.json":
             continue
         source = ROOT / rel
@@ -57,17 +81,16 @@ def build(version: str, update_metadata: bool) -> Path:
 
     fixed_time = (2026, 1, 1, 0, 0, 0)
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_STORED) as archive:
-        for path in sorted(stage.rglob("*")):
-            if path.is_file():
-                info = zipfile.ZipInfo(path.relative_to(dist).as_posix(), fixed_time)
-                info.compress_type = zipfile.ZIP_STORED
-                info.create_system = 0
-                info.create_version = 20
-                info.extract_version = 20
-                info.external_attr = 0
-                info.extra = b""
-                info.comment = b""
-                archive.writestr(info, path.read_bytes())
+        for rel in sorted(files):
+            info = zipfile.ZipInfo((Path(f"Easy-ASR-Bench-{tag}") / rel).as_posix(), fixed_time)
+            info.compress_type = zipfile.ZIP_STORED
+            info.create_system = 0
+            info.create_version = 20
+            info.extract_version = 20
+            info.external_attr = 0
+            info.extra = b""
+            info.comment = b""
+            archive.writestr(info, file_bytes(rel, update_metadata))
         archive.comment = b""
 
     manifest = {
@@ -98,17 +121,12 @@ def build(version: str, update_metadata: bool) -> Path:
             print("Committed manifest:")
             print(json.dumps(committed_manifest, indent=2))
             raise SystemExit("installer/manifest.json does not match generated release metadata")
-        committed_setup = committed_checksums.get("files", {}).get("setup.bat")
-        generated_setup = checksums.get("files", {}).get("setup.bat")
-        if committed_checksums.get("version") != checksums["version"] or committed_setup != generated_setup:
+        if committed_checksums != checksums:
             print("Generated checksums:")
             print(json.dumps(checksums, indent=2))
             print("Committed checksums:")
             print(json.dumps(committed_checksums, indent=2))
-            raise SystemExit("installer/checksums.json setup/version metadata does not match generated release checksums")
-        zip_name = manifest["app_zip"]
-        if zip_name not in committed_checksums.get("files", {}):
-            raise SystemExit(f"installer/checksums.json is missing {zip_name}")
+            raise SystemExit("installer/checksums.json does not match generated release checksums")
 
     verify_dir = dist / f"verify-{tag}"
     shutil.rmtree(verify_dir, ignore_errors=True)

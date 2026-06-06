@@ -81,14 +81,11 @@ class GenericOnnxManifestAdapter:
         if decoding.get("type") != "ctc":
             raise RuntimeError("Generic ONNX v1 supports built-in CTC decoding only.")
         blank = int(decoding.get("blank_token_id", 0))
-        vocab = load_vocab(candidate.path, decoding)
+        vocab = load_vocab(self.candidate.path, decoding)
         transcript_chunks: list[ChunkTranscript] = []
         errors: list[str] = []
         inference_seconds = 0.0
         peak_ram = process_memory_mb()
-        from ..frontend import input_features
-        from ..onnx_common import session_input_names
-
         for chunk, metadata in zip(chunks, chunk_metadata):
             started = time.perf_counter()
             try:
@@ -165,8 +162,6 @@ def load_vocab(root: Path, decoding: dict) -> dict:
 
 def build_manifest_feed(session, manifest: dict, samples: np.ndarray) -> dict:
     import numpy as np
-    from ..frontend import input_features
-    from ..onnx_common import session_input_names
 
     names = set(session_input_names(session))
     inputs = manifest.get("inputs", {})
@@ -184,6 +179,8 @@ def build_manifest_feed(session, manifest: dict, samples: np.ndarray) -> dict:
                     arr = arr / peak
             feed[name] = arr[None, :]
     if "features" in inputs or recipe in {"granite_log_mel", "log_mel"}:
+        from ..frontend import input_features
+
         spec = inputs.get("features", {})
         name = spec.get("name")
         if name and name in names:
@@ -200,8 +197,7 @@ def build_manifest_feed(session, manifest: dict, samples: np.ndarray) -> dict:
         if name in names:
             feed[name] = np.array([len(samples)], dtype=np.int64)
     if not feed:
-        first = session_input_names(session)[0]
-        feed[first] = samples.astype(np.float32)[None, :]
+        raise RuntimeError("Manifest did not build any valid ONNX inputs. Check input names and semantic roles.")
     return feed
 
 
@@ -219,6 +215,10 @@ def greedy_ctc_ids(logits: np.ndarray, blank: int) -> list[int]:
             output.append(token)
         prev = token
     return output
+
+
+def session_input_names(session) -> list[str]:
+    return [item.name for item in session.get_inputs()]
 
 
 def decode_ids(ids: list[int], vocab: dict) -> str:
