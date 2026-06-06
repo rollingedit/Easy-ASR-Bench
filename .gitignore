@@ -22,3 +22,4 @@ Input/*
 goal.md
 dist/
 .pytest_cache/
+.pytest_tmp/

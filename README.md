@@ -47,7 +47,8 @@ That means a GGUF LLM can be used to help create an LLM-corrected reference tran
 5. Put audio/video files in `Input`, or drag them onto `Drop_Audio_Or_Folders_Here.bat`.
 6. Double-click `Run.bat`.
 7. Choose ASR models and precision buckets.
-8. Open the report folder created under `Output`.
+8. Choose an optional LLM reference workflow.
+9. Open the report folder created under `Output`.
 
 ## Model Folder Examples
 
@@ -79,8 +80,11 @@ Models/
     model.onnx
     modelbench.json
 
-  local-reference-llm.Q4_K_M.gguf
+  Reference LLMs/
+    local-reference-llm.Q4_K_M.gguf
 ```
+
+Easy ASR Bench scans `Models` recursively, so you can organize models in nested folders by family, app, format, or quality tier.
 
 ## Generic ONNX Manifest
 
@@ -111,14 +115,22 @@ Minimal CTC manifest:
 
 Every `results.txt` includes an instruction block for creating an LLM-corrected reference transcript.
 
+When you run the app interactively, the reference menu offers:
+
+- use an auto-detected local GGUF LLM from `Models`
+- paste a GGUF file path or folder from another app and save it for future runs
+- use ChatGPT, Claude, or another external LLM manually
+- skip LLM reference scoring
+
 Workflow:
 
-1. Open `results.txt`.
-2. Give the LLM-corrected reference instruction block to an LLM.
-3. The LLM returns JSON with schema `easy_asr_bench.llm_reference.v1`.
-4. Open `compare.html`.
-5. Paste that JSON into the reference box.
-6. Click **Validate Reference and Score Models**.
+1. Run the benchmark.
+2. Open `results.txt` or `results_llm_prompt_part_001.txt`.
+3. Give the LLM-corrected reference instruction block to a local GGUF LLM or an external LLM.
+4. The LLM returns JSON with schema `easy_asr_bench.llm_reference.v1`.
+5. Open `compare.html`.
+6. Paste that JSON into the reference box.
+7. Click **Validate Reference and Score Models**.
 
 The HTML report scores all models against that LLM-corrected reference and shows strict WER, normalized WER, CER, timing, memory, and pairwise differences.
 
@@ -160,6 +172,7 @@ Easy ASR Bench does not execute arbitrary Python files from model folders. Safet
 - **Generic `.onnx` file:** add `modelbench.json`.
 - **CUDA unavailable:** use CPU or install a compatible ONNX Runtime GPU stack.
 - **Media conversion failed:** check that the file opens normally and that there is enough disk space in `Temp`.
-- **GGUF dependency missing:** install the `llama_cpp` dependency group when prompted.
+- **GGUF dependency missing:** install the `llama_cpp` dependency group when prompted, or choose the manual ChatGPT/Claude workflow.
+- **GGUF model lives in another app folder:** choose the paste-path option in the LLM reference menu. The path is saved in `config.json` and scanned again on the next run.
 - **Whisper model not detected:** check `docs/whisper_models.md`.
 - **Setup details:** see `docs/what_setup_installs.md`.

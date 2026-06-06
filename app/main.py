@@ -248,7 +248,7 @@ def main() -> None:
     setup_logging(folder_config(config, "logs", "logs_folder"))
     reference_llm = None
     if args.interactive and not args.scan_only:
-        selected, reference_llm = choose_candidates(runnable, unsupported)
+        selected, reference_llm = choose_candidates(runnable, unsupported, config, Path(args.config))
     else:
         selected = [candidate for candidate in runnable if candidate.category == "asr"]
     if not selected:
