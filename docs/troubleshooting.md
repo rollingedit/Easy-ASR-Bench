@@ -16,6 +16,10 @@ Use a complete Hugging Face ASR folder with:
 
 Add `modelbench.json`. Arbitrary ONNX files do not include enough information for preprocessing and decoding.
 
+## Model Is Detected But Not Runnable
+
+That means Easy ASR Bench recognized the package family but does not have a packaged runtime adapter for it yet, or the folder is missing required sibling files. Check the missing-file list shown in the menu/report. Keep split ONNX sidecars, safetensors shards, tokenizer files, `mmproj` files, and runtime-specific config files in the same model folder.
+
 ## GGUF Appears Under Reference LLMs
 
 That is expected. GGUF text LLMs are used for transcript correction/reference generation, not direct speech-to-text.

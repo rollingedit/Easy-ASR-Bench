@@ -24,7 +24,7 @@ class FasterWhisperASRAdapter:
         for folder in [p for p in models_root.rglob("*") if p.is_dir()]:
             if not (folder / "model.bin").exists() or not (folder / "config.json").exists():
                 continue
-            if not any((folder / name).exists() for name in ["tokenizer.json", "vocabulary.json", "vocab.json"]):
+            if not any((folder / name).exists() for name in ["tokenizer.json", "vocabulary.json", "vocabulary.txt", "vocab.json"]):
                 continue
             label = "unknown"
             name_lower = folder.name.lower()

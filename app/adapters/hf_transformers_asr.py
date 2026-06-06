@@ -7,7 +7,7 @@ from typing import Sequence
 
 from .base import ChunkTranscript, ModelCandidate, ModelRunResult
 from ..benchmark import process_memory_mb
-from ..precision_detector import detect_safetensors_folder_precision
+from ..precision_detector import detect_safetensors_folder_precision, indexed_safetensor_missing_files
 
 
 class HFTransformersASRAdapter:
@@ -36,9 +36,13 @@ class HFTransformersASRAdapter:
                 missing.append("config.json")
             if not any(path.exists() for path in processor_files):
                 missing.append("processor/tokenizer files")
+            missing.extend(indexed_safetensor_missing_files(folder))
             task_ok, warning = self._looks_like_asr(config)
+            text_generation = self._looks_like_text_generation(config)
+            if text_generation:
+                continue
             raw, bucket = detect_safetensors_folder_precision(folder)
-            runnable = config.exists() and not missing and task_ok
+            runnable = config.exists() and not missing
             candidates.append(
                 ModelCandidate(
                     candidate_id=f"hf_asr__{folder.name}".lower().replace(" ", "_"),
@@ -46,7 +50,7 @@ class HFTransformersASRAdapter:
                     family_name=folder.name,
                     backend="transformers",
                     container_format="safetensors",
-                    task="automatic-speech-recognition" if task_ok else "unknown",
+                    task="automatic-speech-recognition" if runnable else "unknown",
                     precision=raw,
                     quantization_label=bucket,
                     path=folder,
@@ -55,7 +59,7 @@ class HFTransformersASRAdapter:
                     runnable_after_dependency_install=runnable,
                     missing_files=missing,
                     warnings=[] if runnable else [warning or "Safetensors folder is missing ASR metadata."],
-                    help_text="Use a complete Hugging Face ASR model folder with config, tokenizer/processor files, and safetensors weights.",
+                    help_text="Use a complete Hugging Face ASR model folder with config, tokenizer/processor files, and safetensors weights. Complete non-text-generation folders are allowed to try the Transformers ASR pipeline even when the scanner cannot prove the architecture from metadata.",
                 )
             )
         return candidates
@@ -75,6 +79,25 @@ class HFTransformersASRAdapter:
         if "ctc" in architectures or "speech" in architectures or "whisper" in architectures:
             return True, ""
         return False, "config.json does not identify a supported ASR architecture."
+
+    def _looks_like_text_generation(self, config_path: Path) -> bool:
+        if not config_path.exists():
+            return False
+        try:
+            data = json.loads(config_path.read_text(encoding="utf-8"))
+        except Exception:
+            return False
+        text = json.dumps(data).lower()
+        architectures = " ".join(data.get("architectures", [])).lower() if isinstance(data.get("architectures"), list) else ""
+        model_type = str(data.get("model_type", "")).lower()
+        text_signals = {"bloom", "causal_lm", "falcon", "gemma", "gpt", "llama", "mistral", "mixtral", "phi", "qwen", "stablelm", "text-generation"}
+        if any(signal in text or signal in architectures or signal in model_type for signal in text_signals):
+            return True
+        normalized_architectures = architectures.replace("_", "")
+        if "causallm" in normalized_architectures or "lmheadmodel" in normalized_architectures:
+            return True
+        structural_keys = {"vocab_size", "hidden_size", "num_hidden_layers", "num_attention_heads"}
+        return len(structural_keys & set(data)) >= 3
 
     def required_dependency_groups(self, candidate: ModelCandidate) -> list[str]:
         return ["transformers_cpu"]

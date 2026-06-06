@@ -10,6 +10,7 @@ from pathlib import Path
 from .adapters import BUILTIN_ADAPTERS
 from .adapters.base import ModelCandidate, ModelRunResult
 from .config import load_config
+from .console_style import key, prompt_label
 from .model_scanner import scan_models
 from .model_selector import choose_candidates
 from .utils import expand_inputs, parse_windows_path_list, sanitize_windows_drag_drop_path, wait_for_stable_file
@@ -103,7 +104,7 @@ def ensure_dependencies(candidates: list[ModelCandidate], config: dict, referenc
         print("Automatic dependency repair is disabled in config.json.")
         failed_groups = set(missing)
         return _drop_candidates_for_failed_dependency_groups(candidates, reference_llm, candidate_groups, failed_groups)
-    answer = input("Install missing dependency groups now? [Y/n] ").strip().lower()
+    answer = input(f"Install missing dependency groups now? [{key('Y')}/{key('n')}] ").strip().lower()
     if answer in {"n", "no"}:
         failed_groups = set(missing)
         return _drop_candidates_for_failed_dependency_groups(candidates, reference_llm, candidate_groups, failed_groups)
@@ -296,8 +297,8 @@ def queue_state(config: dict):
 def interactive_prompt_for_files(config: dict) -> list[Path]:
     print()
     print("Drop/paste audio or video file/folder paths. Press Enter with a blank line to use Input/.")
-    print("Type q to quit.")
-    raw = input("Input> ").strip()
+    print(f"Type {key('q')} to quit.")
+    raw = input(prompt_label("Input> ")).strip()
     if raw.lower() in {"q", "quit", "exit"}:
         return []
     if raw:
@@ -345,7 +346,7 @@ def _main(args: argparse.Namespace) -> None:
     warn_runtime_dependency_fallbacks(config)
     reference_llm = None
     if args.interactive and not args.scan_only:
-        selected, reference_llm = choose_candidates(runnable, unsupported, config, Path(args.config))
+        selected, reference_llm = choose_candidates(runnable, unsupported, config, Path(args.config), models_root)
     else:
         selected = [candidate for candidate in runnable if candidate.category == "asr"]
     if not selected:

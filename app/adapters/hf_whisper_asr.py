@@ -7,7 +7,7 @@ from typing import Sequence
 
 from .base import ChunkTranscript, ModelCandidate, ModelRunResult
 from ..benchmark import process_memory_mb
-from ..precision_detector import detect_safetensors_folder_precision
+from ..precision_detector import detect_safetensors_folder_precision, indexed_safetensor_missing_files
 
 
 class HFWhisperASRAdapter:
@@ -35,6 +35,7 @@ class HFWhisperASRAdapter:
                 missing.append("preprocessor_config.json or processor_config.json")
             if not any((folder / name).exists() for name in ["tokenizer.json", "tokenizer_config.json"]):
                 missing.append("tokenizer files")
+            missing.extend(indexed_safetensor_missing_files(folder))
             raw, bucket = detect_safetensors_folder_precision(folder)
             candidates.append(
                 ModelCandidate(
