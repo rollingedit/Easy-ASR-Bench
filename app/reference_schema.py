@@ -7,6 +7,10 @@ def validate_llm_reference(reference: dict, results: dict) -> list[str]:
         errors.append("Reference schema must be easy_asr_bench.llm_reference.v1.")
     if reference.get("reference_type") != "llm_corrected_reference":
         errors.append("reference_type must be llm_corrected_reference.")
+    expected_source = results.get("source", {}).get("sha256")
+    reference_source = reference.get("source_sha256")
+    if expected_source and reference_source and reference_source != expected_source:
+        errors.append("Reference source_sha256 does not match results source sha256.")
     expected = {chunk["chunk_id"] for chunk in results.get("chunk_plan", {}).get("chunks", [])}
     segments = reference.get("segments", [])
     seen_list = [segment.get("chunk_id") for segment in segments]

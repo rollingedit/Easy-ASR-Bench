@@ -1,6 +1,6 @@
 param(
   [string]$InstallDir = "$env:LOCALAPPDATA\Easy-ASR-Bench",
-  [string]$Version = "v0.2.6",
+  [string]$Version = "v0.2.7",
   [switch]$DryRun,
   [switch]$Repair,
   [switch]$Uninstall,
@@ -28,6 +28,17 @@ function Write-SetupLog($Message) {
 function Invoke-Step($Message, [scriptblock]$Block) {
   Write-SetupLog $Message
   if (-not $DryRun) { & $Block }
+}
+
+function Invoke-Download($Uri, $OutFile) {
+  try {
+    Invoke-WebRequest -Uri $Uri -OutFile $OutFile -UseBasicParsing
+  }
+  catch {
+    Write-SetupLog "Download failed: $Uri"
+    Write-SetupLog "Check your internet connection, TLS support, antivirus/proxy settings, or GitHub availability. Log: $Log"
+    throw
+  }
 }
 
 function Resolve-Python {
@@ -124,7 +135,7 @@ function Copy-PreservedUserData($From, $To) {
 
 if ($Doctor) {
   $python = Join-Path $InstallDir ".venv\Scripts\python.exe"
-  if (Test-Path (Join-Path $InstallDir "app\doctor.py") -and Test-Path $python) {
+  if ((Test-Path (Join-Path $InstallDir "app\doctor.py")) -and (Test-Path $python)) {
     & $python -m app.doctor --config (Join-Path $InstallDir "config.json")
     exit $LASTEXITCODE
   }
@@ -201,15 +212,15 @@ Invoke-Step "Preparing staging folder" {
 }
 
 Invoke-Step "Downloading release manifest and checksums" {
-  Invoke-WebRequest -Uri "$ReleaseBase/manifest.json" -OutFile $Manifest -UseBasicParsing
-  Invoke-WebRequest -Uri "$ReleaseBase/checksums.json" -OutFile $Checksums -UseBasicParsing
+  Invoke-Download "$ReleaseBase/manifest.json" $Manifest
+  Invoke-Download "$ReleaseBase/checksums.json" $Checksums
 }
 
 $manifestJson = Get-Content -Raw -LiteralPath $Manifest | ConvertFrom-Json
 $zipName = $manifestJson.app_zip
 $expected = (Get-Content -Raw -LiteralPath $Checksums | ConvertFrom-Json).files.$zipName
 Invoke-Step "Downloading app ZIP $zipName" {
-  Invoke-WebRequest -Uri "$ReleaseBase/$zipName" -OutFile $Zip -UseBasicParsing
+  Invoke-Download "$ReleaseBase/$zipName" $Zip
 }
 $actual = "sha256:" + (Get-FileHash -Algorithm SHA256 -LiteralPath $Zip).Hash.ToLowerInvariant()
 if ($actual -ne $expected) {
@@ -278,3 +289,6 @@ finally {
 }
 
 Write-SetupLog "Setup complete"
+if (Test-Path $Backup) {
+  Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
+}

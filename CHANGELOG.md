@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.2.7
+
+- Added a version bump helper so release version strings are updated consistently.
+- Added clean Markdown release-note generation and a GitHub Actions publish workflow that builds and uploads release assets from GitHub.
+- Updated agent instructions for CI failure classification, release-note formatting, GitHub-generated assets, and model checksum philosophy.
+- Added real CUDA VRAM peak sampling for model runs when Torch CUDA is available.
+- Added source-hash validation for LLM-corrected references and validation-aware reference merging.
+- Added readable unsupported-input extension reporting and no-audio video precheck errors.
+- Cleaned up installer secondary issues: `-Doctor` path test binding, readable download failures, and successful backup removal.
+- Added workflow YAML parsing to release validation.
+
 ## v0.2.6
 
 - Added the `release.published` workflow trigger so the release gate verifies uploaded GitHub release assets after a release is published.
