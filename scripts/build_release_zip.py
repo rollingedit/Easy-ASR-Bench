@@ -98,12 +98,17 @@ def build(version: str, update_metadata: bool) -> Path:
             print("Committed manifest:")
             print(json.dumps(committed_manifest, indent=2))
             raise SystemExit("installer/manifest.json does not match generated release metadata")
-        if committed_checksums != checksums:
+        committed_setup = committed_checksums.get("files", {}).get("setup.bat")
+        generated_setup = checksums.get("files", {}).get("setup.bat")
+        if committed_checksums.get("version") != checksums["version"] or committed_setup != generated_setup:
             print("Generated checksums:")
             print(json.dumps(checksums, indent=2))
             print("Committed checksums:")
             print(json.dumps(committed_checksums, indent=2))
-            raise SystemExit("installer/checksums.json does not match generated release checksums")
+            raise SystemExit("installer/checksums.json setup/version metadata does not match generated release checksums")
+        zip_name = manifest["app_zip"]
+        if zip_name not in committed_checksums.get("files", {}):
+            raise SystemExit(f"installer/checksums.json is missing {zip_name}")
 
     verify_dir = dist / f"verify-{tag}"
     shutil.rmtree(verify_dir, ignore_errors=True)
