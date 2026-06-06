@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.2.4
+
+- Fixed Generic ONNX CTC inference using an undefined `candidate` variable when loading vocab files.
+- Removed the ambiguous Generic ONNX raw-waveform first-input fallback; manifests must build valid declared inputs.
+- Hardened installer user-data preservation by enumerating files explicitly, failing on preservation errors, and writing `install-preservation-report.json`.
+- Changed uninstall behavior to preserve user data by default; destructive uninstall now requires `-RemoveUserData`.
+- Restored exact generated release ZIP checksum enforcement in the release builder.
+- Fixed standalone `setup.bat` version metadata for the v0.2.4 release line.
+
 ## v0.2.3
 
 - Hardened installer updates to preserve `Models`, `Input`, `Output`, `Logs`, `Cache`, `Temp`, and `config.json` across installs and updates.

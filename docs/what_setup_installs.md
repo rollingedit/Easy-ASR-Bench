@@ -39,3 +39,7 @@ setup.bat --dry-run
 ```
 
 Setup writes logs to `Logs/setup.log`.
+
+Default uninstall removes app/runtime files but preserves user data folders and `config.json`. Destructive user-data removal requires the explicit PowerShell installer flag `-RemoveUserData`.
+
+Updates write `Logs/install-preservation-report.json` listing preserved user folders, file counts, and byte counts.
