@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.6
+
+- Added the `release.published` workflow trigger so the release gate verifies uploaded GitHub release assets after a release is published.
+- Updated the release asset verification step to use the published release tag from the release event.
+
 ## v0.2.5
 
 - Fixed release packaging so ZIP bytes come from the working tree, manifest metadata is written before ZIP hashing, and CI verifies committed release metadata instead of regenerating it.
