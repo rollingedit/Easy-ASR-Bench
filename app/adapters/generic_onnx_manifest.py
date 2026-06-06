@@ -89,12 +89,13 @@ class GenericOnnxManifestAdapter:
         from ..frontend import input_features
         from ..onnx_common import session_input_names
 
-        input_name = session_input_names(self.session)[0]
         for chunk, metadata in zip(chunks, chunk_metadata):
             started = time.perf_counter()
             try:
-                features = input_features(chunk.samples)
-                logits = self.session.run(None, {input_name: features})[0]
+                feed = build_manifest_feed(self.session, manifest, chunk.samples)
+                output_name = manifest.get("outputs", {}).get("logits")
+                outputs = self.session.run([output_name] if output_name else None, feed)
+                logits = outputs[0]
                 ids = greedy_ctc_ids(logits, blank)
                 text = decode_ids(ids, vocab)
             except Exception as exc:
@@ -134,7 +135,53 @@ def validate_manifest(data: dict, root: Path) -> list[str]:
         missing.append("files.model")
     if data.get("decoding", {}).get("type") == "ctc" and "blank_token_id" not in data.get("decoding", {}):
         missing.append("decoding.blank_token_id")
+    if not data.get("inputs"):
+        missing.append("inputs")
+    if not data.get("outputs", {}).get("logits"):
+        missing.append("outputs.logits")
     return missing
+
+
+def build_manifest_feed(session, manifest: dict, samples: np.ndarray) -> dict:
+    import numpy as np
+    from ..frontend import input_features
+    from ..onnx_common import session_input_names
+
+    names = set(session_input_names(session))
+    inputs = manifest.get("inputs", {})
+    preprocessing = manifest.get("preprocessing", {})
+    recipe = preprocessing.get("type", "raw_waveform")
+    feed: dict = {}
+    if "waveform" in inputs:
+        spec = inputs["waveform"]
+        name = spec["name"]
+        if name in names:
+            arr = samples.astype(np.float32)
+            if preprocessing.get("normalize", False):
+                peak = float(np.max(np.abs(arr))) if len(arr) else 0.0
+                if peak > 0:
+                    arr = arr / peak
+            feed[name] = arr[None, :]
+    if "features" in inputs or recipe in {"granite_log_mel", "log_mel"}:
+        spec = inputs.get("features", {})
+        name = spec.get("name")
+        if name and name in names:
+            feed[name] = input_features(samples)
+    if "attention_mask" in inputs:
+        spec = inputs["attention_mask"]
+        name = spec["name"]
+        if name in names:
+            length = next(iter(feed.values())).shape[-1]
+            feed[name] = np.ones((1, length), dtype=np.int64)
+    if "lengths" in inputs:
+        spec = inputs["lengths"]
+        name = spec["name"]
+        if name in names:
+            feed[name] = np.array([len(samples)], dtype=np.int64)
+    if not feed:
+        first = session_input_names(session)[0]
+        feed[first] = samples.astype(np.float32)[None, :]
+    return feed
 
 
 def greedy_ctc_ids(logits: np.ndarray, blank: int) -> list[int]:

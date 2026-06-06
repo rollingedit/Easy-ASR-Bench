@@ -40,6 +40,7 @@
     "trust_remote_code": false,
     "allow_model_folder_scripts": false,
     "allow_pickle_or_pt_files": false,
+    "allow_known_official_whisper_pt": true,
     "scan_only_safe_formats_by_default": true,
     "allow_manifest_custom_python": false
   },
@@ -72,6 +73,14 @@
     "ar_max_new_tokens": 1024,
     "language": "auto",
     "temperature": 0.0
+  },
+  "whisper": {
+    "task": "transcribe",
+    "language": "auto",
+    "return_timestamps": false,
+    "chunk_length_s": 30,
+    "stride_length_s": 5,
+    "batch_size": 1
   },
   "chunking": {
     "mode": "auto_smart",

@@ -1,37 +1,36 @@
 @echo off
-setlocal
+setlocal EnableExtensions
 cd /d "%~dp0"
 
 set APP_NAME=Easy ASR Bench
-set APP_VERSION=v0.2
-set REPO_ZIP=https://github.com/rollingedit/Easy-ASR-Bench/archive/refs/tags/%APP_VERSION%.zip
+set APP_VERSION=v0.2.1
 set INSTALL_DIR=%LOCALAPPDATA%\Easy-ASR-Bench
 
+if /I "%~1"=="--dry-run" goto dry_run
+if /I "%~2"=="--dry-run" goto dry_run
+if /I "%~1"=="--doctor" goto doctor
+if /I "%~1"=="--uninstall" goto uninstall
+if /I "%~1"=="--repair" goto bootstrap
+if /I "%~1"=="--update" goto bootstrap
 if /I "%~1"=="--local" goto local_setup
 if exist "%~dp0app\main.py" goto local_setup
 
-echo Installing %APP_NAME%...
+:bootstrap
+echo %APP_NAME% installer
 echo.
-echo This setup file will download the app into:
-echo %INSTALL_DIR%
+echo Install folder:
+echo   %INSTALL_DIR%
+echo.
+echo Setup will download the verified app ZIP for %APP_VERSION%, install or repair
+echo the app, create a Python virtual environment, and install core packages.
 echo.
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$ErrorActionPreference='Stop';" ^
-  "$install='%INSTALL_DIR%'; $logDir=Join-Path $install 'Logs'; New-Item -ItemType Directory -Force -Path $logDir | Out-Null; $log=Join-Path $logDir 'setup.log';" ^
-  "'Starting setup at ' + (Get-Date) | Tee-Object -FilePath $log -Append;" ^
-  "$zip=Join-Path $env:TEMP 'Easy-ASR-Bench-%APP_VERSION%.zip'; $extract=Join-Path $env:TEMP 'Easy-ASR-Bench-%APP_VERSION%';" ^
-  "Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue;" ^
-  "Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue;" ^
-  "New-Item -ItemType Directory -Force -Path $install | Out-Null;" ^
-  "Invoke-WebRequest -Uri '%REPO_ZIP%' -OutFile $zip; $hash=(Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash; 'Downloaded source archive SHA256: ' + $hash | Tee-Object -FilePath $log -Append;" ^
-  "Expand-Archive -LiteralPath $zip -DestinationPath $extract -Force;" ^
-  "$src=Get-ChildItem -LiteralPath $extract -Directory | Select-Object -First 1;" ^
-  "Copy-Item -Path (Join-Path $src.FullName '*') -Destination $install -Recurse -Force;" ^
-  "Start-Process -FilePath (Join-Path $install 'setup.bat') -ArgumentList '--local' -Wait"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0installer\install.ps1" ^
+  -InstallDir "%INSTALL_DIR%" ^
+  -Version "%APP_VERSION%"
 
 if errorlevel 1 (
-  echo Setup failed.
+  echo Setup failed. Check %INSTALL_DIR%\Logs\setup.log
   pause
   exit /b 1
 )
@@ -41,6 +40,31 @@ echo Setup complete. Opening installed folder...
 explorer "%INSTALL_DIR%"
 pause
 exit /b 0
+
+:dry_run
+echo %APP_NAME% setup dry run
+echo Version: %APP_VERSION%
+echo Install folder: %INSTALL_DIR%
+echo Mode: no files will be downloaded or changed.
+exit /b 0
+
+:doctor
+if exist ".venv\Scripts\python.exe" (
+  ".venv\Scripts\python.exe" -m app.doctor --config config.json
+  exit /b %errorlevel%
+)
+if exist "%INSTALL_DIR%\.venv\Scripts\python.exe" (
+  "%INSTALL_DIR%\.venv\Scripts\python.exe" -m app.doctor --config "%INSTALL_DIR%\config.json"
+  exit /b %errorlevel%
+)
+echo Easy ASR Bench is not installed here and no installed runtime was found.
+exit /b 1
+
+:uninstall
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0installer\install.ps1" ^
+  -InstallDir "%INSTALL_DIR%" ^
+  -Uninstall
+exit /b %errorlevel%
 
 :local_setup
 echo %APP_NAME% - local setup
@@ -76,13 +100,13 @@ if not exist ".venv\Scripts\python.exe" (
   )
 )
 
-echo Installing Python packages...
+echo Installing core Python packages...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip
 if errorlevel 1 (
   pause
   exit /b 1
 )
-".venv\Scripts\python.exe" -m pip install -r requirements.txt
+".venv\Scripts\python.exe" -m pip install -r requirements\core.txt
 if errorlevel 1 (
   pause
   exit /b 1
@@ -95,6 +119,9 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo Running doctor...
+".venv\Scripts\python.exe" -m app.doctor --config config.json
+
 echo Running self-test...
 ".venv\Scripts\python.exe" -m app.self_test --config config.json
 if errorlevel 1 (
@@ -105,3 +132,4 @@ if errorlevel 1 (
 echo.
 echo Setup complete. Drop models into Models, then use Run.bat.
 pause
+exit /b 0
