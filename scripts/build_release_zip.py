@@ -38,7 +38,7 @@ def file_bytes(rel: str, update_metadata: bool) -> bytes:
     if suffix in crlf_suffixes:
         text = data.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
         return text.replace("\n", "\r\n").encode("utf-8")
-    if suffix in lf_suffixes or name in {".gitattributes", ".gitignore"}:
+    if suffix in lf_suffixes or name in {".gitattributes", ".gitignore", ".editorconfig", "license"}:
         text = data.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
         return text.encode("utf-8")
     return data
