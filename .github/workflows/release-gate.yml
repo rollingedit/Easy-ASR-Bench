@@ -1,0 +1,38 @@
+name: Release Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate release files
+        run: python scripts/validate_release_files.py
+
+      - name: Compile Python
+        run: python -m compileall app tests
+
+      - name: Install test dependencies
+        run: python -m pip install pytest
+
+      - name: Run unit tests
+        run: python -m pytest --basetemp .pytest_tmp -p no:cacheprovider
+
+      - name: Setup dry run
+        shell: cmd
+        run: setup.bat --dry-run --local
+
+      - name: Launcher doctor
+        shell: cmd
+        run: Run.bat --doctor
