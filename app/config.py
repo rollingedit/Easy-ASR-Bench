@@ -29,7 +29,7 @@ MEDIA_EXTENSIONS = [
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "app": {
-        "version": "0.2.0",
+        "version": "0.2.2",
         "version_channel": "stable",
         "check_for_updates_on_setup": True,
         "check_for_updates_on_run": False,
@@ -118,6 +118,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "embed_results_json_in_html": True,
         "include_llm_reference_instructions": True,
     },
+    "llm_reference": {
+        "custom_model_paths": [],
+        "auto_scan_saved_paths": True,
+        "manual_external_llm_guide": True,
+    },
     "advanced": {
         "keep_temp_wavs": False,
     },
@@ -142,9 +147,16 @@ def load_config(path: Path) -> dict[str, Any]:
     return deep_merge(DEFAULT_CONFIG, data)
 
 
+def save_config(path: Path, config: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
+        json.dump(config, handle, indent=2)
+        handle.write("\n")
+
+
 def save_default_config(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
         json.dump(DEFAULT_CONFIG, handle, indent=2)
         handle.write("\n")
 

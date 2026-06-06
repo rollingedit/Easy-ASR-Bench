@@ -3,8 +3,10 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 set APP_NAME=Easy ASR Bench
-set APP_VERSION=v0.2.1
+set APP_VERSION=v0.2.2
 set INSTALL_DIR=%LOCALAPPDATA%\Easy-ASR-Bench
+set INSTALLER_PS1=%~dp0installer\install.ps1
+set INSTALLER_URL=https://raw.githubusercontent.com/rollingedit/Easy-ASR-Bench/%APP_VERSION%/installer/install.ps1
 
 if /I "%~1"=="--dry-run" goto dry_run
 if /I "%~2"=="--dry-run" goto dry_run
@@ -25,7 +27,18 @@ echo Setup will download the verified app ZIP for %APP_VERSION%, install or repa
 echo the app, create a Python virtual environment, and install core packages.
 echo.
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0installer\install.ps1" ^
+if not exist "%INSTALLER_PS1%" (
+  echo Downloading installer script for %APP_VERSION%...
+  set INSTALLER_PS1=%TEMP%\Easy-ASR-Bench-install-%APP_VERSION%.ps1
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '%INSTALLER_URL%' -OutFile '%INSTALLER_PS1%'"
+  if errorlevel 1 (
+    echo Could not download installer script.
+    pause
+    exit /b 1
+  )
+)
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^
   -InstallDir "%INSTALL_DIR%" ^
   -Version "%APP_VERSION%"
 
@@ -61,7 +74,13 @@ echo Easy ASR Bench is not installed here and no installed runtime was found.
 exit /b 1
 
 :uninstall
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0installer\install.ps1" ^
+if not exist "%INSTALLER_PS1%" (
+  echo Installer script was not found next to setup.bat.
+  echo Run setup.bat first, or uninstall from the installed folder.
+  pause
+  exit /b 1
+)
+powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^
   -InstallDir "%INSTALL_DIR%" ^
   -Uninstall
 exit /b %errorlevel%

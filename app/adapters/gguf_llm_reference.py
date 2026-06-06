@@ -13,27 +13,37 @@ class GGUFLLMReferenceAdapter:
     def discover(self, models_root: Path) -> list[ModelCandidate]:
         candidates: list[ModelCandidate] = []
         for path in models_root.rglob("*.gguf"):
-            raw, bucket = detect_from_path(path)
-            candidates.append(
-                ModelCandidate(
-                    candidate_id=f"gguf_reference__{path.stem}".lower().replace(" ", "_"),
-                    display_name=path.name,
-                    family_name=path.stem,
-                    backend="llama.cpp",
-                    container_format="gguf",
-                    task="llm-corrected-reference",
-                    precision=raw,
-                    quantization_label=bucket,
-                    path=path,
-                    adapter_name=self.name,
-                    runnable=False,
-                    category="reference_llm",
-                    runnable_after_dependency_install=True,
-                    warnings=["GGUF text LLMs are supported as optional reference/correction models, not direct ASR models."],
-                    help_text="Install llama_cpp support to use this local LLM for transcript correction/reference generation.",
-                )
-            )
+            candidates.append(self.candidate_for_file(path))
         return candidates
+
+    def discover_path(self, path: Path) -> list[ModelCandidate]:
+        path = path.expanduser()
+        if path.is_file() and path.suffix.lower() == ".gguf":
+            return [self.candidate_for_file(path)]
+        if path.is_dir():
+            return self.discover(path)
+        return []
+
+    def candidate_for_file(self, path: Path) -> ModelCandidate:
+        raw, bucket = detect_from_path(path)
+        candidate_key = str(path.resolve()).lower().replace("\\", "_").replace(":", "")
+        return ModelCandidate(
+            candidate_id=f"gguf_reference__{candidate_key}",
+            display_name=path.name,
+            family_name=path.stem,
+            backend="llama.cpp",
+            container_format="gguf",
+            task="llm-corrected-reference",
+            precision=raw,
+            quantization_label=bucket,
+            path=path,
+            adapter_name=self.name,
+            runnable=False,
+            category="reference_llm",
+            runnable_after_dependency_install=True,
+            warnings=["GGUF text LLMs are supported as optional reference/correction models, not direct ASR models."],
+            help_text="Install llama_cpp support to use this local LLM for transcript correction/reference generation.",
+        )
 
     def required_dependency_groups(self, candidate: ModelCandidate) -> list[str]:
         return ["llama_cpp"]

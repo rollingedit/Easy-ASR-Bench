@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from .adapters.base import ModelCandidate
+from .llm_reference import merge_reference_llms, print_external_llm_guide, save_custom_reference_path, scan_custom_reference_llms
 
 
 def parse_selection(raw: str, max_index: int) -> list[int]:
@@ -40,9 +42,15 @@ def recommended_candidates(candidates: list[ModelCandidate]) -> list[int]:
     return indexes or list(range(1, len(candidates) + 1))
 
 
-def choose_candidates(candidates: list[ModelCandidate], unsupported: list[ModelCandidate]) -> tuple[list[ModelCandidate], ModelCandidate | None]:
+def choose_candidates(
+    candidates: list[ModelCandidate],
+    unsupported: list[ModelCandidate],
+    config: dict | None = None,
+    config_path: Path | None = None,
+) -> tuple[list[ModelCandidate], ModelCandidate | None]:
     candidates = [candidate for candidate in candidates if candidate.category == "asr"]
-    reference_llms = [candidate for candidate in unsupported if candidate.category == "reference_llm"]
+    saved_reference_llms = scan_custom_reference_llms(config) if config is not None else []
+    reference_llms = merge_reference_llms([candidate for candidate in unsupported if candidate.category == "reference_llm"], saved_reference_llms)
     unsupported = [candidate for candidate in unsupported if candidate.category != "reference_llm"]
     print("Easy ASR Bench")
     print()
@@ -88,7 +96,7 @@ def choose_candidates(candidates: list[ModelCandidate], unsupported: list[ModelC
             break
         print("No valid runnable models selected.")
     selected = choose_precision_buckets([candidates[index - 1] for index in indexes])
-    reference_llm = choose_reference_llm(reference_llms)
+    reference_llm = choose_reference_llm(reference_llms, config, config_path)
     return selected, reference_llm
 
 
@@ -111,18 +119,53 @@ def choose_precision_buckets(candidates: list[ModelCandidate]) -> list[ModelCand
         print("No valid precision buckets selected.")
 
 
-def choose_reference_llm(reference_llms: list[ModelCandidate]) -> ModelCandidate | None:
-    if not reference_llms:
-        return None
+def choose_reference_llm(
+    reference_llms: list[ModelCandidate],
+    config: dict | None = None,
+    config_path: Path | None = None,
+) -> ModelCandidate | None:
     print()
-    answer = input("Use a local GGUF LLM for LLM-corrected reference help? [y/N] ").strip().lower()
-    if answer not in {"y", "yes"}:
-        return None
-    for index, candidate in enumerate(reference_llms, 1):
-        print(f"[{index}] {candidate.display_name} | {candidate.precision} | {candidate.path}")
+    print("LLM-corrected reference options:")
+    print("[1] Use detected local GGUF reference LLM" + ("" if reference_llms else " (none detected yet)"))
+    print("[2] Paste a GGUF file path or folder and save it for next run")
+    print("[3] Use ChatGPT, Claude, or another external LLM manually")
+    print("[4] Skip LLM reference for now")
     while True:
-        raw = input("Reference LLM> ").strip()
-        indexes = parse_selection(raw, len(reference_llms))
-        if len(indexes) == 1:
-            return reference_llms[indexes[0] - 1]
-        print("Choose one reference LLM number, or press Ctrl+C to skip.")
+        choice = input("Reference option> ").strip().lower()
+        if choice in {"", "4", "s", "skip", "n", "no"}:
+            return None
+        if choice in {"3", "manual", "external", "chatgpt", "claude"}:
+            print_external_llm_guide()
+            return None
+        if choice in {"2", "path", "paste", "import", "manual import"}:
+            if config is None or config_path is None:
+                print("Custom LLM paths require config.json to be writable.")
+                continue
+            raw_path = input("GGUF file or folder path> ").strip()
+            if not raw_path:
+                continue
+            try:
+                new_candidates = save_custom_reference_path(config_path, config, raw_path)
+            except (OSError, ValueError) as exc:
+                print(f"Could not use that path: {exc}")
+                continue
+            reference_llms = merge_reference_llms(reference_llms, new_candidates)
+            print(f"Saved path. Found {len(new_candidates)} GGUF reference LLM candidate(s).")
+            return choose_reference_llm(reference_llms, config, config_path)
+        if choice in {"1", "local", "detected", "gguf", "y", "yes"}:
+            if not reference_llms:
+                print("No GGUF reference LLMs were detected. Choose option 2 to paste a path, option 3 for external LLM instructions, or option 4 to skip.")
+                continue
+            print()
+            print("Detected GGUF reference/correction LLMs:")
+            for index, candidate in enumerate(reference_llms, 1):
+                print(f"[{index}] {candidate.display_name} | {candidate.precision} | {candidate.path}")
+            while True:
+                raw = input("Reference LLM> ").strip()
+                indexes = parse_selection(raw, len(reference_llms))
+                if len(indexes) == 1:
+                    return reference_llms[indexes[0] - 1]
+                if raw.lower() in {"", "s", "skip"}:
+                    return None
+                print("Choose one reference LLM number, or press Enter to skip.")
+        print("Choose 1, 2, 3, or 4.")

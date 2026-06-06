@@ -1,6 +1,6 @@
 {
   "app": {
-    "version": "0.2.0",
+    "version": "0.2.2",
     "version_channel": "stable",
     "check_for_updates_on_setup": true,
     "check_for_updates_on_run": false
@@ -105,6 +105,11 @@
     "write_html": true,
     "embed_results_json_in_html": true,
     "include_llm_reference_instructions": true
+  },
+  "llm_reference": {
+    "custom_model_paths": [],
+    "auto_scan_saved_paths": true,
+    "manual_external_llm_guide": true
   },
   "advanced": {
     "keep_temp_wavs": false
