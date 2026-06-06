@@ -46,6 +46,27 @@ def process_memory_mb() -> float:
     return psutil.Process().memory_info().rss / (1024 * 1024)
 
 
+def reset_peak_vram() -> None:
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+    except Exception:
+        return
+
+
+def peak_vram_mb() -> float | None:
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return float(torch.cuda.max_memory_allocated()) / (1024 * 1024)
+    except Exception:
+        return None
+    return None
+
+
 @contextmanager
 def timer():
     start = time.perf_counter()

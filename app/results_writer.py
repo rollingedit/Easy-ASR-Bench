@@ -162,6 +162,7 @@ def build_results(
         },
         "environment": runtime_environment(),
         "dependency_versions": dependency_versions(),
+        "adapter_versions": {run["model"]["adapter_name"]: __version__ for run in runs},
         "chunk_plan": chunk_plan,
         "selected_models": [run["model"] for run in runs],
         "runs": runs,

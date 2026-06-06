@@ -109,12 +109,24 @@ def write_json_atomic(path: Path, data: dict) -> None:
     partial.replace(path)
 
 
-def expand_inputs(paths: list[Path], extensions: set[str], recursive: bool) -> list[Path]:
+def expand_inputs(paths: list[Path], extensions: set[str], recursive: bool, include_skipped: bool = False):
     files: list[Path] = []
+    skipped: list[Path] = []
     for path in paths:
         if path.is_file() and path.suffix.lower() in extensions:
             files.append(path)
+        elif path.is_file():
+            skipped.append(path)
         elif path.is_dir():
             iterator = path.rglob("*") if recursive else path.glob("*")
-            files.extend(p for p in iterator if p.is_file() and p.suffix.lower() in extensions)
-    return sorted(dict.fromkeys(files))
+            for item in iterator:
+                if not item.is_file():
+                    continue
+                if item.suffix.lower() in extensions:
+                    files.append(item)
+                else:
+                    skipped.append(item)
+    deduped_files = sorted(dict.fromkeys(files))
+    if include_skipped:
+        return deduped_files, sorted(dict.fromkeys(skipped))
+    return deduped_files

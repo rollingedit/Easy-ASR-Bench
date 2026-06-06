@@ -144,5 +144,6 @@ def test_results_environment_and_chunk_metadata_are_not_stubs(tmp_path: Path):
     assert results["environment"]["python"] != "local"
     assert results["environment"]["platform"] != "windows" or results["environment"]["system"] == "Windows"
     assert "dependency_versions" in results
+    assert "adapter_versions" in results
     assert results["chunk_plan"]["chunks"][0]["cut_reason"] == "end_of_audio"
     assert results["chunk_plan"]["chunks"][0]["rms_db"] == -42.0

@@ -1,0 +1,53 @@
+name: Publish Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v0.2.7"
+        required: true
+        type: string
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install validation dependencies
+        run: python -m pip install pyyaml
+
+      - name: Validate release files
+        run: python scripts/validate_release_files.py
+
+      - name: Build release ZIP
+        run: python scripts/build_release_zip.py --version ${{ inputs.tag }}
+
+      - name: Write release notes
+        run: python scripts/write_release_notes.py ${{ inputs.tag }} --output release_notes/${{ inputs.tag }}.md
+
+      - name: Create or update GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ inputs.tag }}"
+          $zip = "dist/Easy-ASR-Bench-$tag-win.zip"
+          $notes = "release_notes/$tag.md"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release edit $tag --title "Easy ASR Bench $tag" --notes-file $notes
+          } else {
+            gh release create $tag --title "Easy ASR Bench $tag" --notes-file $notes --draft
+          }
+          gh release upload $tag $zip setup.bat installer/manifest.json installer/checksums.json --clobber
+          gh release edit $tag --draft=false --latest

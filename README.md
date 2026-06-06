@@ -17,7 +17,7 @@ Easy ASR Bench gives you a practical answer to:
 Which local transcription model is best for my files, on my machine?
 ```
 
-It runs every selected ASR model on the same normalized audio and the same chunk boundaries, then compares transcript differences, speed, memory, and errors.
+It runs every selected ASR model on the same normalized audio and the same chunk boundaries, then compares transcript differences, speed, RAM, VRAM when CUDA metrics are available, and errors.
 
 ## Supported Model Types
 

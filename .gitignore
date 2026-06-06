@@ -22,5 +22,6 @@ Input/*
 goal.md
 AGENTS.md
 dist/
+release_notes/
 .pytest_cache/
 .pytest_tmp/

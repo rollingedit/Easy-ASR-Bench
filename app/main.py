@@ -146,7 +146,7 @@ def process_file_with_candidates(
     unsupported_models: list[ModelCandidate] | None = None,
     reference_llm: ModelCandidate | None = None,
 ) -> Path | None:
-    from .benchmark import process_memory_mb, timer
+    from .benchmark import peak_vram_mb, process_memory_mb, reset_peak_vram, timer
     from .media import audio_duration_seconds, prepare_audio
     from .results_writer import build_results, write_all_reports
 
@@ -175,6 +175,7 @@ def process_file_with_candidates(
             adapter = adapter_for(candidate)
             try:
                 load_started = time.perf_counter()
+                reset_peak_vram()
                 adapter.load(candidate, runtime_config_for_candidate(config))
                 model_load_seconds = time.perf_counter() - load_started
                 result = adapter.transcribe_chunks(chunks, chunk_metadata)
@@ -182,6 +183,7 @@ def process_file_with_candidates(
                 result.metrics["total_wall_seconds"] = model_load_seconds + float(result.metrics.get("inference_seconds", 0))
                 audio_seconds_metric = float(result.metrics.get("audio_seconds", audio_seconds))
                 result.metrics["audio_seconds_per_wall_second"] = audio_seconds_metric / max(0.001, float(result.metrics["total_wall_seconds"]))
+                result.metrics["peak_vram_mb"] = peak_vram_mb()
             except Exception:
                 logging.error("%s failed", candidate.candidate_id)
                 logging.exception("Model failed")
@@ -241,7 +243,11 @@ def collect_input_files(args: argparse.Namespace, config: dict) -> list[Path]:
         input_dir = folder_config(config, "input")
         raw_paths = [input_dir]
     extensions = {ext.lower() for ext in config["input"]["extensions"]}
-    return expand_inputs(raw_paths, extensions, bool(config["input"]["recursive_folders"]))
+    files, skipped = expand_inputs(raw_paths, extensions, bool(config["input"]["recursive_folders"]), include_skipped=True)
+    for path in skipped:
+        print(f"Skipping unsupported input extension: {path}")
+        logging.info("Skipping unsupported input extension: %s", path)
+    return files
 
 
 def queue_state(config: dict):
@@ -262,7 +268,11 @@ def interactive_prompt_for_files(config: dict) -> list[Path]:
     else:
         paths = [folder_config(config, "input")]
     extensions = {ext.lower() for ext in config["input"]["extensions"]}
-    return expand_inputs(paths, extensions, bool(config["input"]["recursive_folders"]))
+    files, skipped = expand_inputs(paths, extensions, bool(config["input"]["recursive_folders"]), include_skipped=True)
+    for path in skipped:
+        print(f"Skipping unsupported input extension: {path}")
+        logging.info("Skipping unsupported input extension: %s", path)
+    return files
 
 
 def main() -> None:
@@ -276,6 +286,14 @@ def main() -> None:
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
 
+    try:
+        _main(args)
+    except KeyboardInterrupt:
+        print()
+        print("Stopped by user. Queue state is saved in Logs/state.json.")
+
+
+def _main(args: argparse.Namespace) -> None:
     config = load_config(Path(args.config))
     if args.doctor:
         from .doctor import run_doctor

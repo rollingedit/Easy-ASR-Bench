@@ -25,8 +25,38 @@ def ffmpeg_exe() -> str:
     return imageio_ffmpeg.get_ffmpeg_exe()
 
 
+def ffprobe_exe() -> str:
+    ffmpeg = Path(ffmpeg_exe())
+    candidate = ffmpeg.with_name("ffprobe.exe" if ffmpeg.suffix.lower() == ".exe" else "ffprobe")
+    return str(candidate if candidate.exists() else "ffprobe")
+
+
+def has_audio_stream(input_path: Path) -> bool:
+    command = [
+        ffprobe_exe(),
+        "-v",
+        "error",
+        "-select_streams",
+        "a",
+        "-show_entries",
+        "stream=index",
+        "-of",
+        "csv=p=0",
+        str(input_path),
+    ]
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True)
+    except OSError:
+        return True
+    if completed.returncode != 0:
+        return True
+    return bool(completed.stdout.strip())
+
+
 def normalize_to_wav(input_path: Path, temp_dir: Path) -> Path:
     temp_dir.mkdir(parents=True, exist_ok=True)
+    if input_path.suffix.lower() in {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".mpeg", ".mpg"} and not has_audio_stream(input_path):
+        raise RuntimeError(f"This video has no audio track: {input_path}")
     output = temp_dir / f"{input_path.stem}_{uuid.uuid4().hex[:10]}_16k_mono.wav"
     command = [
         ffmpeg_exe(),

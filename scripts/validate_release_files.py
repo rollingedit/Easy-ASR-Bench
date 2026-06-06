@@ -64,6 +64,12 @@ def validate_formats() -> None:
             source = path.read_text(encoding="utf-8")
             ast.parse(source)
             compile(source, str(path), "exec")
+    try:
+        import yaml
+    except ModuleNotFoundError as exc:
+        raise AssertionError("PyYAML is required to validate workflow YAML") from exc
+    for path in (ROOT / ".github" / "workflows").glob("*.yml"):
+        yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
 def validate_requirements() -> None:
