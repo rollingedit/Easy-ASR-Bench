@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from app.llm_reference import merge_reference_llms, save_custom_reference_path, scan_custom_reference_llms
+from app.precision_detector import detect_from_path, normalize_precision_label
 
 
 def test_save_custom_reference_file_path_and_rescan(tmp_path: Path):
@@ -40,3 +41,40 @@ def test_merge_reference_llms_deduplicates_by_resolved_path(tmp_path: Path):
     merged = merge_reference_llms(first, second)
 
     assert len(merged) == 1
+
+
+def test_gguf_quantization_labels_are_detected(tmp_path: Path):
+    names = {
+        "model.Q4_K_M.gguf": "4-bit / Q4",
+        "model.Q5_K_S.gguf": "5-bit / Q5",
+        "model.Q6_K.gguf": "6-bit / Q6",
+        "model.IQ3_XXS.gguf": "3-bit / IQ3",
+        "model.FP8.gguf": "8-bit / INT8 / Q8",
+        "model.BF16.gguf": "16-bit / BF16",
+        "model.BF8.gguf": "8-bit / INT8 / Q8",
+        "model.NF4.gguf": "4-bit / Q4",
+        "model.NVFP4.gguf": "4-bit / Q4",
+    }
+
+    for name, bucket in names.items():
+        path = tmp_path / name
+        path.write_bytes(b"gguf")
+        _, detected_bucket = detect_from_path(path)
+        assert detected_bucket == bucket
+
+
+def test_precision_normalization_covers_common_asr_quant_labels():
+    for label, bucket in {
+        "int4": "4-bit / Q4",
+        "int5": "5-bit / Q5",
+        "int6": "6-bit / Q6",
+        "fp4": "4-bit / Q4",
+        "fp8": "8-bit / INT8 / Q8",
+        "bf16": "16-bit / BF16",
+        "bfloat16": "16-bit / BF16",
+        "bf8": "8-bit / INT8 / Q8",
+        "nf4": "4-bit / Q4",
+        "nvfp4": "4-bit / Q4",
+        "nvp4": "4-bit / Q4",
+    }.items():
+        assert normalize_precision_label(label)[1] == bucket

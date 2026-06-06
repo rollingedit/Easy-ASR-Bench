@@ -1,0 +1,4 @@
+onnxruntime-directml
+onnx
+tokenizers
+jinja2

@@ -3,3 +3,7 @@ transformers
 accelerate
 tokenizers
 safetensors
+sentencepiece
+protobuf
+torchaudio
+torchcodec

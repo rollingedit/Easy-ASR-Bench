@@ -41,7 +41,18 @@ def recommended_candidates(candidates: list[ModelCandidate]) -> list[int]:
     for index, candidate in enumerate(candidates, 1):
         family = (candidate.family_name or candidate.adapter_name or candidate.backend).lower()
         by_family.setdefault(family, []).append((index, candidate))
-    precision_rank = {"int8": 0, "q8": 0, "fp16w": 1, "fp16": 1, "fp32": 2, "unknown": 3}
+    precision_rank = {
+        "int8": 0,
+        "q8": 0,
+        "fp16w": 1,
+        "fp16": 1,
+        "float16": 1,
+        "f16": 1,
+        "fp32": 2,
+        "float32": 2,
+        "f32": 2,
+        "unknown": 3,
+    }
     backend_rank = {"faster-whisper": 0, "whisper.cpp": 1, "transformers": 2, "onnxruntime": 3, "openai-whisper": 4}
     for group in by_family.values():
         ranked = sorted(

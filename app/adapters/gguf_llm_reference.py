@@ -53,7 +53,13 @@ class GGUFLLMReferenceAdapter:
             from llama_cpp import Llama
         except ModuleNotFoundError as exc:
             raise RuntimeError("GGUF reference support requires llama-cpp-python. Install requirements/llama_cpp.txt.") from exc
-        return Llama(model_path=str(candidate.path), n_ctx=int(runtime_config.get("llm_context_tokens", 8192)))
+        kwargs = {
+            "model_path": str(candidate.path),
+            "n_ctx": int(runtime_config.get("llm_context_tokens", 8192)),
+        }
+        if runtime_config.get("provider") == "cuda" or bool(runtime_config.get("prefer_gpu", False)):
+            kwargs["n_gpu_layers"] = int(runtime_config.get("llm_gpu_layers", -1))
+        return Llama(**kwargs)
 
     def generate_reference(self, candidate: ModelCandidate, runtime_config: dict, results: dict) -> dict:
         llm = self.load(candidate, runtime_config)

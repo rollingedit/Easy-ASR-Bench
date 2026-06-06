@@ -1,6 +1,6 @@
 param(
   [string]$InstallDir = "$env:LOCALAPPDATA\Easy-ASR-Bench",
-  [string]$Version = "v0.2.8",
+  [string]$Version = "v0.2.9",
   [switch]$DryRun,
   [switch]$Repair,
   [switch]$Uninstall,
@@ -164,7 +164,7 @@ if ($Uninstall) {
       Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
     }
   }
-  foreach ($name in @("Run.bat", "Drop_Audio_Or_Folders_Here.bat", "Open_Models_Folder.bat", "Open_Input_Folder.bat", "Open_Output_Folder.bat", "Edit_Config.bat", "setup.bat", "README.md", "CHANGELOG.md", "SECURITY.md", "SUPPORT.md", "pyproject.toml", "requirements.txt", "pytest.ini")) {
+  foreach ($name in @("Run.bat", "Drop_Audio_Or_Folders_Here.bat", "Open_Latest_Report.bat", "Open_Models_Folder.bat", "Open_Input_Folder.bat", "Open_Output_Folder.bat", "Edit_Config.bat", "setup.bat", "README.md", "CHANGELOG.md", "SECURITY.md", "SUPPORT.md", "pyproject.toml", "requirements.txt", "pytest.ini")) {
     $path = Join-Path $InstallDir $name
     if (Test-Path $path) {
       Remove-Item -LiteralPath $path -Force -ErrorAction Stop

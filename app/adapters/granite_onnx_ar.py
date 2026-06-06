@@ -7,6 +7,7 @@ from typing import Sequence
 
 from .base import ChunkTranscript, ModelCandidate, ModelRunResult
 from ..benchmark import VariantMetrics, process_memory_mb
+from ..precision_detector import normalize_precision_label
 
 
 REQUIRED_AR_FILES = [
@@ -40,8 +41,9 @@ class GraniteOnnxARAdapter:
             seen.add(root)
             if not (root / "tokenizer.json").exists():
                 continue
-            precision_dirs = [p for p in ["int8", "fp16w", "fp32"] if (root / p).is_dir()]
+            precision_dirs = [p for p in ["int8", "fp16w", "fp32", "f32", "float32"] if (root / p).is_dir()]
             for precision in precision_dirs:
+                raw_precision, precision_bucket = normalize_precision_label(precision)
                 folder = root / precision
                 missing = [name for name in REQUIRED_AR_FILES if not (folder / name).exists()]
                 has_ar_signal = (folder / "prompt_encode.onnx").exists() or (folder / "decode_step.onnx").exists()
@@ -50,18 +52,18 @@ class GraniteOnnxARAdapter:
                 candidates.append(
                     ModelCandidate(
                         candidate_id=f"{root.name}__granite_ar__{precision}".lower().replace(" ", "_"),
-                        display_name="Granite Speech ONNX AR",
+                        display_name="Multi-file ONNX AR",
                         family_name=root.name,
                         backend="onnxruntime",
                         container_format="onnx",
                         task="automatic-speech-recognition",
-                        precision=precision,
-                        quantization_label=precision,
+                        precision=raw_precision,
+                        quantization_label=precision_bucket,
                         path=root,
                         adapter_name=self.name,
                         runnable=not missing,
                         missing_files=[f"{precision}/{name}" for name in missing],
-                        warnings=[] if not missing else ["Granite AR folder is incomplete."],
+                        warnings=[] if not missing else ["Multi-file ONNX AR folder is incomplete."],
                     )
                 )
         return candidates

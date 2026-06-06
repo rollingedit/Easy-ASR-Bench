@@ -1,12 +1,13 @@
 {
   "schema": "easy_asr_bench.installer_manifest.v1",
-  "tag": "v0.2.8",
-  "version": "0.2.8",
-  "app_zip": "Easy-ASR-Bench-v0.2.8-win.zip",
+  "tag": "v0.2.9",
+  "version": "0.2.9",
+  "app_zip": "Easy-ASR-Bench-v0.2.9-win.zip",
   "install_dir": "%LOCALAPPDATA%\\Easy-ASR-Bench",
   "entrypoints": [
     "setup.bat",
     "Run.bat",
-    "Drop_Audio_Or_Folders_Here.bat"
+    "Drop_Audio_Or_Folders_Here.bat",
+    "Open_Latest_Report.bat"
   ]
 }

@@ -110,7 +110,11 @@ class GenericOnnxManifestAdapter:
             "active_providers": active_providers,
             "cuda_requested": "CUDAExecutionProvider" in requested_providers,
             "cuda_active": "CUDAExecutionProvider" in active_providers,
-            "provider_fallback": "CUDAExecutionProvider" in requested_providers and "CUDAExecutionProvider" not in active_providers,
+            "directml_requested": "DmlExecutionProvider" in requested_providers,
+            "directml_active": "DmlExecutionProvider" in active_providers,
+            "openvino_requested": "OpenVINOExecutionProvider" in requested_providers,
+            "openvino_active": "OpenVINOExecutionProvider" in active_providers,
+            "provider_fallback": any(provider in requested_providers and provider not in active_providers for provider in ["CUDAExecutionProvider", "DmlExecutionProvider", "OpenVINOExecutionProvider"]),
         }
         return ModelRunResult(
             self.candidate,

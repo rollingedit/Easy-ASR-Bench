@@ -1,6 +1,6 @@
 {
   "app": {
-    "version": "0.2.8",
+    "version": "0.2.9",
     "version_channel": "stable",
     "check_for_updates_on_setup": true,
     "check_for_updates_on_run": false
@@ -16,7 +16,7 @@
   "runtime": {
     "execution": "sequential",
     "provider": "auto",
-    "prefer_gpu": false,
+    "prefer_gpu": true,
     "fallback_to_cpu": true,
     "unload_between_models": true,
     "continue_after_model_error": true,
@@ -25,8 +25,9 @@
   },
   "dependency_install": {
     "auto_install_missing_runtime_dependencies": true,
-    "prefer_cpu_safe_defaults": true,
-    "allow_cuda_install": false
+    "prefer_cpu_safe_defaults": false,
+    "allow_cuda_install": true,
+    "allow_accelerator_install": true
   },
   "model_scan": {
     "recursive": true

@@ -69,7 +69,8 @@ class HFWhisperASRAdapter:
             from transformers import pipeline
         except ModuleNotFoundError as exc:
             raise RuntimeError("HF Whisper requires the transformers_cpu dependency group.") from exc
-        device = 0 if runtime_config.get("provider") == "cuda" and torch.cuda.is_available() else -1
+        wants_cuda = runtime_config.get("provider") == "cuda" or bool(runtime_config.get("prefer_gpu", False))
+        device = 0 if wants_cuda and torch.cuda.is_available() else -1
         whisper_config = runtime_config.get("whisper", {})
         generate_kwargs = {}
         language = runtime_config.get("language", "auto")
@@ -122,6 +123,7 @@ class HFWhisperASRAdapter:
             transcript_chunks,
             {
                 "provider": "transformers",
+                "device": "cuda" if self.pipe is not None and getattr(self.pipe, "device", None) is not None and device_is_cuda(self.pipe.device) else "cpu",
                 "audio_seconds": audio_seconds,
                 "chunk_count": len(chunks),
                 "inference_seconds": inference_seconds,
@@ -135,3 +137,7 @@ class HFWhisperASRAdapter:
     def unload(self) -> None:
         self.pipe = None
         self.candidate = None
+
+
+def device_is_cuda(device) -> bool:
+    return "cuda" in str(device).lower()

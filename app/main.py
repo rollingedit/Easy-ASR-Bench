@@ -68,9 +68,10 @@ def adapter_for(candidate: ModelCandidate):
 
 
 def ensure_dependencies(candidates: list[ModelCandidate], config: dict, reference_llm: ModelCandidate | None = None) -> tuple[list[ModelCandidate], ModelCandidate | None]:
-    from .dependency_manager import install_group, missing_modules
+    from .dependency_manager import acceleration_install_decision, dependency_status, install_group_for_config, missing_modules_for_config, recovery_command_for_config
 
     project_root = Path(__file__).resolve().parent.parent
+    status = dependency_status()
     candidate_groups: dict[str, list[str]] = {}
     all_candidates = [*candidates, *([reference_llm] if reference_llm else [])]
     groups: list[str] = []
@@ -80,13 +81,24 @@ def ensure_dependencies(candidates: list[ModelCandidate], config: dict, referenc
         for group in adapter.required_dependency_groups(candidate):
             if group not in groups:
                 groups.append(group)
-    missing = {group: missing_modules(group) for group in groups if missing_modules(group)}
+    missing = {group: missing_modules_for_config(group, config) for group in groups if missing_modules_for_config(group, config)}
     if not missing:
         return candidates, reference_llm
     print()
     print("Some selected models need additional runtime packages:")
     for group, modules in missing.items():
-        print(f"  {group}: missing {', '.join(modules)}")
+        detail = status.get(group, {})
+        description = detail.get("description", "optional runtime support")
+        acceleration_decision = acceleration_install_decision(config, group)
+        print(f"  {group}: {description}")
+        print(f"    missing: {', '.join(modules)}")
+        if acceleration_decision["use_accelerator"]:
+            print(f"    {acceleration_decision['accelerator'].upper()} install: {acceleration_decision['reason']}")
+            print(f"    repair: {recovery_command_for_config(group, config)}")
+        else:
+            print(f"    repair: {recovery_command_for_config(group, config)}")
+            if "accelerator" in acceleration_decision["reason"].lower() or "gpu" in acceleration_decision["reason"].lower() or "nvidia" in acceleration_decision["reason"].lower():
+                print(f"    accelerator note: {acceleration_decision['reason']}")
     if not config.get("dependency_install", {}).get("auto_install_missing_runtime_dependencies", True):
         print("Automatic dependency repair is disabled in config.json.")
         failed_groups = set(missing)
@@ -97,18 +109,42 @@ def ensure_dependencies(candidates: list[ModelCandidate], config: dict, referenc
         return _drop_candidates_for_failed_dependency_groups(candidates, reference_llm, candidate_groups, failed_groups)
     failed_groups: set[str] = set()
     for group in missing:
-        print(f"Installing {group}...")
+        acceleration_decision = acceleration_install_decision(config, group)
+        accelerator = acceleration_decision.get("accelerator") if acceleration_decision["use_accelerator"] else ""
+        install_label = f"{group} with {str(accelerator).upper()} packages" if accelerator else group
+        print(f"Installing {install_label}...")
         try:
-            install_group(group, project_root)
+            install_group_for_config(group, project_root, config)
         except Exception as exc:
             print(f"Install failed for {group}: {exc}")
+            print(f"Manual repair command: {recovery_command_for_config(group, config)}")
             failed_groups.add(group)
             continue
-        still_missing = missing_modules(group)
+        still_missing = missing_modules_for_config(group, config)
         if still_missing:
             print(f"Install finished but {group} is still missing: {', '.join(still_missing)}")
+            print(f"Manual repair command: {recovery_command_for_config(group, config)}")
             failed_groups.add(group)
     return _drop_candidates_for_failed_dependency_groups(candidates, reference_llm, candidate_groups, failed_groups)
+
+
+def warn_runtime_dependency_fallbacks(config: dict) -> None:
+    runtime = config.get("runtime", {})
+    provider = str(runtime.get("provider", "auto")).lower()
+    prefer_gpu = bool(runtime.get("prefer_gpu", False))
+    if provider != "cuda" and not prefer_gpu:
+        return
+    from .dependency_manager import cuda_diagnostics
+
+    diagnostics = cuda_diagnostics()
+    messages = diagnostics.get("messages", [])
+    if not messages:
+        return
+    print()
+    print("CUDA was requested or preferred, but this install may fall back to CPU:")
+    for message in messages:
+        print(f"  - {message}")
+    print("Run setup.bat --doctor for full dependency status and repair commands.")
 
 
 def _drop_candidates_for_failed_dependency_groups(
@@ -229,6 +265,7 @@ def process_file_with_candidates(
         if wav_path and wav_path.exists() and not config["advanced"].get("keep_temp_wavs", False):
             wav_path.unlink()
         print(f"Wrote reports to {output_path}")
+        print(f"Open HTML comparison: {output_path / 'compare.html'}")
         return output_path
     except Exception:
         logging.error("Failed processing %s", source)
@@ -305,6 +342,7 @@ def _main(args: argparse.Namespace) -> None:
         print_scan_summary(runnable, unsupported)
         return
     setup_logging(folder_config(config, "logs", "logs_folder"))
+    warn_runtime_dependency_fallbacks(config)
     reference_llm = None
     if args.interactive and not args.scan_only:
         selected, reference_llm = choose_candidates(runnable, unsupported, config, Path(args.config))

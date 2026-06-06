@@ -6,7 +6,7 @@ from typing import Sequence
 
 from .base import ChunkTranscript, ModelCandidate, ModelRunResult
 from ..benchmark import process_memory_mb
-from ..precision_detector import normalize_precision_label
+from ..precision_detector import detect_from_path
 
 
 class WhisperCppASRAdapter:
@@ -19,7 +19,7 @@ class WhisperCppASRAdapter:
     def discover(self, models_root: Path) -> list[ModelCandidate]:
         candidates: list[ModelCandidate] = []
         for path in models_root.rglob("ggml-*.bin"):
-            raw, bucket = normalize_precision_label("unknown")
+            raw, bucket = detect_from_path(path)
             candidates.append(
                 ModelCandidate(
                     candidate_id=f"whisper_cpp__{path.stem}".lower().replace(" ", "_"),

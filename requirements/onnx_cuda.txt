@@ -1,0 +1,4 @@
+onnxruntime-gpu
+onnx
+tokenizers
+jinja2

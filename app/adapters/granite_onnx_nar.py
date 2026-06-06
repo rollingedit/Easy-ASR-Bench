@@ -7,6 +7,7 @@ from typing import Sequence
 
 from .base import ChunkTranscript, ModelCandidate, ModelRunResult
 from ..benchmark import VariantMetrics, process_memory_mb
+from ..precision_detector import normalize_precision_label
 
 
 REQUIRED_NAR_FILES = [
@@ -38,8 +39,9 @@ class GraniteOnnxNARAdapter:
             seen.add(root)
             if not (root / "tokenizer.json").exists():
                 continue
-            precision_dirs = [p for p in ["int8", "fp16w", "fp32"] if (root / p).is_dir()]
+            precision_dirs = [p for p in ["int8", "fp16w", "fp32", "f32", "float32"] if (root / p).is_dir()]
             for precision in precision_dirs:
+                raw_precision, precision_bucket = normalize_precision_label(precision)
                 folder = root / precision
                 missing = [name for name in REQUIRED_NAR_FILES if not (folder / name).exists()]
                 has_nar_signal = (folder / "editor.onnx").exists()
@@ -48,18 +50,18 @@ class GraniteOnnxNARAdapter:
                 candidates.append(
                     ModelCandidate(
                         candidate_id=f"{root.name}__granite_nar__{precision}".lower().replace(" ", "_"),
-                        display_name="Granite Speech ONNX NAR",
+                        display_name="Multi-file ONNX NAR",
                         family_name=root.name,
                         backend="onnxruntime",
                         container_format="onnx",
                         task="automatic-speech-recognition",
-                        precision=precision,
-                        quantization_label=precision,
+                        precision=raw_precision,
+                        quantization_label=precision_bucket,
                         path=root,
                         adapter_name=self.name,
                         runnable=not missing,
                         missing_files=[f"{precision}/{name}" for name in missing],
-                        warnings=[] if not missing else ["Granite NAR folder is incomplete."],
+                        warnings=[] if not missing else ["Multi-file ONNX NAR folder is incomplete."],
                     )
                 )
         return candidates
