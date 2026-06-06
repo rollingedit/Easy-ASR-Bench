@@ -46,13 +46,21 @@ def current_version() -> str:
 
 
 def tracked_text_files() -> list[Path]:
-    import subprocess
-
-    completed = subprocess.run(["git", "ls-files"], cwd=ROOT, text=True, capture_output=True, check=True)
+    release_inputs = [
+        "app/__init__.py",
+        "app/config.py",
+        "config.json",
+        "pyproject.toml",
+        "setup.bat",
+        "installer/install.ps1",
+        "README.md",
+        "docs/supported_models.md",
+        "docs/troubleshooting.md",
+    ]
     paths: list[Path] = []
-    for rel in completed.stdout.splitlines():
+    for rel in release_inputs:
         path = ROOT / rel
-        if path.is_file() and path.suffix.lower() in {".py", ".json", ".toml", ".bat", ".ps1", ".md", ".yml", ".yaml", ".txt"}:
+        if path.is_file():
             paths.append(path)
     return paths
 

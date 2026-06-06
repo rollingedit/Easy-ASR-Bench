@@ -72,7 +72,8 @@ class GenericOnnxManifestAdapter:
 
         manifest = candidate.metadata["manifest"]
         model_path = candidate.path / manifest["files"]["model"]
-        self.session = make_session(model_path, choose_providers(runtime_config.get("provider", "auto")), int(runtime_config.get("cpu_threads", 0)))
+        self.requested_providers = choose_providers(runtime_config.get("provider", "auto"))
+        self.session = make_session(model_path, self.requested_providers, int(runtime_config.get("cpu_threads", 0)))
         return self
 
     def transcribe_chunks(self, chunks: Sequence, chunk_metadata: list[dict]) -> ModelRunResult:
@@ -102,11 +103,21 @@ class GenericOnnxManifestAdapter:
             peak_ram = max(peak_ram, process_memory_mb())
             transcript_chunks.append(ChunkTranscript(str(metadata["chunk_id"]), float(metadata["start_seconds"]), float(metadata["end_seconds"]), text))
         audio_seconds = sum(float(item["end_seconds"]) - float(item["start_seconds"]) for item in chunk_metadata)
+        requested_providers = getattr(self, "requested_providers", self.session.get_providers())
+        active_providers = list(self.session.get_providers())
+        provider_summary = {
+            "requested_providers": list(requested_providers),
+            "active_providers": active_providers,
+            "cuda_requested": "CUDAExecutionProvider" in requested_providers,
+            "cuda_active": "CUDAExecutionProvider" in active_providers,
+            "provider_fallback": "CUDAExecutionProvider" in requested_providers and "CUDAExecutionProvider" not in active_providers,
+        }
         return ModelRunResult(
             self.candidate,
             transcript_chunks,
             {
                 "provider": ",".join(self.session.get_providers()),
+                "provider_summary": provider_summary,
                 "audio_seconds": audio_seconds,
                 "chunk_count": len(chunks),
                 "inference_seconds": inference_seconds,
