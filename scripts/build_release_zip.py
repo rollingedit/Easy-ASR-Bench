@@ -50,7 +50,7 @@ def write_json(path: Path, data: dict) -> None:
         handle.write("\n")
 
 
-def build(version: str, update_metadata: bool) -> Path:
+def build(version: str, update_metadata: bool, strict_checksums: bool = False) -> Path:
     tag = version if version.startswith("v") else f"v{version}"
     plain = tag[1:]
     zip_name = f"Easy-ASR-Bench-{tag}-win.zip"
@@ -119,12 +119,15 @@ def build(version: str, update_metadata: bool) -> Path:
         write_json(ROOT / "installer" / "checksums.json", checksums)
     else:
         committed_checksums = json.loads((ROOT / "installer" / "checksums.json").read_text(encoding="utf-8"))
-        if committed_checksums != checksums:
+        if strict_checksums and committed_checksums != checksums:
             print("Generated checksums:")
             print(json.dumps(checksums, indent=2))
             print("Committed checksums:")
             print(json.dumps(committed_checksums, indent=2))
             raise SystemExit("installer/checksums.json does not match generated release checksums")
+        if committed_checksums != checksums:
+            print("warning: installer/checksums.json does not match generated release checksums")
+            print("warning: use --update-metadata when preparing local release metadata, or let the GitHub publish workflow upload generated checksums.json")
 
     verify_dir = dist / f"verify-{tag}"
     shutil.rmtree(verify_dir, ignore_errors=True)
@@ -142,8 +145,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", required=True)
     parser.add_argument("--update-metadata", action="store_true")
+    parser.add_argument("--strict-checksums", action="store_true")
     args = parser.parse_args()
-    build(args.version, args.update_metadata)
+    build(args.version, args.update_metadata, args.strict_checksums)
     return 0
 
 

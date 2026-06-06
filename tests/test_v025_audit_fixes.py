@@ -20,6 +20,7 @@ def test_release_gate_verifies_committed_metadata():
     assert "github.event_name == 'release'" in workflow
     assert "actions/upload-artifact" in workflow
     assert "gh release download" in workflow
+    assert "release-asset/checksums.json" in workflow
 
 
 def test_release_builder_uses_working_tree_bytes_not_head_blobs():
@@ -28,6 +29,7 @@ def test_release_builder_uses_working_tree_bytes_not_head_blobs():
     assert "git show" not in text
     assert "(ROOT / rel).read_bytes()" in text
     assert '!= "installer/checksums.json"' in text
+    assert "--strict-checksums" in text
 
 
 def test_installer_uses_tls12_and_basic_parsing_for_downloads():

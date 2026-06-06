@@ -30,7 +30,7 @@ jobs:
         run: python scripts/validate_release_files.py
 
       - name: Build release ZIP
-        run: python scripts/build_release_zip.py --version ${{ inputs.tag }}
+        run: python scripts/build_release_zip.py --version ${{ inputs.tag }} --update-metadata
 
       - name: Write release notes
         run: python scripts/write_release_notes.py ${{ inputs.tag }} --output release_notes/${{ inputs.tag }}.md

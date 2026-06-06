@@ -13,6 +13,7 @@ def test_publish_release_workflow_builds_assets_on_github_from_draft():
 
     assert "workflow_dispatch" in text
     assert "python scripts/build_release_zip.py --version" in text
+    assert "--update-metadata" in text
     assert "python scripts/write_release_notes.py" in text
     assert "gh release create" in text
     assert "--draft" in text

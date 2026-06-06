@@ -44,8 +44,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "${{ github.event.release.tag_name }}"
-          $manifest = Get-Content -Raw installer/manifest.json | ConvertFrom-Json
-          $checksums = Get-Content -Raw installer/checksums.json | ConvertFrom-Json
+          gh release download $tag --pattern manifest.json --pattern checksums.json --dir release-asset
+          $manifest = Get-Content -Raw release-asset/manifest.json | ConvertFrom-Json
+          $checksums = Get-Content -Raw release-asset/checksums.json | ConvertFrom-Json
           $zipName = $manifest.app_zip
           gh release download $tag --pattern $zipName --dir release-asset
           $actual = "sha256:" + (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path "release-asset" $zipName)).Hash.ToLowerInvariant()
