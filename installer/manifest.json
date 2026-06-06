@@ -1,8 +1,9 @@
 {
-  "schema": "easy_asr_bench.installer_manifest.v1",
+  "schema": "easy_asr_bench.installer_manifest.v2",
   "tag": "v0.3.0",
   "version": "0.3.0",
   "app_zip": "Easy-ASR-Bench-v0.3.0-win.zip",
+  "installer_asset": "install.ps1",
   "install_dir": "%LOCALAPPDATA%\\Easy-ASR-Bench",
   "entrypoints": [
     "setup.bat",

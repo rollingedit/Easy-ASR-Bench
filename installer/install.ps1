@@ -2,9 +2,11 @@ param(
   [string]$InstallDir = "$env:LOCALAPPDATA\Easy-ASR-Bench",
   [string]$Version = "v0.3.0",
   [switch]$DryRun,
+  [switch]$VerifyRelease,
   [switch]$Repair,
   [switch]$Uninstall,
   [switch]$RemoveUserData,
+  [string]$ConfirmRemoveUserData = "",
   [switch]$Doctor
 )
 
@@ -66,6 +68,83 @@ function Invoke-PythonFile($Python, $ScriptPath) {
   if ($LASTEXITCODE -ne 0) {
     throw "Python validation failed with exit code $LASTEXITCODE"
   }
+}
+
+function Assert-Checksum($Path, $Expected, $Name) {
+  if (-not $Expected) {
+    throw "Missing expected SHA256 for $Name"
+  }
+  $actual = "sha256:" + (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
+  if ($actual -ne $Expected) {
+    throw "Checksum mismatch for $Name. Expected $Expected, got $actual"
+  }
+  Write-SetupLog "[OK] $Name SHA256 verified"
+}
+
+function Test-ReleaseAssets($Python) {
+  Write-SetupLog "Verify-release dry run:"
+  Write-SetupLog "  release: $ReleaseBase"
+  Remove-Item -LiteralPath $TempRoot -Recurse -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $Stage | Out-Null
+  Invoke-Download "$ReleaseBase/manifest.json" $Manifest
+  Write-SetupLog "[OK] manifest downloaded"
+  Invoke-Download "$ReleaseBase/checksums.json" $Checksums
+  Write-SetupLog "[OK] checksums downloaded"
+  $manifestJson = Get-Content -Raw -LiteralPath $Manifest | ConvertFrom-Json
+  $checksumsJson = Get-Content -Raw -LiteralPath $Checksums | ConvertFrom-Json
+  if ($manifestJson.tag -ne $Version) {
+    throw "Manifest tag mismatch. Expected $Version, got $($manifestJson.tag)"
+  }
+  Write-SetupLog "[OK] release tag pinned"
+  if ($manifestJson.installer_asset) {
+    if ($manifestJson.installer_asset -ne "install.ps1") {
+      throw "Manifest installer asset mismatch. Expected install.ps1, got $($manifestJson.installer_asset)"
+    }
+    Assert-Checksum $Manifest $checksumsJson.files.'manifest.json' "manifest.json"
+    $releaseSetup = Join-Path $TempRoot "release-setup.bat"
+    $releaseInstaller = Join-Path $TempRoot "release-install.ps1"
+    Invoke-Download "$ReleaseBase/setup.bat" $releaseSetup
+    Write-SetupLog "[OK] setup.bat downloaded"
+    Assert-Checksum $releaseSetup $checksumsJson.files.'setup.bat' "setup.bat"
+    Invoke-Download "$ReleaseBase/install.ps1" $releaseInstaller
+    Write-SetupLog "[OK] install.ps1 downloaded"
+    Assert-Checksum $releaseInstaller $checksumsJson.files.'install.ps1' "install.ps1"
+  }
+  else {
+    Write-SetupLog "Legacy manifest does not declare installer_asset; skipping standalone bootstrap asset verification."
+  }
+  $zipName = $manifestJson.app_zip
+  Invoke-Download "$ReleaseBase/$zipName" $Zip
+  Write-SetupLog "[OK] app ZIP downloaded"
+  Assert-Checksum $Zip $checksumsJson.files.$zipName $zipName
+  Expand-Archive -LiteralPath $Zip -DestinationPath $Stage -Force
+  $root = Get-ChildItem -LiteralPath $Stage -Directory | Select-Object -First 1
+  if (-not $root) {
+    throw "Release ZIP did not contain an app root folder."
+  }
+  Write-SetupLog "[OK] ZIP layout valid"
+  $validator = Join-Path $root.FullName "scripts\validate_physical_files.py"
+  if (Test-Path $validator) {
+    if ($Python) {
+      & $Python.File @($Python.Args) $validator --repo $root.FullName
+      if ($LASTEXITCODE -ne 0) {
+        throw "Physical release-file validation failed with exit code $LASTEXITCODE"
+      }
+      Write-SetupLog "[OK] release physical files valid"
+    }
+    else {
+      Write-SetupLog "Python was not found, so ZIP physical-file validation could not compile Python source in dry-run."
+    }
+  }
+  else {
+    Write-SetupLog "Release ZIP does not contain scripts\validate_physical_files.py; falling back to legacy validator if present."
+    $legacy = Join-Path $root.FullName "scripts\validate_release_files.py"
+    if ($Python -and (Test-Path $legacy)) {
+      Invoke-PythonFile $Python $legacy
+      Write-SetupLog "[OK] legacy release-file validator passed"
+    }
+  }
+  Write-SetupLog "[OK] install would preserve Models, Input, Output, Logs, Cache, Temp, and config.json"
 }
 
 function Get-TreeStats($Path) {
@@ -155,6 +234,10 @@ if ($Uninstall) {
     exit 0
   }
   if ($RemoveUserData) {
+    if ($ConfirmRemoveUserData -ne "DELETE USER DATA") {
+      Write-SetupLog "Destructive uninstall refused. Re-run with -ConfirmRemoveUserData 'DELETE USER DATA' to delete Models, Input, Output, Logs, Cache, Temp, and config.json."
+      exit 1
+    }
     Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction Stop
     exit 0
   }
@@ -202,7 +285,13 @@ if ($DryRun) {
   Write-SetupLog "  checksums: $ReleaseBase/checksums.json"
   Write-SetupLog "  install dir: $InstallDir"
   Write-SetupLog "  preserved user data: Models, Input, Output, Logs, Cache, Temp, config.json"
-  Write-SetupLog "  no files will be downloaded, moved, or deleted"
+  if ($VerifyRelease) {
+    Test-ReleaseAssets $Python
+  }
+  else {
+    Write-SetupLog "  no files will be downloaded, moved, or deleted"
+    Write-SetupLog "  use setup.bat --dry-run --verify-release to validate public release assets"
+  }
   exit 0
 }
 

@@ -202,7 +202,7 @@ function renderAlignment(items) {{
     if (item.op === 'equal') return `<span class="equal">${{safe(item.hypothesis)}}</span>`;
     if (item.op === 'insert') return `<span class="insert">+${{safe(item.hypothesis)}}</span>`;
     if (item.op === 'delete') return `<span class="delete">-${{safe(item.reference)}}</span>`;
-    return `<span class="replace">${{safe(item.reference)}}→${{safe(item.hypothesis)}}</span>`;
+    return `<span class="replace">${{safe(item.reference)}}-&gt;${{safe(item.hypothesis)}}</span>`;
   }}).join(' ');
 }}
 function extractJson(text) {{

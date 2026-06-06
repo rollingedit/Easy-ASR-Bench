@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass
 
 
 def normalize_words(text: str) -> list[str]:
     text = unicodedata.normalize("NFKC", text.casefold())
+    text = text.replace("’", "'").replace("‘", "'").replace("ʼ", "'").replace("`", "'").replace("â€™", "'")
     chars: list[str] = []
     for char in text:
         category = unicodedata.category(char)
@@ -14,7 +14,7 @@ def normalize_words(text: str) -> list[str]:
             chars.append(" ")
         elif category[0] in {"L", "N", "M"}:
             chars.append(char)
-        elif char in {"'", "’"}:
+        elif char == "'":
             chars.append(char)
         else:
             chars.append(" ")

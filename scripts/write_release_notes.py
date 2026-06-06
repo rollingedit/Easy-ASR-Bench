@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import subprocess
 from pathlib import Path
 
 
@@ -19,6 +21,22 @@ def changelog_section(tag: str) -> list[str]:
     return [line.strip() for line in section.splitlines() if line.strip().startswith("- ")]
 
 
+def asset_hash_lines() -> list[str]:
+    checksums_path = ROOT / "installer" / "checksums.json"
+    if not checksums_path.exists():
+        return ["- Asset hashes were not available in `installer/checksums.json`."]
+    checksums = json.loads(checksums_path.read_text(encoding="utf-8"))
+    return [f"- `{name}`: `{digest}`" for name, digest in sorted(checksums.get("files", {}).items())]
+
+
+def current_commit() -> str:
+    try:
+        completed = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True)
+        return completed.stdout.strip()
+    except Exception:
+        return "unknown"
+
+
 def write_notes(tag: str, output: Path) -> None:
     changes = changelog_section(tag)
     if not changes:
@@ -32,13 +50,20 @@ def write_notes(tag: str, output: Path) -> None:
         "",
         "## Verified",
         "",
+        f"- Built from commit: `{current_commit()}`.",
         "- Release file validator passed.",
+        "- Physical file validator passed for repo and release ZIP bytes.",
         "- Release ZIP built in no-update verification mode.",
         "- Python compile check passed.",
         "- Unit tests passed.",
         "- `setup.bat --dry-run --local` passed.",
+        "- `setup.bat --dry-run --verify-release` is the public release-asset validation path.",
         "- Strict doctor passed for core dependencies.",
         "- GitHub Actions Release Gate must pass before this release is considered final.",
+        "",
+        "## Release assets",
+        "",
+        *asset_hash_lines(),
         "",
         "## Known limits",
         "",

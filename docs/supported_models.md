@@ -18,7 +18,7 @@ Large selections and unknown folder layouts require confirmation before download
 
 If the rescan reports exact missing files that are present in the same Hugging Face repo, the app can download those missing files after user confirmation. Existing local files are skipped on repeat downloads.
 
-Ambiguous requirements are shown to the user instead of guessed. The app writes `hf_missing_file_request.json` and `hf_missing_file_prompt.txt` beside the incomplete package so a local or external LLM can return structured recommendations using only exact filenames from the repo file list.
+Ambiguous requirements are shown to the user instead of guessed. The app may offer tightly scoped same-package repair files, such as selected ONNX sidecars, parent metadata, or a matching ASR GGUF projector, but it does not pull alternate weight variants as a repair guess. It also writes `hf_missing_file_request.json` and `hf_missing_file_prompt.txt` beside the incomplete package so a local or external LLM can return structured recommendations. Any imported recommendation must use exact filenames from the repo file list and still requires confirmation before download.
 
 The tested Hugging Face links are representative stress cases, not a complete map of every possible future repo layout. Unknown or mixed package structures should still be audited and expanded with new regression tests when found.
 

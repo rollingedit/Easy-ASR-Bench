@@ -30,6 +30,9 @@ jobs:
       - name: Validate release files
         run: python scripts/validate_release_files.py
 
+      - name: Validate physical source files
+        run: python scripts/validate_physical_files.py --repo .
+
       - name: Build and validate release ZIP
         shell: pwsh
         run: |
@@ -56,12 +59,16 @@ jobs:
           $manifest = Get-Content -Raw release-asset/manifest.json | ConvertFrom-Json
           $checksums = Get-Content -Raw release-asset/checksums.json | ConvertFrom-Json
           $zipName = $manifest.app_zip
+          gh release download $tag --pattern setup.bat --pattern install.ps1 --dir release-asset
           gh release download $tag --pattern $zipName --dir release-asset
-          $actual = "sha256:" + (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path "release-asset" $zipName)).Hash.ToLowerInvariant()
-          $expected = $checksums.files.$zipName
-          if ($actual -ne $expected) {
-            throw "Published release asset checksum mismatch for $zipName. Expected $expected, got $actual"
+          foreach ($asset in @($zipName, "setup.bat", "install.ps1", "manifest.json")) {
+            $actual = "sha256:" + (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path "release-asset" $asset)).Hash.ToLowerInvariant()
+            $expected = $checksums.files.$asset
+            if ($actual -ne $expected) {
+              throw "Published release asset checksum mismatch for $asset. Expected $expected, got $actual"
+            }
           }
+          python scripts/validate_physical_files.py --zip (Join-Path "release-asset" $zipName)
 
       - name: Compile Python
         run: python -m compileall app tests

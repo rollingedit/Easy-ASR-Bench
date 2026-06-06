@@ -74,7 +74,7 @@ class FasterWhisperASRAdapter:
         self.requested_compute_type = compute_type
         self.effective_compute_type = effective_compute_type
         self.load_warnings = warnings
-        self.model = WhisperModel(str(candidate.path), device=device, compute_type=compute_type)
+        self.model = WhisperModel(str(candidate.path), device=device, compute_type=effective_compute_type)
         return self
 
     def transcribe_chunks(self, chunks: Sequence, chunk_metadata: list[dict]) -> ModelRunResult:

@@ -44,6 +44,9 @@ def make_session(path: Path, providers: list[str], cpu_threads: int = 0) -> ort.
     if cpu_threads:
         options.intra_op_num_threads = int(cpu_threads)
         options.inter_op_num_threads = int(cpu_threads)
+    if "DmlExecutionProvider" in providers:
+        options.enable_mem_pattern = False
+        options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
     return ort.InferenceSession(str(path), sess_options=options, providers=providers)
 
 

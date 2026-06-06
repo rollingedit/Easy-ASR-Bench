@@ -1,12 +1,18 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 set APP_NAME=Easy ASR Bench
 set APP_VERSION=v0.3.0
 set INSTALL_DIR=%LOCALAPPDATA%\Easy-ASR-Bench
 set INSTALLER_PS1=%~dp0installer\install.ps1
-set INSTALLER_URL=https://raw.githubusercontent.com/rollingedit/Easy-ASR-Bench/%APP_VERSION%/installer/install.ps1
+set INSTALLER_URL=https://github.com/rollingedit/Easy-ASR-Bench/releases/download/%APP_VERSION%/install.ps1
+set INSTALLER_SHA256=sha256:2ac1824bb4ea0a8cf83bb3f8a706251f2228c3b3a0338d315c96319a4fb385b9
+set VERIFY_RELEASE=0
+
+for %%A in (%*) do (
+  if /I "%%~A"=="--verify-release" set VERIFY_RELEASE=1
+)
 
 if /I "%~1"=="--dry-run" goto dry_run
 if /I "%~2"=="--dry-run" goto dry_run
@@ -38,6 +44,12 @@ if not exist "%INSTALLER_PS1%" (
   )
 )
 
+call :verify_sha "%INSTALLER_PS1%" "%INSTALLER_SHA256%" "installer/install.ps1"
+if errorlevel 1 (
+  pause
+  exit /b 1
+)
+
 powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^
   -InstallDir "%INSTALL_DIR%" ^
   -Version "%APP_VERSION%"
@@ -60,10 +72,30 @@ echo Version: %APP_VERSION%
 echo Install folder: %INSTALL_DIR%
 echo Mode: validates installer inputs without changing files.
 if not exist "%INSTALLER_PS1%" (
-  echo Installer script was not found beside setup.bat.
-  echo Standalone setup will download it from:
-  echo   %INSTALLER_URL%
-  exit /b 0
+  if "%VERIFY_RELEASE%"=="0" (
+    echo Installer script was not found beside setup.bat.
+    echo Standalone setup will download and verify it from:
+    echo   %INSTALLER_URL%
+    echo Use --dry-run --verify-release to validate public release assets.
+    exit /b 0
+  )
+  echo Downloading installer script for release verification...
+  set INSTALLER_PS1=%TEMP%\Easy-ASR-Bench-install-%APP_VERSION%.ps1
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '%INSTALLER_URL%' -OutFile '%INSTALLER_PS1%'"
+  if errorlevel 1 (
+    echo Could not download installer script.
+    exit /b 1
+  )
+)
+call :verify_sha "%INSTALLER_PS1%" "%INSTALLER_SHA256%" "installer/install.ps1"
+if errorlevel 1 exit /b 1
+if "%VERIFY_RELEASE%"=="1" (
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^
+    -InstallDir "%INSTALL_DIR%" ^
+    -Version "%APP_VERSION%" ^
+    -DryRun ^
+    -VerifyRelease
+  exit /b %errorlevel%
 )
 powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^
   -InstallDir "%INSTALL_DIR%" ^
@@ -85,10 +117,14 @@ exit /b 1
 
 :uninstall
 if not exist "%INSTALLER_PS1%" (
-  echo Installer script was not found next to setup.bat.
-  echo Run setup.bat first, or uninstall from the installed folder.
-  pause
-  exit /b 1
+  if exist "%INSTALL_DIR%\installer\install.ps1" (
+    set INSTALLER_PS1=%INSTALL_DIR%\installer\install.ps1
+  ) else (
+    echo Installer script was not found next to setup.bat or in the installed app folder.
+    echo Run setup.bat first, or uninstall from the installed folder.
+    pause
+    exit /b 1
+  )
 )
 powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^
   -InstallDir "%INSTALL_DIR%" ^
@@ -161,4 +197,27 @@ if errorlevel 1 (
 echo.
 echo Setup complete. Drop models into Models, then use Run.bat.
 pause
+exit /b 0
+
+:verify_sha
+set VERIFY_FILE=%~1
+set EXPECTED_SHA=%~2
+set VERIFY_LABEL=%~3
+set ACTUAL_SHA=
+for /f "tokens=1" %%H in ('certutil -hashfile "%VERIFY_FILE%" SHA256 ^| findstr /R "^[0-9A-Fa-f][0-9A-Fa-f]*$"') do (
+  set ACTUAL_SHA=sha256:%%H
+)
+if "%ACTUAL_SHA%"=="" (
+  echo Could not compute SHA256 for %VERIFY_LABEL%.
+  exit /b 1
+)
+if /I not "%ACTUAL_SHA%"=="%EXPECTED_SHA%" (
+  echo Integrity check failed before execution.
+  echo Asset: %VERIFY_LABEL%
+  echo Expected SHA256: %EXPECTED_SHA%
+  echo Actual SHA256:   %ACTUAL_SHA%
+  echo No files were installed or modified.
+  exit /b 1
+)
+echo Verified %VERIFY_LABEL% SHA256.
 exit /b 0

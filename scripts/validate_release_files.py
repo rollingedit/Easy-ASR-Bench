@@ -5,6 +5,8 @@ import json
 import sys
 from pathlib import Path
 
+from validate_physical_files import validate_root
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SKIP_DIRS = {".git", ".venv", "dist", ".pytest_cache", ".pytest_tmp", "__pycache__"}
@@ -100,6 +102,7 @@ def validate_endings() -> None:
 
 def main() -> int:
     try:
+        validate_root(ROOT)
         validate_line_counts()
         validate_formats()
         validate_requirements()
