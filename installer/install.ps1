@@ -1,6 +1,6 @@
 param(
   [string]$InstallDir = "$env:LOCALAPPDATA\Easy-ASR-Bench",
-  [string]$Version = "v0.2.4",
+  [string]$Version = "v0.2.5",
   [switch]$DryRun,
   [switch]$Repair,
   [switch]$Uninstall,
@@ -13,6 +13,8 @@ $Repo = "https://github.com/rollingedit/Easy-ASR-Bench"
 $ReleaseBase = "$Repo/releases/download/$Version"
 $LogDir = Join-Path $InstallDir "Logs"
 $Log = Join-Path $LogDir "setup.log"
+
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 function Write-SetupLog($Message) {
   $line = "$(Get-Date -Format s) $Message"
@@ -199,15 +201,15 @@ Invoke-Step "Preparing staging folder" {
 }
 
 Invoke-Step "Downloading release manifest and checksums" {
-  Invoke-WebRequest -Uri "$ReleaseBase/manifest.json" -OutFile $Manifest
-  Invoke-WebRequest -Uri "$ReleaseBase/checksums.json" -OutFile $Checksums
+  Invoke-WebRequest -Uri "$ReleaseBase/manifest.json" -OutFile $Manifest -UseBasicParsing
+  Invoke-WebRequest -Uri "$ReleaseBase/checksums.json" -OutFile $Checksums -UseBasicParsing
 }
 
 $manifestJson = Get-Content -Raw -LiteralPath $Manifest | ConvertFrom-Json
 $zipName = $manifestJson.app_zip
 $expected = (Get-Content -Raw -LiteralPath $Checksums | ConvertFrom-Json).files.$zipName
 Invoke-Step "Downloading app ZIP $zipName" {
-  Invoke-WebRequest -Uri "$ReleaseBase/$zipName" -OutFile $Zip
+  Invoke-WebRequest -Uri "$ReleaseBase/$zipName" -OutFile $Zip -UseBasicParsing
 }
 $actual = "sha256:" + (Get-FileHash -Algorithm SHA256 -LiteralPath $Zip).Hash.ToLowerInvariant()
 if ($actual -ne $expected) {

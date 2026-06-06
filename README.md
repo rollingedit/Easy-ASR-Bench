@@ -29,8 +29,11 @@ It runs every selected ASR model on the same normalized audio and the same chunk
 - Hugging Face Whisper Safetensors folders
 - faster-whisper / CTranslate2 folders
 - whisper.cpp GGML `.bin` models
-- SHA256-allowlisted OpenAI Whisper `.pt` files, or explicitly trusted `.pt` files when unsafe pickle loading is enabled
 - Generic ONNX ASR models with a valid `modelbench.json` manifest using the built-in CTC recipe
+
+### Blocked By Default
+
+- OpenAI Whisper `.pt` checkpoint files are detected, but blocked by default because `.pt` uses pickle-backed loading. They run only when a checksum is explicitly allowlisted by the app or when you deliberately enable unsafe trusted-file loading in `config.json`.
 
 ### GGUF Reference Models
 
@@ -170,7 +173,7 @@ Easy ASR Bench does not execute arbitrary Python files from model folders. Safet
 - **No runnable ASR models:** put a complete supported model folder in `Models`.
 - **Standalone `.safetensors` file:** use the complete Hugging Face model folder, not only the weights file.
 - **Generic `.onnx` file:** add `modelbench.json` with CTC decoding metadata and a vocab file.
-- **CUDA unavailable:** use CPU or install a compatible ONNX Runtime GPU stack.
+- **CUDA unavailable:** use CPU, or manually install a compatible CUDA Torch/ONNX Runtime GPU stack and confirm the report shows CUDA availability.
 - **Media conversion failed:** check that the file opens normally and that there is enough disk space in `Temp`.
 - **GGUF dependency missing:** install the `llama_cpp` dependency group when prompted, or choose the manual ChatGPT/Claude workflow.
 - **GGUF model lives in another app folder:** choose the paste-path option in the LLM reference menu. The path is saved in `config.json` and scanned again on the next run.

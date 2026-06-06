@@ -29,7 +29,7 @@ MEDIA_EXTENSIONS = [
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "app": {
-        "version": "0.2.4",
+        "version": "0.2.5",
         "version_channel": "stable",
         "check_for_updates_on_setup": True,
         "check_for_updates_on_run": False,
@@ -59,11 +59,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "model_scan": {
         "recursive": True,
-        "recognize_safetensors": True,
-        "recognize_onnx": True,
-        "recognize_gguf": True,
-        "recognize_ggml_bin": True,
-        "show_unsupported_candidates": True,
     },
     "security": {
         "trust_remote_code": False,
@@ -74,7 +69,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "allow_manifest_custom_python": False,
     },
     "input": {
-        "watch_input_folder": True,
         "recursive_folders": True,
         "file_stability_wait_seconds": 5,
         "extensions": MEDIA_EXTENSIONS,
@@ -106,10 +100,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "fallback": "lowest_rms_boundary",
     },
     "benchmark": {
-        "repeat_runs": 1,
-        "warmup_first_chunk": True,
         "measure_peak_ram": True,
-        "measure_peak_vram_if_available": True,
     },
     "reports": {
         "write_txt": True,

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import csv
+import importlib.metadata
 import json
+import os
+import platform
+import sys
 from datetime import datetime
 from itertools import combinations
 from pathlib import Path
@@ -11,6 +15,23 @@ from . import __version__
 from .llm_reference_prompt import build_llm_reference_prompt
 from .scoring import pairwise_metrics
 from .utils import format_timestamp, now_stamp, safe_stem, sha256_file
+
+
+DEPENDENCY_PACKAGES = [
+    "imageio-ffmpeg",
+    "librosa",
+    "numpy",
+    "onnxruntime",
+    "psutil",
+    "soundfile",
+    "torch",
+    "transformers",
+    "faster-whisper",
+    "ctranslate2",
+    "pywhispercpp",
+    "openai-whisper",
+    "llama-cpp-python",
+]
 
 
 def candidate_to_dict(candidate) -> dict:
@@ -27,6 +48,46 @@ def candidate_to_dict(candidate) -> dict:
         "adapter_name": candidate.adapter_name,
         "warnings": list(candidate.warnings),
     }
+
+
+def dependency_versions() -> dict[str, str]:
+    versions: dict[str, str] = {}
+    for package in DEPENDENCY_PACKAGES:
+        try:
+            versions[package] = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+    return versions
+
+
+def runtime_environment() -> dict:
+    environment = {
+        "platform": platform.platform(),
+        "system": platform.system(),
+        "release": platform.release(),
+        "machine": platform.machine(),
+        "python": sys.version.split()[0],
+        "python_executable": sys.executable,
+        "cpu_count": os.cpu_count(),
+        "cuda_available": False,
+        "gpu": [],
+    }
+    try:
+        import torch
+
+        environment["cuda_available"] = bool(torch.cuda.is_available())
+        environment["torch_cuda_version"] = torch.version.cuda
+        if torch.cuda.is_available():
+            environment["gpu"] = [torch.cuda.get_device_name(index) for index in range(torch.cuda.device_count())]
+    except Exception:
+        pass
+    try:
+        import onnxruntime as ort
+
+        environment["onnxruntime_providers"] = ort.get_available_providers()
+    except Exception:
+        environment["onnxruntime_providers"] = []
+    return environment
 
 
 def build_results(
@@ -55,6 +116,7 @@ def build_results(
                 "start_timestamp": format_timestamp(chunk.start_seconds),
                 "end_timestamp": format_timestamp(chunk.end_seconds),
                 "cut_reason": getattr(chunk, "cut_reason", "rms_or_duration"),
+                "rms_db": getattr(chunk, "rms_db", None),
             }
             for chunk in chunks
         ],
@@ -65,6 +127,7 @@ def build_results(
         metrics = dict(result.metrics)
         metrics.setdefault("media_normalization_seconds", media_seconds)
         metrics.setdefault("audio_seconds_per_wall_second", metrics.get("audio_seconds", 0) / max(0.001, metrics.get("total_wall_seconds", 0.001)))
+        metrics.setdefault("peak_vram_mb", None)
         runs.append(
             {
                 "model": candidate_to_dict(candidate),
@@ -97,7 +160,8 @@ def build_results(
             "sha256": source_hash,
             "duration_seconds": audio_seconds,
         },
-        "environment": {"platform": "windows", "python": "local"},
+        "environment": runtime_environment(),
+        "dependency_versions": dependency_versions(),
         "chunk_plan": chunk_plan,
         "selected_models": [run["model"] for run in runs],
         "runs": runs,

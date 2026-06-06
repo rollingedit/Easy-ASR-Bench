@@ -26,14 +26,9 @@ def git_files() -> list[str]:
     return [line.strip() for line in completed.stdout.splitlines() if line.strip()]
 
 
-def git_blob(rel: str) -> bytes:
-    completed = subprocess.run(["git", "show", f"HEAD:{rel}"], cwd=ROOT, capture_output=True, check=True)
-    return completed.stdout
-
-
 def file_bytes(rel: str, update_metadata: bool) -> bytes:
     del update_metadata
-    data = git_blob(rel)
+    data = (ROOT / rel).read_bytes()
     if b"\0" in data:
         return data
     suffix = Path(rel).suffix.lower()
@@ -62,12 +57,31 @@ def build(version: str, update_metadata: bool) -> Path:
     dist = ROOT / "dist"
     stage = dist / f"Easy-ASR-Bench-{tag}"
     zip_path = dist / zip_name
+    manifest = {
+        "schema": "easy_asr_bench.installer_manifest.v1",
+        "tag": tag,
+        "version": plain,
+        "app_zip": zip_name,
+        "install_dir": "%LOCALAPPDATA%\\Easy-ASR-Bench",
+        "entrypoints": ["setup.bat", "Run.bat", "Drop_Audio_Or_Folders_Here.bat"],
+    }
+    if update_metadata:
+        write_json(ROOT / "installer" / "manifest.json", manifest)
+    else:
+        committed_manifest = json.loads((ROOT / "installer" / "manifest.json").read_text(encoding="utf-8"))
+        if committed_manifest != manifest:
+            print("Generated manifest:")
+            print(json.dumps(manifest, indent=2))
+            print("Committed manifest:")
+            print(json.dumps(committed_manifest, indent=2))
+            raise SystemExit("installer/manifest.json does not match generated release metadata")
+
     dist.mkdir(exist_ok=True)
     shutil.rmtree(stage, ignore_errors=True)
     if zip_path.exists():
         zip_path.unlink()
     stage.mkdir(parents=True)
-    files = [rel for rel in git_files() if rel.replace("\\", "/") != "installer/checksums.json"]
+    files = [rel for rel in git_files() if rel.replace("\\", "/") != "installer/checksums.json" and (ROOT / rel).is_file()]
 
     for rel in files:
         if rel.replace("\\", "/") == "installer/checksums.json":
@@ -93,14 +107,6 @@ def build(version: str, update_metadata: bool) -> Path:
             archive.writestr(info, file_bytes(rel, update_metadata))
         archive.comment = b""
 
-    manifest = {
-        "schema": "easy_asr_bench.installer_manifest.v1",
-        "tag": tag,
-        "version": plain,
-        "app_zip": zip_name,
-        "install_dir": "%LOCALAPPDATA%\\Easy-ASR-Bench",
-        "entrypoints": ["setup.bat", "Run.bat", "Drop_Audio_Or_Folders_Here.bat"],
-    }
     checksums = {
         "schema": "easy_asr_bench.checksums.v1",
         "version": plain,
@@ -110,17 +116,9 @@ def build(version: str, update_metadata: bool) -> Path:
         },
     }
     if update_metadata:
-        write_json(ROOT / "installer" / "manifest.json", manifest)
         write_json(ROOT / "installer" / "checksums.json", checksums)
     else:
-        committed_manifest = json.loads((ROOT / "installer" / "manifest.json").read_text(encoding="utf-8"))
         committed_checksums = json.loads((ROOT / "installer" / "checksums.json").read_text(encoding="utf-8"))
-        if committed_manifest != manifest:
-            print("Generated manifest:")
-            print(json.dumps(manifest, indent=2))
-            print("Committed manifest:")
-            print(json.dumps(committed_manifest, indent=2))
-            raise SystemExit("installer/manifest.json does not match generated release metadata")
         if committed_checksums != checksums:
             print("Generated checksums:")
             print(json.dumps(checksums, indent=2))

@@ -8,8 +8,11 @@
 - Hugging Face Whisper Safetensors folders
 - faster-whisper / CTranslate2 folders
 - whisper.cpp GGML `.bin` files
-- SHA256-allowlisted OpenAI Whisper `.pt` files, or explicitly trusted `.pt` files when unsafe pickle loading is enabled
 - Generic ONNX CTC ASR with `modelbench.json`
+
+## Blocked by Default
+
+- OpenAI Whisper `.pt` files are detected but not runnable by default unless a checksum is allowlisted by the app or unsafe trusted-file loading is explicitly enabled.
 
 ## Reference/Correction LLM
 

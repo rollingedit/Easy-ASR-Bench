@@ -7,6 +7,24 @@ from .adapters.base import ModelCandidate
 from .precision_detector import detect_from_path, detect_safetensors_folder_precision
 
 
+ADAPTER_PRIORITY = {
+    "granite_onnx_ar": 100,
+    "granite_onnx_nar": 95,
+    "hf_whisper_asr": 90,
+    "hf_transformers_asr": 80,
+    "faster_whisper": 70,
+    "whisper_cpp": 65,
+    "openai_whisper_pt": 60,
+    "generic_onnx_manifest": 50,
+    "gguf_llm_reference": 10,
+    "none": 0,
+}
+
+
+def candidate_root(candidate: ModelCandidate) -> Path:
+    return candidate.path.parent.resolve() if candidate.path.is_file() else candidate.path.resolve()
+
+
 def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCandidate]]:
     models_root.mkdir(parents=True, exist_ok=True)
     discovered: list[ModelCandidate] = []
@@ -14,7 +32,7 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
         discovered.extend(adapter.discover(models_root))
 
     known_paths = {candidate.path.resolve() for candidate in discovered}
-    known_parent_paths = {candidate.path.parent.resolve() if candidate.path.is_file() else candidate.path.resolve() for candidate in discovered}
+    known_parent_paths = {candidate_root(candidate) for candidate in discovered}
     unsupported: list[ModelCandidate] = []
     precision_folders = {"int8", "fp16w", "fp32"}
 
@@ -37,7 +55,7 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
             for shared in ["tokenizer.json", "tokenizer_config.json", "preprocessor_config.json"]:
                 if not (parent / shared).exists():
                     missing.append(shared)
-            if missing:
+            if missing and parent.resolve() not in known_parent_paths:
                 unsupported.append(
                     ModelCandidate(
                         candidate_id=f"incomplete_granite_ar__{parent.name}__{folder.name}".lower(),
@@ -68,7 +86,7 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
             for shared in ["tokenizer.json", "tokenizer_config.json", "preprocessor_config.json"]:
                 if not (parent / shared).exists():
                     missing.append(shared)
-            if missing:
+            if missing and parent.resolve() not in known_parent_paths:
                 unsupported.append(
                     ModelCandidate(
                         candidate_id=f"incomplete_granite_nar__{parent.name}__{folder.name}".lower(),
@@ -171,6 +189,21 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
     unique_unsupported: dict[str, ModelCandidate] = {}
     for candidate in unsupported:
         unique_unsupported[candidate.candidate_id + "::" + str(candidate.path.resolve())] = candidate
-    runnable = [candidate for candidate in discovered if candidate.runnable]
-    partial = [candidate for candidate in discovered if not candidate.runnable]
+    runnable = dedupe_runnable([candidate for candidate in discovered if candidate.runnable])
+    runnable_roots = {candidate_root(candidate) for candidate in runnable}
+    partial = [
+        candidate
+        for candidate in discovered
+        if not candidate.runnable and candidate_root(candidate) not in runnable_roots
+    ]
     return runnable, partial + list(unique_unsupported.values())
+
+
+def dedupe_runnable(candidates: list[ModelCandidate]) -> list[ModelCandidate]:
+    by_root: dict[Path, ModelCandidate] = {}
+    for candidate in candidates:
+        root = candidate_root(candidate)
+        current = by_root.get(root)
+        if current is None or ADAPTER_PRIORITY.get(candidate.adapter_name, 0) > ADAPTER_PRIORITY.get(current.adapter_name, 0):
+            by_root[root] = candidate
+    return list(by_root.values())
