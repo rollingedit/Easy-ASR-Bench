@@ -1,11 +1,12 @@
 {
-  "schema": "easy_asr_bench.installer_manifest.v1",
-  "version": "0.2.0",
-  "tag": "v0.2",
-  "install_dir": "%LOCALAPPDATA%\\Easy-ASR-Bench",
-  "entrypoints": [
-    "setup.bat",
-    "Run.bat",
-    "Drop_Audio_Or_Folders_Here.bat"
-  ]
+    "tag":  "v0.2.1",
+    "version":  "0.2.1",
+    "entrypoints":  [
+                        "setup.bat",
+                        "Run.bat",
+                        "Drop_Audio_Or_Folders_Here.bat"
+                    ],
+    "install_dir":  "%LOCALAPPDATA%\\Easy-ASR-Bench",
+    "schema":  "easy_asr_bench.installer_manifest.v1",
+    "app_zip":  "Easy-ASR-Bench-v0.2.1-win.zip"
 }

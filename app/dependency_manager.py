@@ -10,6 +10,10 @@ DEPENDENCY_GROUPS = {
     "core": ["numpy", "soundfile", "librosa", "imageio_ffmpeg", "psutil", "jiwer"],
     "onnx": ["onnxruntime", "tokenizers", "jinja2"],
     "transformers_cpu": ["torch", "transformers", "safetensors"],
+    "transformers_cuda": ["torch", "transformers", "safetensors"],
+    "faster_whisper": ["faster_whisper", "ctranslate2"],
+    "openai_whisper": ["whisper"],
+    "whisper_cpp": ["pywhispercpp"],
     "llama_cpp": ["llama_cpp"],
 }
 
@@ -18,6 +22,10 @@ REQUIREMENT_FILES = {
     "core": "requirements/core.txt",
     "onnx": "requirements/onnx.txt",
     "transformers_cpu": "requirements/transformers_cpu.txt",
+    "transformers_cuda": "requirements/transformers_cuda.txt",
+    "faster_whisper": "requirements/faster_whisper.txt",
+    "openai_whisper": "requirements/openai_whisper.txt",
+    "whisper_cpp": "requirements/whisper_cpp.txt",
     "llama_cpp": "requirements/llama_cpp.txt",
 }
 

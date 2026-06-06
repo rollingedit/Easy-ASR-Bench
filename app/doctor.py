@@ -8,7 +8,7 @@ from .config import load_config
 from .dependency_manager import dependency_status
 
 
-def run_doctor(config_path: Path) -> int:
+def run_doctor(config_path: Path, strict: bool = False) -> int:
     config = load_config(config_path)
     folders = config["folders"]
     for folder in folders.values():
@@ -25,14 +25,15 @@ def run_doctor(config_path: Path) -> int:
     print("Folders checked:")
     for key, folder in folders.items():
         print(f"  {key}: {folder}")
-    return 0 if status["core"]["available"] else 1
+    return 0 if (status["core"]["available"] or not strict) else 1
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config.json")
+    parser.add_argument("--strict", action="store_true")
     args = parser.parse_args()
-    raise SystemExit(run_doctor(Path(args.config)))
+    raise SystemExit(run_doctor(Path(args.config), strict=args.strict))
 
 
 if __name__ == "__main__":

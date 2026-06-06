@@ -20,6 +20,7 @@ class ModelCandidate:
     runnable: bool
     category: str = "asr"
     runnable_after_dependency_install: bool = False
+    dependency_groups: list[str] = field(default_factory=list)
     missing_files: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     help_text: str = ""

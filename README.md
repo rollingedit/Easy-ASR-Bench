@@ -26,6 +26,10 @@ It runs every selected ASR model on the same normalized audio and the same chunk
 - Granite Speech ONNX AR folders with `int8`, `fp16w`, or `fp32` precision folders
 - Granite Speech ONNX NAR folders with `int8`, `fp16w`, or `fp32` precision folders
 - Hugging Face Transformers ASR folders using `.safetensors` weights
+- Hugging Face Whisper Safetensors folders
+- faster-whisper / CTranslate2 folders
+- whisper.cpp GGML `.bin` models
+- official-name OpenAI Whisper `.pt` files, with unsafe pickle restrictions
 - Generic ONNX ASR models with a valid `modelbench.json` manifest using the built-in CTC recipe
 
 ### GGUF Reference Models
@@ -80,7 +84,7 @@ Models/
 
 ## Generic ONNX Manifest
 
-Generic ONNX ASR models need `modelbench.json` so Easy ASR Bench knows how to preprocess and decode them safely.
+Generic ONNX ASR models need `modelbench.json` so Easy ASR Bench knows how to preprocess, feed inputs, select outputs, and decode them safely.
 
 Minimal CTC manifest:
 
@@ -91,25 +95,15 @@ Minimal CTC manifest:
   "task": "automatic-speech-recognition",
   "backend": "onnxruntime",
   "precision": "int8",
-  "files": {
-    "model": "model.onnx"
-  },
+  "files": {"model": "model.onnx"},
   "audio": {
     "sample_rate": 16000,
     "channels": 1
   },
-  "preprocessing": {
-    "type": "granite_log_mel"
-  },
-  "decoding": {
-    "type": "ctc",
-    "blank_token_id": 0,
-    "vocab": {
-      "0": "",
-      "1": "a",
-      "2": "b"
-    }
-  }
+  "inputs": {"waveform": {"name": "input_values", "dtype": "float32"}},
+  "outputs": {"logits": "logits"},
+  "preprocessing": {"type": "raw_waveform", "normalize": true},
+  "decoding": {"type": "ctc", "blank_token_id": 0}
 }
 ```
 
@@ -146,6 +140,8 @@ Output/
 ## Windows Launchers
 
 - `setup.bat`: install or repair the app
+- `setup.bat --dry-run`: verify setup command structure without changing files
+- `setup.bat --doctor`: run environment checks
 - `Run.bat`: scan models, choose models, process inputs
 - `Drop_Audio_Or_Folders_Here.bat`: drag files/folders directly onto the app
 - `Open_Models_Folder.bat`: open the model drop folder
@@ -165,3 +161,5 @@ Easy ASR Bench does not execute arbitrary Python files from model folders. Safet
 - **CUDA unavailable:** use CPU or install a compatible ONNX Runtime GPU stack.
 - **Media conversion failed:** check that the file opens normally and that there is enough disk space in `Temp`.
 - **GGUF dependency missing:** install the `llama_cpp` dependency group when prompted.
+- **Whisper model not detected:** check `docs/whisper_models.md`.
+- **Setup details:** see `docs/what_setup_installs.md`.

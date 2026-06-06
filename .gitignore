@@ -20,3 +20,5 @@ Input/*
 *.partial
 *.partial.txt
 goal.md
+dist/
+.pytest_cache/

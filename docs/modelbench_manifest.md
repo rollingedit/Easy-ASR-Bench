@@ -13,25 +13,18 @@ Easy ASR Bench does not guess arbitrary ONNX preprocessing and decoding. The man
   "task": "automatic-speech-recognition",
   "backend": "onnxruntime",
   "precision": "int8",
-  "files": {
-    "model": "model.onnx"
-  },
+  "files": {"model": "model.onnx"},
   "audio": {
     "sample_rate": 16000,
     "channels": 1
   },
-  "preprocessing": {
-    "type": "granite_log_mel"
+  "inputs": {
+    "waveform": {"name": "input_values", "dtype": "float32"},
+    "attention_mask": {"name": "attention_mask", "dtype": "int64", "optional": true}
   },
-  "decoding": {
-    "type": "ctc",
-    "blank_token_id": 0,
-    "vocab": {
-      "0": "",
-      "1": "a",
-      "2": "b"
-    }
-  }
+  "outputs": {"logits": "logits"},
+  "preprocessing": {"type": "raw_waveform", "normalize": true},
+  "decoding": {"type": "ctc", "blank_token_id": 0}
 }
 ```
 

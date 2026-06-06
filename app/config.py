@@ -69,6 +69,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "trust_remote_code": False,
         "allow_model_folder_scripts": False,
         "allow_pickle_or_pt_files": False,
+        "allow_known_official_whisper_pt": True,
         "scan_only_safe_formats_by_default": True,
         "allow_manifest_custom_python": False,
     },
@@ -84,6 +85,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "ar_max_new_tokens": 1024,
         "language": "auto",
         "temperature": 0.0,
+    },
+    "whisper": {
+        "task": "transcribe",
+        "language": "auto",
+        "return_timestamps": False,
+        "chunk_length_s": 30,
+        "stride_length_s": 5,
+        "batch_size": 1,
     },
     "chunking": {
         "mode": "auto_smart",

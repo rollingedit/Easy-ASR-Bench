@@ -120,6 +120,7 @@ def write_all_reports(results: dict, output_root: Path) -> Path:
     _atomic_write_text(txt_path, render_text_report(results))
     _atomic_write_text(html_path, build_html_report(results))
     write_benchmark_csv(csv_path, results)
+    write_prompt_packs(output_dir, results)
     return output_dir
 
 
@@ -214,3 +215,22 @@ def _atomic_write_text(path: Path, text: str) -> None:
     partial = path.with_suffix(path.suffix + ".partial")
     partial.write_text(text, encoding="utf-8")
     partial.replace(path)
+
+
+def write_prompt_packs(output_dir: Path, results: dict, max_chars: int = 24000) -> None:
+    prompt = build_llm_reference_prompt(results)
+    if len(prompt) <= max_chars:
+        _atomic_write_text(output_dir / "results_llm_prompt_part_001.txt", prompt)
+        return
+    chunks = results.get("chunk_plan", {}).get("chunks", [])
+    for index, chunk in enumerate(chunks, 1):
+        part = dict(results)
+        wanted = chunk["chunk_id"]
+        part["chunk_plan"] = dict(results["chunk_plan"])
+        part["chunk_plan"]["chunks"] = [chunk]
+        part["runs"] = []
+        for run in results.get("runs", []):
+            run_part = dict(run)
+            run_part["transcript_chunks"] = [item for item in run.get("transcript_chunks", []) if item.get("chunk_id") == wanted]
+            part["runs"].append(run_part)
+        _atomic_write_text(output_dir / f"results_llm_prompt_part_{index:03d}.txt", build_llm_reference_prompt(part))

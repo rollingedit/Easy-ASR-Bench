@@ -99,6 +99,8 @@ def ensure_dependencies(candidates: list[ModelCandidate], config: dict, referenc
 def runtime_config_for_candidate(config: dict) -> dict:
     runtime = dict(config.get("runtime", {}))
     runtime.update(config.get("transcription", {}))
+    runtime["security"] = config.get("security", {})
+    runtime["whisper"] = config.get("whisper", {})
     return runtime
 
 
@@ -201,6 +203,12 @@ def collect_input_files(args: argparse.Namespace, config: dict) -> list[Path]:
     return expand_inputs(raw_paths, extensions, bool(config["input"]["recursive_folders"]))
 
 
+def queue_state(config: dict):
+    from .queue_manager import QueueState
+
+    return QueueState(folder_config(config, "logs") / "state.json")
+
+
 def interactive_prompt_for_files(config: dict) -> list[Path]:
     print()
     print("Drop/paste audio or video file/folder paths. Press Enter with a blank line to use Input/.")
@@ -223,13 +231,15 @@ def main() -> None:
     parser.add_argument("--interactive", action="store_true")
     parser.add_argument("--scan-only", action="store_true")
     parser.add_argument("--doctor", action="store_true")
+    parser.add_argument("--watch", action="store_true")
+    parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
 
     config = load_config(Path(args.config))
     if args.doctor:
         from .doctor import run_doctor
 
-        raise SystemExit(run_doctor(Path(args.config)))
+        raise SystemExit(run_doctor(Path(args.config), strict=False))
     models_root = folder_config(config, "models")
     runnable, unsupported = scan_models(models_root)
     if args.scan_only:
@@ -248,11 +258,37 @@ def main() -> None:
         print("Cannot run selected models until their dependency groups are installed.")
         return
     while True:
+        if args.watch:
+            from .queue_manager import discover_queue
+
+            print("Watching Input for supported media. Press Ctrl+C to stop.")
+            state = queue_state(config)
+            while True:
+                files = discover_queue(
+                    [folder_config(config, "input")],
+                    {ext.lower() for ext in config["input"]["extensions"]},
+                    bool(config["input"]["recursive_folders"]),
+                    float(config["input"]["file_stability_wait_seconds"]),
+                    state,
+                    bool(config["input"].get("skip_already_processed_by_hash", True)),
+                )
+                for file_path in files:
+                    output = process_file_with_candidates(file_path, selected, config, unsupported, reference_llm)
+                    state.mark(file_path.resolve(), "done" if output else "failed", str(output or ""))
+                if args.once:
+                    return
+                time.sleep(2)
         files = collect_input_files(args, config) if args.paths else interactive_prompt_for_files(config)
         if not files:
             return
+        state = queue_state(config)
         for file_path in files:
-            process_file_with_candidates(file_path, selected, config, unsupported, reference_llm)
+            from .queue_manager import QueueItem
+            from .utils import sha256_file
+
+            state.upsert(QueueItem(str(file_path.resolve()), sha256_file(file_path)))
+            output = process_file_with_candidates(file_path, selected, config, unsupported, reference_llm)
+            state.mark(file_path.resolve(), "done" if output else "failed", str(output or ""))
         if not args.interactive:
             return
         args.paths = []

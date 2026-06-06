@@ -94,6 +94,8 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
             continue
         if any(part.lower() in precision_folders for part in path.parts):
             continue
+        if path.suffix.lower() in {".pt", ".bin", ".gguf"} and path.resolve() in known_paths:
+            continue
         if path.is_file() and path.suffix.lower() == ".gguff":
             raw, bucket = detect_from_path(path)
             unsupported.append(
@@ -162,7 +164,7 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
                     adapter_name="hf_transformers_asr",
                     runnable=False,
                     missing_files=missing,
-                    warnings=["Safetensors weights were found, but this build does not yet include the HF ASR adapter."],
+                    warnings=["Safetensors weights were found, but this folder is not a complete runnable ASR model folder."],
                 )
             )
 
