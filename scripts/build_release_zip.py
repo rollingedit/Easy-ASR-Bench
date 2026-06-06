@@ -9,6 +9,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+from check_release_version_coherence import validate as validate_version_coherence
+
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER_SHA_PATTERN = r"set INSTALLER_SHA256=sha256:[0-9a-fA-F]+"
@@ -149,6 +151,8 @@ def build(version: str, update_metadata: bool, strict_checksums: bool = False) -
         if committed_checksums != checksums:
             print("warning: installer/checksums.json does not match generated release checksums")
             print("warning: use --update-metadata when preparing local release metadata, or let the GitHub publish workflow upload generated checksums.json")
+
+    validate_version_coherence(tag)
 
     verify_dir = dist / f"verify-{tag}"
     shutil.rmtree(verify_dir, ignore_errors=True)

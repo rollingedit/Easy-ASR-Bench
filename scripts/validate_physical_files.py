@@ -14,13 +14,19 @@ ROOT = Path(__file__).resolve().parents[1]
 SKIP_DIRS = {".git", ".venv", "dist", ".pytest_cache", ".pytest_tmp", "__pycache__"}
 
 MIN_LINES = {
-    "setup.bat": 50,
+    "setup.bat": 200,
     "Run.bat": 5,
     "Drop_Audio_Or_Folders_Here.bat": 5,
-    "installer/install.ps1": 200,
+    "installer/install.ps1": 250,
     "app/main.py": 100,
-    "app/model_scanner.py": 300,
+    "app/model_scanner.py": 600,
+    "app/results_writer.py": 100,
+    "app/scoring.py": 80,
     "app/hf_model_downloader.py": 300,
+    "scripts/validate_physical_files.py": 150,
+    "scripts/verify_github_release.py": 80,
+    ".github/workflows/release-gate.yml": 75,
+    ".github/workflows/publish-release.yml": 50,
     "requirements/core.txt": 5,
     "config.json": 20,
 }

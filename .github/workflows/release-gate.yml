@@ -33,6 +33,10 @@ jobs:
       - name: Validate physical source files
         run: python scripts/validate_physical_files.py --repo .
 
+      - name: Validate raw GitHub source files
+        if: github.event_name != 'pull_request'
+        run: python scripts/validate_raw_github_files.py --repo rollingedit/Easy-ASR-Bench --commit ${{ github.sha }}
+
       - name: Build and validate release ZIP
         shell: pwsh
         run: |

@@ -7,10 +7,14 @@ Release and installer safety:
 - Added `setup.bat --dry-run --verify-release` to download and validate release manifest, checksums, app ZIP hash, ZIP layout, and release-file validators without installing.
 - Extended `--verify-release` for v2 manifests so it also verifies uploaded `manifest.json`, `setup.bat`, and `install.ps1` assets, while keeping legacy validation compatible with the already-published `v0.3.0` assets.
 - Updated GitHub release publishing to upload `install.ps1` as a release asset and verify uploaded release asset hashes after publication.
+- Changed release publishing so uploaded draft assets are verified before the release is marked public/latest.
 - Added a public `scripts/verify_github_release.py` verifier for downloaded GitHub release assets, including annotated-tag handling for expected-commit checks.
 - Added release physical-file validation for repo and ZIP bytes, including CRLF launcher checks, LF source/docs/config checks, YAML/JSON/Python parsing, requirements formatting, and minimum physical line counts for critical files.
+- Added raw GitHub source validation for pushed commits so collapsed or CR-only public bytes are caught from `raw.githubusercontent.com`, not only from the checkout.
+- Added release version-coherence validation so `app.__version__`, `setup.bat`, `install.ps1`, manifest, checksums, and ZIP names must agree.
 - Kept checksum validation scoped to release/bootstrap artifacts and unsafe checkpoint allowlists; normal user-supplied ASR/LLM models are still structure/runtime validated rather than hash-policed.
 - Hardened uninstall behavior: standalone `setup.bat --uninstall` can locate the installed uninstaller, and destructive user-data removal requires an explicit confirmation string.
+- Added PowerShell staging validation before activation so clean systems without Python still get basic ZIP layout, line-ending, and critical-file line-count checks before local setup runs.
 
 Runtime and report correctness:
 - Improved media error reporting for no-audio videos, ffprobe failures, and FFmpeg conversion failures.
@@ -21,7 +25,7 @@ Runtime and report correctness:
 
 Validation and documentation:
 - Added `docs/release_verification.md` with local gates, GitHub release asset verification, and manual Windows QA rows that must not be claimed as verified unless actually run.
-- Added regression coverage for release bootstrap assets, annotated Git tag verification, Unicode scoring edge cases, long HTML report pagination guards, LLM reference validation guards, Windows pasted path parsing, and queue fast-key skipping.
+- Added regression coverage for release bootstrap assets, version coherence, raw source validation, publish workflow ordering, annotated Git tag verification, Unicode scoring edge cases, long HTML report pagination guards, LLM reference validation guards, Windows pasted path parsing, and queue fast-key skipping.
 
 ## v0.3.0
 

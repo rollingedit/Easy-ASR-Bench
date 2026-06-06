@@ -58,4 +58,24 @@ jobs:
             gh release create $tag --title "Easy ASR Bench $tag" --notes-file $notes --draft
           }
           gh release upload $tag $zip setup.bat install.ps1 installer/manifest.json installer/checksums.json --clobber
-          gh release edit $tag --draft=false --latest
+
+      - name: Verify uploaded draft release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/verify_github_release.py `
+            --repo rollingedit/Easy-ASR-Bench `
+            --tag ${{ inputs.tag }} `
+            --expected-commit ${{ github.sha }}
+
+      - name: Publish verified release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release edit ${{ inputs.tag }} --draft=false --latest
+
+      - name: Verify public setup path
+        shell: cmd
+        run: setup.bat --dry-run --verify-release

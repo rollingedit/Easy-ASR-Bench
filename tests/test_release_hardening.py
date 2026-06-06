@@ -5,6 +5,8 @@ from unittest.mock import patch
 from pathlib import Path
 
 import scripts.verify_github_release as verify_github_release
+from scripts.check_release_version_coherence import validate as validate_version_coherence
+from scripts.validate_raw_github_files import validate_bytes
 from scripts.validate_physical_files import validate_root
 
 
@@ -33,6 +35,22 @@ def test_release_checksums_include_bootstrap_assets():
     assert "manifest.json" in checksums["files"]
 
 
+def test_release_version_coherence_matches_app_version():
+    import app
+
+    validate_version_coherence("v" + app.__version__)
+
+
+def test_raw_github_validator_catches_collapsed_lines():
+    with patch("scripts.validate_raw_github_files.fetch", return_value=b"first\rsecond\rthird"):
+        try:
+            validate_bytes("setup.bat", b"first\rsecond\rthird", 200)
+        except AssertionError as exc:
+            assert "CR-only line endings" in str(exc)
+        else:
+            raise AssertionError("collapsed raw lines were accepted")
+
+
 def test_installer_verify_release_checks_uploaded_bootstrap_assets():
     installer = (ROOT / "installer" / "install.ps1").read_text(encoding="utf-8")
 
@@ -41,6 +59,8 @@ def test_installer_verify_release_checks_uploaded_bootstrap_assets():
     assert "Assert-Checksum $releaseSetup $checksumsJson.files.'setup.bat' \"setup.bat\"" in installer
     assert "Assert-Checksum $releaseInstaller $checksumsJson.files.'install.ps1' \"install.ps1\"" in installer
     assert "Legacy manifest does not declare installer_asset" in installer
+    assert "Assert-StagingPhysicalFiles" in installer
+    assert "Python 3.10-3.14" in installer
 
 
 def test_release_verifier_peels_annotated_tags():
