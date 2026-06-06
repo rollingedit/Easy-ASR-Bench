@@ -62,8 +62,13 @@ def build(version: str, update_metadata: bool) -> Path:
                 info = zipfile.ZipInfo(path.relative_to(dist).as_posix(), fixed_time)
                 info.compress_type = zipfile.ZIP_STORED
                 info.create_system = 0
+                info.create_version = 20
+                info.extract_version = 20
                 info.external_attr = 0
+                info.extra = b""
+                info.comment = b""
                 archive.writestr(info, path.read_bytes())
+        archive.comment = b""
 
     manifest = {
         "schema": "easy_asr_bench.installer_manifest.v1",
