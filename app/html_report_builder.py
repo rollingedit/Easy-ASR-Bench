@@ -38,6 +38,9 @@ pre {{ white-space:pre-wrap; word-break:break-word; background:#f7f8fa; border:1
 .replace {{ background:var(--red); }}
 .insert {{ background:var(--yellow); }}
 .delete {{ text-decoration:line-through; background:var(--red); }}
+.equal {{ background:transparent; }}
+.diffline {{ line-height:1.8; }}
+.pager {{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 12px; }}
 .ok {{ background:var(--green); padding:8px; border-radius:6px; }}
 .warn {{ background:#fff4d6; padding:8px; border-radius:6px; }}
 </style>
@@ -78,6 +81,8 @@ pre {{ white-space:pre-wrap; word-break:break-word; background:#f7f8fa; border:1
 const results = JSON.parse(document.getElementById('results-json').textContent);
 let scored = null;
 let latestScores = null;
+let chunkPage = 0;
+const pageSize = 25;
 function tab(id) {{ for (const s of document.querySelectorAll('section')) s.classList.toggle('active', s.id===id); }}
 function words(s, normalized=true) {{
   s = String(s || '');
@@ -114,6 +119,35 @@ function editCounts(a,b) {{
   }}
   return {{substitutions, insertions, deletions, edits: dp[a.length][b.length]}};
 }}
+function alignment(a,b) {{
+  const dp = Array(a.length+1).fill(null).map(()=>Array(b.length+1).fill(0));
+  const op = Array(a.length+1).fill(null).map(()=>Array(b.length+1).fill(''));
+  for (let i=1;i<=a.length;i++) {{ dp[i][0]=i; op[i][0]='delete'; }}
+  for (let j=1;j<=b.length;j++) {{ dp[0][j]=j; op[0][j]='insert'; }}
+  for (let i=1;i<=a.length;i++) for (let j=1;j<=b.length;j++) {{
+    const choices = a[i-1]===b[j-1] ? [[dp[i-1][j-1], 'equal']] : [[dp[i-1][j-1]+1, 'replace']];
+    choices.push([dp[i-1][j]+1, 'delete'], [dp[i][j-1]+1, 'insert']);
+    choices.sort((x,y)=>x[0]-y[0]);
+    dp[i][j]=choices[0][0]; op[i][j]=choices[0][1];
+  }}
+  let i=a.length, j=b.length, out=[];
+  while (i>0 || j>0) {{
+    const action = op[i][j];
+    if (action === 'equal') {{ out.push({{op:'equal', reference:a[i-1], hypothesis:b[j-1]}}); i--; j--; }}
+    else if (action === 'replace') {{ out.push({{op:'replace', reference:a[i-1], hypothesis:b[j-1]}}); i--; j--; }}
+    else if (action === 'delete') {{ out.push({{op:'delete', reference:a[i-1], hypothesis:''}}); i--; }}
+    else {{ out.push({{op:'insert', reference:'', hypothesis:b[j-1]}}); j--; }}
+  }}
+  return out.reverse();
+}}
+function balancedScore(score, metrics) {{
+  if (!Number.isFinite(score?.normalized_wer)) return NaN;
+  const quality = Math.max(0, 1 - score.normalized_wer);
+  const speed = Math.min(1, Math.max(0, Number(metrics?.audio_seconds_per_wall_second || 0) / 10));
+  const ram = Number(metrics?.peak_process_memory_mb || 0);
+  const memory = ram > 0 ? Math.max(0, Math.min(1, 1 - ram / 32768)) : 0;
+  return Math.max(0, Math.min(1, 0.70 * quality + 0.20 * speed + 0.10 * memory));
+}}
 function wer(ref,hyp,norm=true) {{ const r=words(ref,norm), h=words(hyp,norm); return edit(r,h)/Math.max(1,r.length); }}
 function fullText(run) {{ return (run.transcript_chunks || []).map(c=>c.text || '').join('\\n'); }}
 function fmt(n) {{ return Number.isFinite(n) ? n.toFixed(3) : 'n/a'; }}
@@ -136,25 +170,41 @@ function renderScoreboard(scores=null) {{
   const rows = (results.runs || []).map(run => {{
     const m = run.metrics || {{}};
     const s = scores?.[run.model.candidate_id] || {{}};
-    return `<tr><td>${{safe(run.model.display_name)}}<br><span class="badge">${{safe(run.model.precision)}}</span></td><td>${{safe(run.model.backend)}}</td><td>${{fmt(s.normalized_wer)}}</td><td>${{fmt(s.strict_wer)}}</td><td>${{fmt(s.cer)}}</td><td>${{s.substitutions ?? 'n/a'}}</td><td>${{s.insertions ?? 'n/a'}}</td><td>${{s.deletions ?? 'n/a'}}</td><td>${{fmt(m.audio_seconds_per_wall_second)}}</td><td>${{fmt(m.total_wall_seconds)}}</td><td>${{fmt(m.peak_process_memory_mb)}}</td><td>${{fmt(m.peak_vram_mb)}}</td><td>${{run.errors?.length || 0}}</td></tr>`;
+    return `<tr><td>${{safe(run.model.display_name)}}<br><span class="badge">${{safe(run.model.precision)}}</span></td><td>${{safe(run.model.backend)}}</td><td>${{fmt(s.normalized_wer)}}</td><td>${{fmt(s.strict_wer)}}</td><td>${{fmt(s.cer)}}</td><td>${{s.substitutions ?? 'n/a'}}</td><td>${{s.insertions ?? 'n/a'}}</td><td>${{s.deletions ?? 'n/a'}}</td><td>${{fmt(balancedScore(s,m))}}</td><td>${{fmt(m.audio_seconds_per_wall_second)}}</td><td>${{fmt(m.total_wall_seconds)}}</td><td>${{fmt(m.peak_process_memory_mb)}}</td><td>${{fmt(m.peak_vram_mb)}}</td><td>${{run.errors?.length || 0}}</td></tr>`;
   }}).join('');
-  document.getElementById('scoreboard').innerHTML = `<table><thead><tr><th>Model</th><th>Backend</th><th>Norm WER</th><th>Strict WER</th><th>CER</th><th>Sub</th><th>Ins</th><th>Del</th><th>x Real-time</th><th>Wall s</th><th>RAM MB</th><th>VRAM MB</th><th>Errors</th></tr></thead><tbody>${{rows}}</tbody></table>`;
+  document.getElementById('scoreboard').innerHTML = `<table><thead><tr><th>Model</th><th>Backend</th><th>Norm WER</th><th>Strict WER</th><th>CER</th><th>Sub</th><th>Ins</th><th>Del</th><th>Balanced</th><th>x Real-time</th><th>Wall s</th><th>RAM MB</th><th>VRAM MB</th><th>Errors</th></tr></thead><tbody>${{rows}}</tbody></table>`;
 }}
 function renderPairwise() {{
   const rows = Object.entries(results.pairwise_differences || {{}}).map(([k,v]) => `<tr><td>${{safe(k)}}</td><td>${{fmt(v.normalized_wer_like_difference)}}</td><td>${{fmt(v.cer_difference)}}</td></tr>`).join('');
   document.getElementById('pairwiseBody').innerHTML = rows ? `<table><thead><tr><th>Pair</th><th>Norm WER-like Difference</th><th>CER Difference</th></tr></thead><tbody>${{rows}}</tbody></table>` : '<p>No pairwise differences available.</p>';
 }}
 function renderTranscripts() {{
-  document.getElementById('transcriptsBody').innerHTML = (results.runs || []).map(run => `<h3>${{safe(run.model.display_name)}} <span class="badge">${{safe(run.model.precision)}}</span></h3><pre>${{escapeHtml(fullText(run))}}</pre>`).join('');
+  document.getElementById('transcriptsBody').innerHTML = (results.runs || []).map(run => {{
+    const s = latestScores?.[run.model.candidate_id];
+    const diff = s?.alignment ? `<div class="diffline">${{renderAlignment(s.alignment)}}</div>` : `<pre>${{escapeHtml(fullText(run))}}</pre>`;
+    return `<h3>${{safe(run.model.display_name)}} <span class="badge">${{safe(run.model.precision)}}</span></h3>${{diff}}`;
+  }}).join('');
 }}
 function renderChunks() {{
   const chunks = results.chunk_plan?.chunks || [];
-  document.getElementById('chunksBody').innerHTML = chunks.map(c => `<h3>${{safe(c.chunk_id)}} [${{safe(c.start_timestamp)}} - ${{safe(c.end_timestamp)}}]</h3>` + (results.runs||[]).map(run => {{
+  const totalPages = Math.max(1, Math.ceil(chunks.length / pageSize));
+  chunkPage = Math.min(chunkPage, totalPages - 1);
+  const pageChunks = chunks.slice(chunkPage * pageSize, (chunkPage + 1) * pageSize);
+  const pager = `<div class="pager"><button onclick="chunkPage=Math.max(0,chunkPage-1);renderChunks()">Prev</button><span>Page ${{chunkPage+1}} / ${{totalPages}}</span><button onclick="chunkPage=Math.min(${{totalPages-1}},chunkPage+1);renderChunks()">Next</button></div>`;
+  document.getElementById('chunksBody').innerHTML = pager + pageChunks.map(c => `<h3>${{safe(c.chunk_id)}} [${{safe(c.start_timestamp)}} - ${{safe(c.end_timestamp)}}]</h3>` + (results.runs||[]).map(run => {{
     const t = (run.transcript_chunks||[]).find(x=>x.chunk_id===c.chunk_id);
     return `<div class="card"><b>${{safe(run.model.display_name)}}</b><pre>${{escapeHtml(t?.text || '')}}</pre></div>`;
   }}).join('')).join('');
 }}
 function escapeHtml(s) {{ return String(s).replace(/[&<>]/g, c=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[c])); }}
+function renderAlignment(items) {{
+  return items.map(item => {{
+    if (item.op === 'equal') return `<span class="equal">${{safe(item.hypothesis)}}</span>`;
+    if (item.op === 'insert') return `<span class="insert">+${{safe(item.hypothesis)}}</span>`;
+    if (item.op === 'delete') return `<span class="delete">-${{safe(item.reference)}}</span>`;
+    return `<span class="replace">${{safe(item.reference)}}→${{safe(item.hypothesis)}}</span>`;
+  }}).join(' ');
+}}
 function extractJson(text) {{
   text = String(text || '').trim();
   const fence = text.match(/```(?:json)?\\s*([\\s\\S]*?)```/i);
@@ -181,8 +231,14 @@ function scoreReference() {{
   const missing = [...expected].filter(id=>!refMap.has(id));
   const extra = [...refMap.keys()].filter(id=>!expected.has(id));
   const sourceMismatch = ref.source_sha256 && results.source?.sha256 && ref.source_sha256 !== results.source.sha256;
-  if (ref.schema !== 'easy_asr_bench.llm_reference.v1' || ref.reference_type !== 'llm_corrected_reference' || missing.length || extra.length || duplicates.length || sourceMismatch) {{
-    document.getElementById('referenceStatus').innerHTML = `<p class="warn">Invalid reference. Missing chunks: ${{safe(missing.join(', ') || 'none')}}. Extra chunks: ${{safe(extra.join(', ') || 'none')}}. Duplicate chunks: ${{safe(duplicates.join(', ') || 'none')}}. Source hash mismatch: ${{sourceMismatch ? 'yes' : 'no'}}.</p>`;
+  const timestampErrors = [];
+  for (const chunk of results.chunk_plan?.chunks || []) {{
+    const segment = refMap.get(chunk.chunk_id);
+    if (!segment) continue;
+    if (Math.abs(Number(segment.start_seconds) - Number(chunk.start_seconds)) > 0.01 || Math.abs(Number(segment.end_seconds) - Number(chunk.end_seconds)) > 0.01) timestampErrors.push(chunk.chunk_id);
+  }}
+  if (ref.schema !== 'easy_asr_bench.llm_reference.v1' || ref.reference_type !== 'llm_corrected_reference' || missing.length || extra.length || duplicates.length || sourceMismatch || timestampErrors.length) {{
+    document.getElementById('referenceStatus').innerHTML = `<p class="warn">Invalid reference. Missing chunks: ${{safe(missing.join(', ') || 'none')}}. Extra chunks: ${{safe(extra.join(', ') || 'none')}}. Duplicate chunks: ${{safe(duplicates.join(', ') || 'none')}}. Timestamp mismatches: ${{safe(timestampErrors.join(', ') || 'none')}}. Source hash mismatch: ${{sourceMismatch ? 'yes' : 'no'}}.</p>`;
     return;
   }}
   const referenceText = (results.chunk_plan?.chunks || []).map(c=>refMap.get(c.chunk_id)?.text || '').join('\\n');
@@ -192,12 +248,13 @@ function scoreReference() {{
     const refWords = words(referenceText, true);
     const hypWords = words(hyp, true);
     const counts = editCounts(refWords, hypWords);
-    scores[run.model.candidate_id] = {{ normalized_wer: counts.edits/Math.max(1,refWords.length), strict_wer: wer(referenceText,hyp,false), cer: edit(referenceText,hyp)/Math.max(1,referenceText.length), substitutions: counts.substitutions, insertions: counts.insertions, deletions: counts.deletions }};
+    scores[run.model.candidate_id] = {{ normalized_wer: counts.edits/Math.max(1,refWords.length), strict_wer: wer(referenceText,hyp,false), cer: edit(referenceText,hyp)/Math.max(1,referenceText.length), substitutions: counts.substitutions, insertions: counts.insertions, deletions: counts.deletions, alignment: alignment(refWords, hypWords) }};
   }}
   scored = {{ results, reference: ref, scores }};
   latestScores = scores;
   document.getElementById('referenceStatus').innerHTML = '<p class="ok">Reference validated. Scores updated. Label these as LLM-corrected reference scores, not human ground truth.</p>';
   renderScoreboard(scores);
+  renderTranscripts();
 }}
 function downloadScored() {{
   const blob = new Blob([JSON.stringify(scored || {{results}}, null, 2)], {{type:'application/json'}});

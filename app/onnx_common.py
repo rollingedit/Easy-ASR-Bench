@@ -35,6 +35,17 @@ def make_session(path: Path, providers: list[str], cpu_threads: int = 0) -> ort.
     return ort.InferenceSession(str(path), sess_options=options, providers=providers)
 
 
+def session_provider_summary(session: ort.InferenceSession, requested: list[str]) -> dict:
+    actual = list(session.get_providers())
+    return {
+        "requested_providers": list(requested),
+        "active_providers": actual,
+        "cuda_requested": "CUDAExecutionProvider" in requested,
+        "cuda_active": "CUDAExecutionProvider" in actual,
+        "provider_fallback": "CUDAExecutionProvider" in requested and "CUDAExecutionProvider" not in actual,
+    }
+
+
 def session_input_names(session: ort.InferenceSession) -> list[str]:
     return [item.name for item in session.get_inputs()]
 

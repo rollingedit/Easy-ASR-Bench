@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.8
+
+- Added HTML visual word-diff rendering for LLM-corrected reference scoring.
+- Added chunk pagination in `compare.html` so large reports do not render every chunk at once.
+- Added balanced score and stricter reference timestamp validation in the HTML report.
+- Added ONNX provider fallback metadata for generic ONNX manifest runs.
+- Added faster-whisper requested/effective compute type and device reporting, including CPU float16 relabeling.
+
 ## v0.2.7
 
 - Added a version bump helper so release version strings are updated consistently.

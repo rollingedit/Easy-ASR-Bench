@@ -15,6 +15,9 @@ class FasterWhisperASRAdapter:
     def __init__(self) -> None:
         self.model = None
         self.candidate: ModelCandidate | None = None
+        self.device = "cpu"
+        self.requested_compute_type = "default"
+        self.effective_compute_type = "default"
 
     def discover(self, models_root: Path) -> list[ModelCandidate]:
         candidates: list[ModelCandidate] = []
@@ -60,6 +63,15 @@ class FasterWhisperASRAdapter:
         self.candidate = candidate
         device = "cuda" if runtime_config.get("provider") == "cuda" else "cpu"
         compute_type = candidate.precision if candidate.precision in {"int8", "int8_float16", "float16", "float32"} else "default"
+        effective_compute_type = compute_type
+        warnings = []
+        if device == "cpu" and compute_type in {"float16", "int8_float16"}:
+            effective_compute_type = "float32" if compute_type == "float16" else "int8"
+            warnings.append(f"Requested {compute_type} on CPU; CTranslate2 uses {effective_compute_type} effectively.")
+        self.device = device
+        self.requested_compute_type = compute_type
+        self.effective_compute_type = effective_compute_type
+        self.load_warnings = warnings
         self.model = WhisperModel(str(candidate.path), device=device, compute_type=compute_type)
         return self
 
@@ -82,7 +94,21 @@ class FasterWhisperASRAdapter:
             peak_ram = max(peak_ram, process_memory_mb())
             out.append(ChunkTranscript(str(metadata["chunk_id"]), float(metadata["start_seconds"]), float(metadata["end_seconds"]), text, raw))
         audio_seconds = sum(float(item["end_seconds"]) - float(item["start_seconds"]) for item in chunk_metadata)
-        return ModelRunResult(self.candidate, out, {"provider": "faster-whisper", "audio_seconds": audio_seconds, "chunk_count": len(chunks), "inference_seconds": inference_seconds, "total_wall_seconds": inference_seconds, "peak_process_memory_mb": peak_ram, "audio_seconds_per_wall_second": audio_seconds / max(0.001, inference_seconds)}, errors)
+        metrics = {
+            "provider": "faster-whisper",
+            "device": self.device,
+            "requested_compute_type": self.requested_compute_type,
+            "effective_compute_type": self.effective_compute_type,
+            "audio_seconds": audio_seconds,
+            "chunk_count": len(chunks),
+            "inference_seconds": inference_seconds,
+            "total_wall_seconds": inference_seconds,
+            "peak_process_memory_mb": peak_ram,
+            "audio_seconds_per_wall_second": audio_seconds / max(0.001, inference_seconds),
+        }
+        if getattr(self, "load_warnings", []):
+            metrics["warnings"] = list(self.load_warnings)
+        return ModelRunResult(self.candidate, out, metrics, errors)
 
     def unload(self) -> None:
         self.model = None
