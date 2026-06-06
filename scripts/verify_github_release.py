@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -24,13 +25,21 @@ def sha256(path: Path) -> str:
 
 
 def request_json(url: str) -> dict:
-    request = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "Easy-ASR-Bench-release-verifier"})
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "Easy-ASR-Bench-release-verifier"}
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=60) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
 def download(url: str, destination: Path) -> None:
-    request = urllib.request.Request(url, headers={"User-Agent": "Easy-ASR-Bench-release-verifier"})
+    headers = {"User-Agent": "Easy-ASR-Bench-release-verifier"}
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=120) as response:
         destination.write_bytes(response.read())
 

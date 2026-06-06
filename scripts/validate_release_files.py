@@ -5,11 +5,14 @@ import json
 import sys
 from pathlib import Path
 
+from check_release_version_coherence import validate as validate_version_coherence
 from validate_physical_files import validate_root
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SKIP_DIRS = {".git", ".venv", "dist", ".pytest_cache", ".pytest_tmp", "__pycache__"}
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 MIN_LINES = {
     "setup.bat": 50,
@@ -103,6 +106,9 @@ def validate_endings() -> None:
 def main() -> int:
     try:
         validate_root(ROOT)
+        import app
+
+        validate_version_coherence("v" + app.__version__, require_checksums=(ROOT / "installer" / "checksums.json").exists())
         validate_line_counts()
         validate_formats()
         validate_requirements()

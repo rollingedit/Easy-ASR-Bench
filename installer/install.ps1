@@ -1,6 +1,6 @@
 param(
   [string]$InstallDir = "$env:LOCALAPPDATA\Easy-ASR-Bench",
-  [string]$Version = "v0.3.0",
+  [string]$Version = "v0.3.1",
   [switch]$DryRun,
   [switch]$VerifyRelease,
   [switch]$Repair,
@@ -45,8 +45,11 @@ function Invoke-Download($Uri, $OutFile) {
 
 function Resolve-Python {
   $commands = @(
-    @{ File = "py"; Args = @("-3.11") },
+    @{ File = "py"; Args = @("-3.14") },
+    @{ File = "py"; Args = @("-3.13") },
     @{ File = "py"; Args = @("-3.12") },
+    @{ File = "py"; Args = @("-3.11") },
+    @{ File = "py"; Args = @("-3.10") },
     @{ File = "python"; Args = @() }
   )
   foreach ($command in $commands) {
@@ -79,6 +82,73 @@ function Assert-Checksum($Path, $Expected, $Name) {
     throw "Checksum mismatch for $Name. Expected $Expected, got $actual"
   }
   Write-SetupLog "[OK] $Name SHA256 verified"
+}
+
+function Get-PhysicalLineCount($Path) {
+  $text = [System.IO.File]::ReadAllText($Path)
+  if ($text.Length -eq 0) { return 0 }
+  return ([regex]::Matches($text, "`r`n|`n|`r")).Count + 1
+}
+
+function Assert-TextLineEndings($Path, $Expected, $Name) {
+  $bytes = [System.IO.File]::ReadAllBytes($Path)
+  if ($bytes.Length -eq 0) { return }
+  for ($i = 0; $i -lt $bytes.Length; $i++) {
+    if ($bytes[$i] -eq 13) {
+      if (($i + 1) -ge $bytes.Length -or $bytes[$i + 1] -ne 10) {
+        throw "$Name contains CR-only line endings"
+      }
+    }
+    if ($Expected -eq "CRLF" -and $bytes[$i] -eq 10) {
+      if ($i -eq 0 -or $bytes[$i - 1] -ne 13) {
+        throw "$Name must use CRLF line endings"
+      }
+    }
+    if ($Expected -eq "LF" -and $i -gt 0 -and $bytes[$i - 1] -eq 13 -and $bytes[$i] -eq 10) {
+      throw "$Name must use LF line endings"
+    }
+  }
+}
+
+function Assert-StagingPhysicalFiles($Root) {
+  $minimums = @{
+    "setup.bat" = 200
+    "installer\install.ps1" = 250
+    "scripts\validate_physical_files.py" = 150
+    "scripts\verify_github_release.py" = 80
+    ".github\workflows\release-gate.yml" = 75
+    ".github\workflows\publish-release.yml" = 50
+    "app\model_scanner.py" = 600
+    "app\results_writer.py" = 100
+    "app\scoring.py" = 80
+  }
+  foreach ($rel in $minimums.Keys) {
+    $path = Join-Path $Root $rel
+    if (-not (Test-Path $path)) {
+      throw "Staging validation failed: missing $rel"
+    }
+    $count = Get-PhysicalLineCount $path
+    if ($count -lt $minimums[$rel]) {
+      throw "Staging validation failed: $rel has $count physical lines, expected at least $($minimums[$rel])"
+    }
+  }
+  $crlfFiles = @("setup.bat", "installer\install.ps1")
+  foreach ($rel in $crlfFiles) {
+    Assert-TextLineEndings (Join-Path $Root $rel) "CRLF" $rel
+  }
+  $lfFiles = @(
+    "scripts\validate_physical_files.py",
+    "scripts\verify_github_release.py",
+    ".github\workflows\release-gate.yml",
+    ".github\workflows\publish-release.yml",
+    "app\model_scanner.py",
+    "app\results_writer.py",
+    "app\scoring.py"
+  )
+  foreach ($rel in $lfFiles) {
+    Assert-TextLineEndings (Join-Path $Root $rel) "LF" $rel
+  }
+  Write-SetupLog "[OK] staging physical files passed PowerShell validation"
 }
 
 function Test-ReleaseAssets($Python) {
@@ -125,6 +195,7 @@ function Test-ReleaseAssets($Python) {
   Write-SetupLog "[OK] ZIP layout valid"
   $validator = Join-Path $root.FullName "scripts\validate_physical_files.py"
   if (Test-Path $validator) {
+    Assert-StagingPhysicalFiles $root.FullName
     if ($Python) {
       & $Python.File @($Python.Args) $validator --repo $root.FullName
       if ($LASTEXITCODE -ne 0) {
@@ -133,7 +204,7 @@ function Test-ReleaseAssets($Python) {
       Write-SetupLog "[OK] release physical files valid"
     }
     else {
-      Write-SetupLog "Python was not found, so ZIP physical-file validation could not compile Python source in dry-run."
+      Write-SetupLog "Python was not found; PowerShell physical-file validation passed and Python compile validation will run after Python is installed."
     }
   }
   else {
@@ -273,10 +344,10 @@ if ($Python) {
   Write-SetupLog "Python command for validation: $($Python.Display)"
 }
 elseif ($DryRun) {
-  Write-SetupLog "Python 3.11/3.12 was not found. Setup will install Python before local setup."
+  Write-SetupLog "Python 3.10-3.14 was not found. Setup will install Python before local setup."
 }
 else {
-  Write-SetupLog "Python 3.11/3.12 was not found yet. Staging validation will be skipped until local setup installs Python."
+  Write-SetupLog "Python 3.10-3.14 was not found yet. PowerShell staging validation will run before activation; Python validation will run after local setup installs Python."
 }
 
 if ($DryRun) {
@@ -327,11 +398,14 @@ Invoke-Step "Extracting staging app" {
 
 if ($Python) {
   Invoke-Step "Validating staging app" {
+    Assert-StagingPhysicalFiles $Stage
     Invoke-PythonFile $Python (Join-Path $Stage "scripts\validate_release_files.py")
   }
 }
 else {
-  Write-SetupLog "Skipping Python staging validator because Python is not installed before bootstrap."
+  Invoke-Step "Validating staging app with PowerShell" {
+    Assert-StagingPhysicalFiles $Stage
+  }
 }
 
 Invoke-Step "Installing app atomically with user-data preservation" {

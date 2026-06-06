@@ -20,7 +20,12 @@ def test_publish_release_workflow_builds_assets_on_github_from_draft():
     assert "--draft" in text
     assert "gh release upload" in text
     assert "install.ps1" in text
-    assert "gh release edit $tag --draft=false --latest" in text
+    assert "Verify uploaded draft release assets" in text
+    assert "scripts/verify_github_release.py" in text
+    assert "Publish verified release" in text
+    assert "setup.bat --dry-run --verify-release" in text
+    assert text.index("Verify uploaded draft release assets") < text.index("Publish verified release")
+    assert text.index("gh release upload") < text.index("Verify uploaded draft release assets")
 
 
 def test_bump_version_script_exists_and_checks_stale_versions():
@@ -29,6 +34,14 @@ def test_bump_version_script_exists_and_checks_stale_versions():
     assert "assert_old_version_removed" in text
     assert "setup.bat" in text
     assert "installer/install.ps1" in text
+
+
+def test_release_version_coherence_script_exists():
+    text = Path("scripts/check_release_version_coherence.py").read_text(encoding="utf-8")
+
+    assert "setup.bat APP_VERSION mismatch" in text
+    assert "installer default Version mismatch" in text
+    assert "manifest app_zip mismatch" in text
 
 
 def test_release_notes_script_writes_notes_file(tmp_path: Path):
@@ -49,6 +62,7 @@ def test_release_validator_parses_workflow_yaml():
     assert "yaml.safe_load" in text
     assert "workflows" in text
     assert "validate_root(ROOT)" in text
+    assert "validate_version_coherence" in text
 
 
 def test_reference_validation_rejects_source_hash_mismatch():

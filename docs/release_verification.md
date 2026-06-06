@@ -9,6 +9,7 @@ Run from a clean working tree after the version bump and final metadata regenera
 ```powershell
 python scripts\validate_release_files.py
 python scripts\validate_physical_files.py --repo .
+python scripts\check_release_version_coherence.py --tag vX.Y.Z
 python -m compileall app tests scripts
 python -m pytest --basetemp .pytest_tmp -p no:cacheprovider
 python scripts\build_release_zip.py --version vX.Y.Z --strict-checksums
@@ -24,6 +25,12 @@ After GitHub Actions publishes the release, verify the actual uploaded assets:
 
 ```powershell
 python scripts\verify_github_release.py --repo rollingedit/Easy-ASR-Bench --tag vX.Y.Z --expected-commit <commit>
+```
+
+For pushed commits, CI also fetches selected files from `raw.githubusercontent.com` at the exact commit SHA:
+
+```powershell
+python scripts\validate_raw_github_files.py --repo rollingedit/Easy-ASR-Bench --commit <commit>
 ```
 
 The release must upload:

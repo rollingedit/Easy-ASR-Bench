@@ -3,11 +3,11 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 set APP_NAME=Easy ASR Bench
-set APP_VERSION=v0.3.0
+set APP_VERSION=v0.3.1
 set INSTALL_DIR=%LOCALAPPDATA%\Easy-ASR-Bench
 set INSTALLER_PS1=%~dp0installer\install.ps1
 set INSTALLER_URL=https://github.com/rollingedit/Easy-ASR-Bench/releases/download/%APP_VERSION%/install.ps1
-set INSTALLER_SHA256=sha256:2ac1824bb4ea0a8cf83bb3f8a706251f2228c3b3a0338d315c96319a4fb385b9
+set INSTALLER_SHA256=sha256:4dad4fc3eeb67485c297c9e5d9b5b2c3e53a9bd204bf6dc29bd60c13d52f2029
 set VERIFY_RELEASE=0
 
 for %%A in (%*) do (
@@ -136,24 +136,23 @@ echo %APP_NAME% - local setup
 echo.
 
 set PYEXE=
-py -3.11 -c "import sys" >nul 2>nul
-if not errorlevel 1 set PYEXE=py -3.11
-
-if "%PYEXE%"=="" (
-  py -3.12 -c "import sys" >nul 2>nul
-  if not errorlevel 1 set PYEXE=py -3.12
+for %%V in (3.14 3.13 3.12 3.11 3.10) do (
+  if "!PYEXE!"=="" (
+    py -%%V -c "import sys" >nul 2>nul
+    if not errorlevel 1 set PYEXE=py -%%V
+  )
 )
 
 if "%PYEXE%"=="" (
-  echo Python 3.11 or 3.12 was not found. Attempting install with winget...
-  winget install -e --id Python.Python.3.11
-  py -3.11 -c "import sys" >nul 2>nul
+  echo Python 3.10 through 3.14 was not found. Attempting install with winget...
+  winget install -e --id Python.Python.3.12
+  py -3.12 -c "import sys" >nul 2>nul
   if errorlevel 1 (
-    echo Python install was not detected. Install Python 3.11 and rerun setup.bat.
+    echo Python install was not detected. Install Python 3.12 and rerun setup.bat.
     pause
     exit /b 1
   )
-  set PYEXE=py -3.11
+  set PYEXE=py -3.12
 )
 
 if not exist ".venv\Scripts\python.exe" (
