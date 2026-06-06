@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from jinja2 import Template
 import numpy as np
 
 from .frontend import input_features
@@ -41,7 +42,16 @@ class GraniteOnnxAR:
         return ",".join(self.encoder.get_providers())
 
     def _chat_prompt(self, prompt: str) -> str:
-        return f"USER: <|audio|>{prompt}\n\nASSISTANT:"
+        content = prompt if "<|audio|>" in prompt else f"<|audio|>{prompt}"
+        template_path = self.model_root / "chat_template.jinja"
+        if template_path.exists():
+            rendered = Template(template_path.read_text(encoding="utf-8")).render(
+                messages=[{"role": "user", "content": content}],
+                add_generation_prompt=True,
+            )
+            if rendered.strip():
+                return rendered
+        return f"USER: {content}\n\nASSISTANT:"
 
     def _embed(self, input_ids: np.ndarray) -> np.ndarray:
         name = session_input_names(self.embed_tokens)[0]

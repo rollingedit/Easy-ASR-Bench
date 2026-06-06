@@ -14,6 +14,7 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
         discovered.extend(adapter.discover(models_root))
 
     known_paths = {candidate.path.resolve() for candidate in discovered}
+    known_parent_paths = {candidate.path.parent.resolve() if candidate.path.is_file() else candidate.path.resolve() for candidate in discovered}
     unsupported: list[ModelCandidate] = []
     precision_folders = {"int8", "fp16w", "fp32"}
 
@@ -89,6 +90,8 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
     for path in models_root.rglob("*"):
         if path.resolve() in known_paths:
             continue
+        if path.parent.resolve() in known_parent_paths:
+            continue
         if any(part.lower() in precision_folders for part in path.parts):
             continue
         if path.is_file() and path.suffix.lower() == ".gguff":
@@ -110,24 +113,10 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
                 )
             )
         elif path.is_file() and path.suffix.lower() == ".gguf":
-            raw, bucket = detect_from_path(path)
-            unsupported.append(
-                ModelCandidate(
-                    candidate_id=f"gguf__{path.stem}".lower(),
-                    display_name=path.name,
-                    family_name=path.stem,
-                    backend="llama.cpp-compatible",
-                    container_format="gguf",
-                    task="text-generation",
-                    precision=raw,
-                    quantization_label=bucket,
-                    path=path,
-                    adapter_name="gguf_llm_reference",
-                    runnable=False,
-                    warnings=["GGUF was recognized as a text LLM candidate, not direct ASR."],
-                )
-            )
+            continue
         elif path.is_file() and path.suffix.lower() == ".onnx":
+            if (path.parent / "modelbench.json").exists():
+                continue
             raw, bucket = detect_from_path(path)
             manifest = path.parent / "modelbench.json"
             unsupported.append(
@@ -148,6 +137,8 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
                 )
             )
         elif path.is_file() and path.suffix.lower() == ".safetensors":
+            if path.parent.resolve() in known_parent_paths:
+                continue
             root = path.parent
             raw, bucket = detect_safetensors_folder_precision(root)
             has_config = (root / "config.json").exists()

@@ -18,8 +18,11 @@ class ModelCandidate:
     path: Path
     adapter_name: str
     runnable: bool
+    category: str = "asr"
+    runnable_after_dependency_install: bool = False
     missing_files: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    help_text: str = ""
     metadata: dict = field(default_factory=dict)
 
 

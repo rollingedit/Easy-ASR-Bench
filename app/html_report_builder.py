@@ -1,0 +1,138 @@
+from __future__ import annotations
+
+import html
+import json
+
+
+def build_html_report(results: dict) -> str:
+    embedded = html.escape(json.dumps(results, ensure_ascii=False))
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Easy ASR Bench Report</title>
+<style>
+:root {{ color-scheme: light; --bg:#f6f7f9; --panel:#fff; --ink:#17202a; --muted:#5f6b7a; --line:#d9dee7; --blue:#174ea6; --red:#ffd7d7; --yellow:#fff0b3; --green:#dff4e4; }}
+body {{ margin:0; font-family:Segoe UI, Arial, sans-serif; background:var(--bg); color:var(--ink); }}
+header {{ padding:24px 32px; background:#0f1720; color:white; }}
+header h1 {{ margin:0 0 6px; font-size:26px; }}
+header p {{ margin:0; color:#c8d1dc; }}
+main {{ padding:24px 32px 48px; max-width:1400px; margin:0 auto; }}
+section {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:18px; margin:0 0 18px; }}
+h2 {{ margin:0 0 12px; font-size:18px; }}
+.grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; }}
+.card {{ border:1px solid var(--line); border-radius:8px; padding:12px; background:#fbfcfe; }}
+.label {{ color:var(--muted); font-size:12px; text-transform:uppercase; }}
+.value {{ font-size:20px; margin-top:4px; }}
+table {{ width:100%; border-collapse:collapse; font-size:14px; }}
+th, td {{ text-align:left; border-bottom:1px solid var(--line); padding:8px; vertical-align:top; }}
+th {{ background:#f0f3f7; position:sticky; top:0; }}
+textarea {{ width:100%; min-height:180px; box-sizing:border-box; font-family:Consolas, monospace; }}
+button {{ background:var(--blue); color:white; border:0; border-radius:6px; padding:9px 12px; cursor:pointer; margin:8px 8px 0 0; }}
+pre {{ white-space:pre-wrap; word-break:break-word; background:#f7f8fa; border:1px solid var(--line); border-radius:6px; padding:10px; }}
+.badge {{ display:inline-block; padding:2px 7px; border-radius:999px; background:#e8eef8; color:#123b73; font-size:12px; }}
+.replace {{ background:var(--red); }}
+.insert {{ background:var(--yellow); }}
+.delete {{ text-decoration:line-through; background:var(--red); }}
+.ok {{ background:var(--green); padding:8px; border-radius:6px; }}
+.warn {{ background:#fff4d6; padding:8px; border-radius:6px; }}
+</style>
+</head>
+<body>
+<header>
+  <h1>Easy ASR Bench Report</h1>
+  <p>Local model comparison with transcripts, speed, memory, pairwise differences, and LLM-corrected reference scoring.</p>
+</header>
+<main>
+  <section id="overview"></section>
+  <section>
+    <h2>LLM-Corrected Reference</h2>
+    <p>Paste JSON returned by an LLM using the prompt in <code>results.txt</code>. This scores against an LLM-corrected reference, not human ground truth.</p>
+    <textarea id="referenceInput" placeholder="Paste easy_asr_bench.llm_reference.v1 JSON here"></textarea>
+    <button onclick="scoreReference()">Validate Reference and Score Models</button>
+    <button onclick="downloadScored()">Download scored_report.json</button>
+    <div id="referenceStatus"></div>
+  </section>
+  <section><h2>Scoreboard</h2><div id="scoreboard"></div></section>
+  <section><h2>Pairwise Differences</h2><div id="pairwise"></div></section>
+  <section><h2>Transcript Comparison</h2><div id="transcripts"></div></section>
+  <section><h2>Raw Results JSON</h2><pre id="raw"></pre></section>
+</main>
+<script type="application/json" id="results-json">{embedded}</script>
+<script>
+const results = JSON.parse(document.getElementById('results-json').textContent);
+let scored = null;
+function words(s, normalized=true) {{
+  s = String(s || '');
+  if (normalized) s = s.toLowerCase().replace(/[^a-z0-9\\s]+/g, ' ');
+  return s.trim().replace(/\\s+/g, ' ').split(' ').filter(Boolean);
+}}
+function edit(a,b) {{
+  const dp = Array(a.length+1).fill(null).map(()=>Array(b.length+1).fill(0));
+  for (let i=0;i<=a.length;i++) dp[i][0]=i;
+  for (let j=0;j<=b.length;j++) dp[0][j]=j;
+  for (let i=1;i<=a.length;i++) for (let j=1;j<=b.length;j++) {{
+    dp[i][j]=Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+  }}
+  return dp[a.length][b.length];
+}}
+function wer(ref,hyp,norm=true) {{ const r=words(ref,norm), h=words(hyp,norm); return edit(r,h)/Math.max(1,r.length); }}
+function fullText(run) {{ return (run.transcript_chunks || []).map(c=>c.text || '').join('\\n'); }}
+function fmt(n) {{ return Number.isFinite(n) ? n.toFixed(3) : 'n/a'; }}
+function renderOverview() {{
+  const source = results.source || {{}};
+  const runs = results.runs || [];
+  document.getElementById('overview').innerHTML = `<h2>Overview</h2><div class="grid">
+    <div class="card"><div class="label">Source</div><div class="value">${{source.name || ''}}</div></div>
+    <div class="card"><div class="label">Duration</div><div class="value">${{fmt(source.duration_seconds || 0)}}s</div></div>
+    <div class="card"><div class="label">Models Tested</div><div class="value">${{runs.length}}</div></div>
+    <div class="card"><div class="label">Chunks</div><div class="value">${{(results.chunk_plan?.chunks || []).length}}</div></div>
+  </div>`;
+}}
+function renderScoreboard(scores=null) {{
+  const rows = (results.runs || []).map(run => {{
+    const m = run.metrics || {{}};
+    const s = scores?.[run.model.candidate_id] || {{}};
+    return `<tr><td>${{run.model.display_name}}<br><span class="badge">${{run.model.precision}}</span></td><td>${{run.model.backend}}</td><td>${{fmt(s.normalized_wer)}}</td><td>${{fmt(s.strict_wer)}}</td><td>${{fmt(s.cer)}}</td><td>${{fmt(m.audio_seconds_per_wall_second)}}</td><td>${{fmt(m.total_wall_seconds)}}</td><td>${{fmt(m.peak_process_memory_mb)}}</td><td>${{run.errors?.length || 0}}</td></tr>`;
+  }}).join('');
+  document.getElementById('scoreboard').innerHTML = `<table><thead><tr><th>Model</th><th>Backend</th><th>Norm WER</th><th>Strict WER</th><th>CER</th><th>x Real-time</th><th>Wall s</th><th>RAM MB</th><th>Errors</th></tr></thead><tbody>${{rows}}</tbody></table>`;
+}}
+function renderPairwise() {{
+  const rows = Object.entries(results.pairwise_differences || {{}}).map(([k,v]) => `<tr><td>${{k}}</td><td>${{fmt(v.normalized_wer_like_difference)}}</td><td>${{fmt(v.cer_difference)}}</td></tr>`).join('');
+  document.getElementById('pairwise').innerHTML = rows ? `<table><thead><tr><th>Pair</th><th>Norm WER-like Difference</th><th>CER Difference</th></tr></thead><tbody>${{rows}}</tbody></table>` : '<p>No pairwise differences available.</p>';
+}}
+function renderTranscripts() {{
+  document.getElementById('transcripts').innerHTML = (results.runs || []).map(run => `<h3>${{run.model.display_name}} <span class="badge">${{run.model.precision}}</span></h3><pre>${{escapeHtml(fullText(run))}}</pre>`).join('');
+}}
+function escapeHtml(s) {{ return String(s).replace(/[&<>]/g, c=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[c])); }}
+function scoreReference() {{
+  let ref;
+  try {{ ref = JSON.parse(document.getElementById('referenceInput').value); }}
+  catch(e) {{ document.getElementById('referenceStatus').innerHTML = '<p class="warn">Reference JSON could not be parsed.</p>'; return; }}
+  const expected = new Set((results.chunk_plan?.chunks || []).map(c=>c.chunk_id));
+  const refMap = new Map((ref.segments || []).map(s=>[s.chunk_id, s]));
+  const missing = [...expected].filter(id=>!refMap.has(id));
+  if (ref.schema !== 'easy_asr_bench.llm_reference.v1' || ref.reference_type !== 'llm_corrected_reference' || missing.length) {{
+    document.getElementById('referenceStatus').innerHTML = `<p class="warn">Invalid reference. Missing chunks: ${{missing.join(', ') || 'none'}}.</p>`;
+    return;
+  }}
+  const referenceText = (results.chunk_plan?.chunks || []).map(c=>refMap.get(c.chunk_id)?.text || '').join('\\n');
+  const scores = {{}};
+  for (const run of results.runs || []) {{
+    const hyp = fullText(run);
+    scores[run.model.candidate_id] = {{ normalized_wer: wer(referenceText,hyp,true), strict_wer: wer(referenceText,hyp,false), cer: edit(referenceText,hyp)/Math.max(1,referenceText.length) }};
+  }}
+  scored = {{ results, reference: ref, scores }};
+  document.getElementById('referenceStatus').innerHTML = '<p class="ok">Reference validated. Scores updated. Label these as LLM-corrected reference scores, not human ground truth.</p>';
+  renderScoreboard(scores);
+}}
+function downloadScored() {{
+  const blob = new Blob([JSON.stringify(scored || {{results}}, null, 2)], {{type:'application/json'}});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'scored_report.json'; a.click();
+}}
+renderOverview(); renderScoreboard(); renderPairwise(); renderTranscripts();
+document.getElementById('raw').textContent = JSON.stringify(results, null, 2);
+</script>
+</body>
+</html>"""

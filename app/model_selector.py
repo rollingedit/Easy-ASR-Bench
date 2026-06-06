@@ -14,6 +14,8 @@ def parse_selection(raw: str, max_index: int) -> list[int]:
     selected: set[int] = set()
     if re.fullmatch(r"\d+", text) and max_index <= 9 and len(text) > 1:
         selected.update(int(char) for char in text)
+    elif re.fullmatch(r"\d+", text) and max_index > 9 and len(text) > 1:
+        return []
     else:
         for part in re.split(r"[\s,]+", text):
             if not part:
@@ -38,8 +40,11 @@ def recommended_candidates(candidates: list[ModelCandidate]) -> list[int]:
     return indexes or list(range(1, len(candidates) + 1))
 
 
-def choose_candidates(candidates: list[ModelCandidate], unsupported: list[ModelCandidate]) -> list[ModelCandidate]:
-    print("ASR Model Bench")
+def choose_candidates(candidates: list[ModelCandidate], unsupported: list[ModelCandidate]) -> tuple[list[ModelCandidate], ModelCandidate | None]:
+    candidates = [candidate for candidate in candidates if candidate.category == "asr"]
+    reference_llms = [candidate for candidate in unsupported if candidate.category == "reference_llm"]
+    unsupported = [candidate for candidate in unsupported if candidate.category != "reference_llm"]
+    print("Easy ASR Bench")
     print()
     print("Detected runnable ASR model variants:")
     print()
@@ -52,6 +57,13 @@ def choose_candidates(candidates: list[ModelCandidate], unsupported: list[ModelC
         )
         print(f"    Path: {candidate.path}")
     if unsupported:
+        if reference_llms:
+            print()
+            print("Detected reference/correction LLMs:")
+            print()
+            for index, candidate in enumerate(reference_llms, 1):
+                print(f"[L{index}] {candidate.display_name}    {candidate.backend}    {candidate.precision}    {candidate.quantization_label}")
+                print(f"     Use: optional LLM-corrected reference generation, not direct transcription.")
         print()
         print("Detected non-ASR, incomplete, or unsupported candidates:")
         print()
@@ -60,9 +72,12 @@ def choose_candidates(candidates: list[ModelCandidate], unsupported: list[ModelC
             print(f"[U{index}] {candidate.display_name}")
             print(f"     Reason: {reason or 'Unsupported by current adapters.'}")
     if not candidates:
-        return []
+        return [], None
     print()
-    print("Choose models: numbers like 1 2 4, 1,2,4, 1-4, A for all, R for recommended.")
+    if len(candidates) > 9:
+        print("Choose models with spaces, commas, or ranges: 1 2 10, 1,2,10, 1-4. Compact digits are disabled for 10+ models.")
+    else:
+        print("Choose models: numbers like 1 2 4, 1,2,4, 1-4, 1234, A for all, R for recommended.")
     while True:
         raw = input("Models> ").strip()
         if raw.lower() in {"r", "recommended"}:
@@ -72,8 +87,9 @@ def choose_candidates(candidates: list[ModelCandidate], unsupported: list[ModelC
         if indexes:
             break
         print("No valid runnable models selected.")
-    selected = [candidates[index - 1] for index in indexes]
-    return choose_precision_buckets(selected)
+    selected = choose_precision_buckets([candidates[index - 1] for index in indexes])
+    reference_llm = choose_reference_llm(reference_llms)
+    return selected, reference_llm
 
 
 def choose_precision_buckets(candidates: list[ModelCandidate]) -> list[ModelCandidate]:
@@ -93,3 +109,20 @@ def choose_precision_buckets(candidates: list[ModelCandidate]) -> list[ModelCand
             chosen = {buckets[index - 1] for index in indexes}
             return [candidate for candidate in candidates if candidate.quantization_label in chosen]
         print("No valid precision buckets selected.")
+
+
+def choose_reference_llm(reference_llms: list[ModelCandidate]) -> ModelCandidate | None:
+    if not reference_llms:
+        return None
+    print()
+    answer = input("Use a local GGUF LLM for LLM-corrected reference help? [y/N] ").strip().lower()
+    if answer not in {"y", "yes"}:
+        return None
+    for index, candidate in enumerate(reference_llms, 1):
+        print(f"[{index}] {candidate.display_name} | {candidate.precision} | {candidate.path}")
+    while True:
+        raw = input("Reference LLM> ").strip()
+        indexes = parse_selection(raw, len(reference_llms))
+        if len(indexes) == 1:
+            return reference_llms[indexes[0] - 1]
+        print("Choose one reference LLM number, or press Ctrl+C to skip.")
