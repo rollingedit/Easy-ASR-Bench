@@ -1,8 +1,8 @@
 {
-    "files":  {
-                  "Easy-ASR-Bench-v0.2.2-win.zip":  "sha256:43b419a33b37dd2fa84d3ee4c72efdc65ee02c1c57b20843b6c2b572dc897035",
-                  "setup.bat":  "sha256:bab996f0f1600ef9c7681cb64fcd5e368388ccbafb3dbaae646d0bc2593f78f7"
-              },
-    "schema":  "easy_asr_bench.checksums.v1",
-    "version":  "0.2.2"
+  "schema": "easy_asr_bench.checksums.v1",
+  "version": "0.2.3",
+  "files": {
+    "Easy-ASR-Bench-v0.2.3-win.zip": "sha256:41bce8f96f804cae275278ea8a0ef0da0a3cc20b1064a5566753f51050e243ee",
+    "setup.bat": "sha256:04eeba1bca8c42f0b93778f71c7aae1a89558d0c8119ce84058104ee42817417"
+  }
 }

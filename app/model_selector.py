@@ -34,12 +34,26 @@ def parse_selection(raw: str, max_index: int) -> list[int]:
 
 
 def recommended_candidates(candidates: list[ModelCandidate]) -> list[int]:
-    indexes: list[int] = []
-    wanted = {"int8", "fp16w"}
+    if not candidates:
+        return []
+    selected: list[int] = []
+    by_family: dict[str, list[tuple[int, ModelCandidate]]] = {}
     for index, candidate in enumerate(candidates, 1):
-        if candidate.precision in wanted and "granite" in candidate.adapter_name:
-            indexes.append(index)
-    return indexes or list(range(1, len(candidates) + 1))
+        family = (candidate.family_name or candidate.adapter_name or candidate.backend).lower()
+        by_family.setdefault(family, []).append((index, candidate))
+    precision_rank = {"int8": 0, "q8": 0, "fp16w": 1, "fp16": 1, "fp32": 2, "unknown": 3}
+    backend_rank = {"faster-whisper": 0, "whisper.cpp": 1, "transformers": 2, "onnxruntime": 3, "openai-whisper": 4}
+    for group in by_family.values():
+        ranked = sorted(
+            group,
+            key=lambda item: (
+                precision_rank.get(item[1].precision, precision_rank.get(item[1].quantization_label, 5)),
+                backend_rank.get(item[1].backend, 5),
+                item[1].display_name.lower(),
+            ),
+        )
+        selected.append(ranked[0][0])
+    return sorted(selected[:4])
 
 
 def choose_candidates(

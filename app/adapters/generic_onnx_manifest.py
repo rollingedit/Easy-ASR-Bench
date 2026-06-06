@@ -81,7 +81,7 @@ class GenericOnnxManifestAdapter:
         if decoding.get("type") != "ctc":
             raise RuntimeError("Generic ONNX v1 supports built-in CTC decoding only.")
         blank = int(decoding.get("blank_token_id", 0))
-        vocab = decoding.get("vocab", {})
+        vocab = load_vocab(candidate.path, decoding)
         transcript_chunks: list[ChunkTranscript] = []
         errors: list[str] = []
         inference_seconds = 0.0
@@ -133,13 +133,34 @@ def validate_manifest(data: dict, root: Path) -> list[str]:
     files = data.get("files", {})
     if not files.get("model") or not (root / files.get("model", "")).exists():
         missing.append("files.model")
-    if data.get("decoding", {}).get("type") == "ctc" and "blank_token_id" not in data.get("decoding", {}):
-        missing.append("decoding.blank_token_id")
+    decoding = data.get("decoding", {})
+    if decoding.get("type") == "ctc":
+        if "blank_token_id" not in decoding:
+            missing.append("decoding.blank_token_id")
+        vocab_file = decoding.get("vocab_file") or decoding.get("tokenizer_json")
+        if not decoding.get("vocab") and not vocab_file:
+            missing.append("decoding.vocab or decoding.vocab_file")
+        elif vocab_file and not (root / str(vocab_file)).exists():
+            missing.append(str(vocab_file))
     if not data.get("inputs"):
         missing.append("inputs")
     if not data.get("outputs", {}).get("logits"):
         missing.append("outputs.logits")
     return missing
+
+
+def load_vocab(root: Path, decoding: dict) -> dict:
+    if decoding.get("vocab"):
+        return decoding["vocab"]
+    vocab_file = decoding.get("vocab_file") or decoding.get("tokenizer_json")
+    if not vocab_file:
+        raise RuntimeError("CTC decoding requires decoding.vocab or decoding.vocab_file.")
+    data = json.loads((root / str(vocab_file)).read_text(encoding="utf-8"))
+    if isinstance(data, dict) and "model" in data and isinstance(data["model"], dict) and isinstance(data["model"].get("vocab"), dict):
+        return data["model"]["vocab"]
+    if isinstance(data, dict):
+        return data
+    raise RuntimeError(f"Unsupported vocab file format: {vocab_file}")
 
 
 def build_manifest_feed(session, manifest: dict, samples: np.ndarray) -> dict:
@@ -202,6 +223,6 @@ def greedy_ctc_ids(logits: np.ndarray, blank: int) -> list[int]:
 
 def decode_ids(ids: list[int], vocab: dict) -> str:
     if not vocab:
-        return " ".join(str(token) for token in ids)
+        raise RuntimeError("Cannot decode token IDs without a vocab.")
     inv = {int(v): k for k, v in vocab.items()} if all(isinstance(v, int) for v in vocab.values()) else {int(k): v for k, v in vocab.items()}
     return "".join(inv.get(token, "") for token in ids).replace("|", " ").strip()

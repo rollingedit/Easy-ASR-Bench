@@ -29,7 +29,7 @@ MEDIA_EXTENSIONS = [
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "app": {
-        "version": "0.2.2",
+        "version": "0.2.3",
         "version_channel": "stable",
         "check_for_updates_on_setup": True,
         "check_for_updates_on_run": False,
@@ -69,7 +69,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "trust_remote_code": False,
         "allow_model_folder_scripts": False,
         "allow_pickle_or_pt_files": False,
-        "allow_known_official_whisper_pt": True,
+        "allow_known_official_whisper_pt": False,
         "scan_only_safe_formats_by_default": True,
         "allow_manifest_custom_python": False,
     },

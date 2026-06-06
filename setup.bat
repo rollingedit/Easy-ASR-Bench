@@ -3,7 +3,7 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 set APP_NAME=Easy ASR Bench
-set APP_VERSION=v0.2.2
+set APP_VERSION=v0.2.3
 set INSTALL_DIR=%LOCALAPPDATA%\Easy-ASR-Bench
 set INSTALLER_PS1=%~dp0installer\install.ps1
 set INSTALLER_URL=https://raw.githubusercontent.com/rollingedit/Easy-ASR-Bench/%APP_VERSION%/installer/install.ps1
@@ -58,8 +58,18 @@ exit /b 0
 echo %APP_NAME% setup dry run
 echo Version: %APP_VERSION%
 echo Install folder: %INSTALL_DIR%
-echo Mode: no files will be downloaded or changed.
-exit /b 0
+echo Mode: validates installer inputs without changing files.
+if not exist "%INSTALLER_PS1%" (
+  echo Installer script was not found beside setup.bat.
+  echo Standalone setup will download it from:
+  echo   %INSTALLER_URL%
+  exit /b 0
+)
+powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^
+  -InstallDir "%INSTALL_DIR%" ^
+  -Version "%APP_VERSION%" ^
+  -DryRun
+exit /b %errorlevel%
 
 :doctor
 if exist ".venv\Scripts\python.exe" (

@@ -11,6 +11,7 @@ from .utils import expand_inputs, file_key, read_json, sha256_file, wait_for_sta
 class QueueItem:
     source_path: str
     sha256: str
+    fast_key: str = ""
     status: str = "queued"
     output_folder: str = ""
     errors: list[str] = field(default_factory=list)
@@ -53,16 +54,23 @@ class QueueState:
     def done_hashes(self) -> set[str]:
         return {item["sha256"] for item in self.data.get("items", []) if item.get("status") == "done"}
 
+    def done_fast_keys(self) -> set[str]:
+        return {item["fast_key"] for item in self.data.get("items", []) if item.get("status") == "done" and item.get("fast_key")}
+
 
 def discover_queue(paths: list[Path], extensions: set[str], recursive: bool, stability_seconds: float, state: QueueState, skip_done: bool) -> list[Path]:
     files = expand_inputs(paths, extensions, recursive)
     queued: list[Path] = []
     done = state.done_hashes() if skip_done else set()
+    done_fast = state.done_fast_keys() if skip_done else set()
     for path in files:
         wait_for_stable_file(path, stability_seconds)
+        fast = file_key(path)
+        if fast in done_fast:
+            continue
         digest = sha256_file(path)
         if digest in done:
             continue
-        state.upsert(QueueItem(str(path.resolve()), digest))
+        state.upsert(QueueItem(str(path.resolve()), digest, fast))
         queued.append(path)
     return queued
