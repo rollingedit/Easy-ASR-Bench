@@ -19,7 +19,7 @@ Input/*
 *.log
 *.partial
 *.partial.txt
-goal.md
 dist/
 .pytest_cache/
 .pytest_tmp/
+
