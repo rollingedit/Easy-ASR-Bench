@@ -68,6 +68,8 @@ function Write-AssetHashes {
 
 New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
+$WorkDir = (Resolve-Path -LiteralPath $WorkDir).Path
+$Output = (Resolve-Path -LiteralPath $Output).Path
 
 if ([string]::IsNullOrWhiteSpace($ReleaseCommit)) {
   try {
@@ -83,6 +85,8 @@ if ([string]::IsNullOrWhiteSpace($AssetDir)) {
   Remove-Item -LiteralPath $AssetDir -Recurse -Force -ErrorAction SilentlyContinue
   New-Item -ItemType Directory -Force -Path $AssetDir | Out-Null
   gh release download $Tag --repo $Repo --dir $AssetDir --clobber
+} else {
+  $AssetDir = (Resolve-Path -LiteralPath $AssetDir).Path
 }
 
 $required = @(
@@ -104,12 +108,12 @@ Write-AssetHashes -SourceDir $AssetDir -Destination $assetHashPath
 $setup = Join-Path $AssetDir "setup.bat"
 $verifyTranscript = Join-Path $WorkDir "setup-verify-release-$Tag.txt"
 Invoke-CapturedCommand `
-  -Command "`"$setup`" --dry-run --verify-release --asset-dir `"$AssetDir`"" `
+  -Command "call `"$setup`" --dry-run --verify-release --asset-dir `"$AssetDir`"" `
   -TranscriptPath $verifyTranscript
 
 $setupRowDir = Join-Path $Output "setup_dry_run_verify_release"
 New-Item -ItemType Directory -Force -Path $setupRowDir | Out-Null
-Copy-Item -LiteralPath $verifyTranscript -Destination (Join-Path $setupRowDir "setup-verify-release.txt") -Force
+Copy-Item -LiteralPath $verifyTranscript -Destination (Join-Path $setupRowDir "setup-verify-release.log") -Force
 Copy-Item -LiteralPath $assetHashPath -Destination (Join-Path $setupRowDir "public-assets.json") -Force
 
 & powershell -ExecutionPolicy Bypass -File qa\windows_matrix\collect_release_evidence.ps1 `
@@ -119,11 +123,14 @@ Copy-Item -LiteralPath $assetHashPath -Destination (Join-Path $setupRowDir "publ
   -AppVersion $Tag `
   -ReleaseCommit $ReleaseCommit `
   -Commands @("setup.bat --dry-run --verify-release --asset-dir <downloaded assets>")
+if ($LASTEXITCODE -ne 0) {
+  throw "collect_release_evidence failed for setup_dry_run_verify_release with exit code $LASTEXITCODE"
+}
 
 if ($Install) {
   $installTranscript = Join-Path $WorkDir "setup-install-$Tag.txt"
   Invoke-CapturedCommand `
-    -Command "echo Q| `"$setup`"" `
+    -Command "echo Q| call `"$setup`"" `
     -TranscriptPath $installTranscript `
     -WorkingDirectory $AssetDir
 
@@ -150,7 +157,7 @@ if ($Install) {
   New-Item -ItemType Directory -Force -Path $firstRunRowDir | Out-Null
   Copy-Item -LiteralPath $doctorJson -Destination (Join-Path $firstRunRowDir "doctor.json") -Force
   Copy-Item -LiteralPath $firstRunJson -Destination (Join-Path $firstRunRowDir "first-run-smoke.json") -Force
-  Copy-Item -LiteralPath $installTranscript -Destination (Join-Path $firstRunRowDir "setup-install.txt") -Force
+  Copy-Item -LiteralPath $installTranscript -Destination (Join-Path $firstRunRowDir "setup-install.log") -Force
 
   & powershell -ExecutionPolicy Bypass -File qa\windows_matrix\collect_release_evidence.ps1 `
     -Output $Output `
@@ -159,6 +166,9 @@ if ($Install) {
     -AppVersion $Tag `
     -ReleaseCommit $ReleaseCommit `
     -Commands @("Run.bat --doctor --json", "Run.bat --first-run-smoke")
+  if ($LASTEXITCODE -ne 0) {
+    throw "collect_release_evidence failed for empty_models_guided_first_run with exit code $LASTEXITCODE"
+  }
 }
 
 Write-Host "Public asset smoke work directory: $WorkDir"

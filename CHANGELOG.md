@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+Release QA automation:
+- Fixed `qa/windows_matrix/run_public_asset_smoke.ps1` so public-asset smoke transcripts are collected as log evidence and evidence-collection failures stop the runner instead of being hidden behind a zero exit code.
+
 ## v0.3.8
 
 Release QA automation:
