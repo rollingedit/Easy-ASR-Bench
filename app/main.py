@@ -115,12 +115,15 @@ def ensure_dependencies(candidates: list[ModelCandidate], config: dict, referenc
         install_label = f"{group} with {str(accelerator).upper()} packages" if accelerator else group
         print(f"Installing {install_label}...")
         try:
-            install_group_for_config(group, project_root, config)
+            install_decision = install_group_for_config(group, project_root, config)
         except Exception as exc:
             print(f"Install failed for {group}: {exc}")
             print(f"Manual repair command: {recovery_command_for_config(group, config)}")
             failed_groups.add(group)
             continue
+        install_decision = install_decision or {}
+        if install_decision.get("accelerator_fallback_reason"):
+            print(f"Accelerator fallback: {install_decision['accelerator_fallback_reason']}")
         still_missing = missing_modules_for_config(group, config)
         if still_missing:
             print(f"Install finished but {group} is still missing: {', '.join(still_missing)}")

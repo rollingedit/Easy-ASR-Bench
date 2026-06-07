@@ -6,6 +6,7 @@ from .faster_whisper_asr import FasterWhisperASRAdapter
 from .whisper_cpp_asr import WhisperCppASRAdapter
 from .openai_whisper_pt import OpenAIWhisperPTAdapter
 from .generic_onnx_manifest import GenericOnnxManifestAdapter
+from .gguf_asr_mmproj import GGUFASRMMProjAdapter
 from .gguf_llm_reference import GGUFLLMReferenceAdapter
 
 
@@ -18,5 +19,6 @@ BUILTIN_ADAPTERS = [
     WhisperCppASRAdapter(),
     OpenAIWhisperPTAdapter(),
     GenericOnnxManifestAdapter(),
+    GGUFASRMMProjAdapter(),
     GGUFLLMReferenceAdapter(),
 ]

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 import scripts.write_release_smoke as write_release_smoke
-from scripts.verify_github_release import download_assets, sha256, verify_release
+from scripts.verify_github_release import download_assets, sha256, verify_release, write_transcript
 
 
 def test_write_release_smoke_records_automated_passes_and_manual_not_run(tmp_path, monkeypatch):
@@ -31,9 +31,11 @@ def test_write_release_smoke_records_automated_passes_and_manual_not_run(tmp_pat
     assert data["commit"] == "abc123"
     assert data["asset_hashes_verified"] is True
     assert all(check["status"] == "pass" for check in data["checks"])
-    assert data["manual_matrix"]["windows_no_python_install"] == "not_run"
-    assert data["manual_matrix"]["provider_smoke"]["cuda"] == "not_run"
+    assert data["manual_matrix"]["windows_11_clean_no_python"] == "not_run"
+    assert data["manual_matrix"]["windows_existing_python_3_14"] == "not_run"
+    assert data["manual_matrix"]["provider_smoke"]["nvidia_cuda_torch_onnx_faster_whisper_llama"] == "not_run"
     assert data["manual_matrix"]["model_smoke"]["gguf_reference_llm"] == "not_run"
+    assert data["manual_matrix"]["model_smoke"]["audio_asr_gguf_mmproj"] == "not_run"
 
 
 def test_write_release_smoke_fails_when_automated_check_fails(tmp_path, monkeypatch):
@@ -210,6 +212,28 @@ def test_verify_github_release_accepts_complete_mocked_release_with_smoke(tmp_pa
     monkeypatch.setattr("scripts.verify_github_release.download", fake_download)
 
     verify_release("owner/repo", "v0.3.1", "abc123")
+
+
+def test_write_release_verification_transcript_records_assets(tmp_path):
+    transcript = tmp_path / "release-verification-v0.3.1.txt"
+
+    write_transcript(
+        transcript,
+        repo="owner/repo",
+        tag="v0.3.1",
+        expected_commit="abc123",
+        resolved_commit="abc123",
+        release={"id": 12, "draft": True, "prerelease": False},
+        hashes={"setup.bat": "sha256:aaa", "Easy-ASR-Bench-v0.3.1-win.zip": "sha256:bbb"},
+        zip_name="Easy-ASR-Bench-v0.3.1-win.zip",
+    )
+
+    text = transcript.read_text(encoding="utf-8")
+    assert "Easy ASR Bench release verification transcript" in text
+    assert "resolved_release_commit: abc123" in text
+    assert "setup.bat sha256:aaa" in text
+    assert "zip_physical_validation: pass" in text
+    assert "not marked pass" in text
 
 
 def test_download_assets_prefers_authenticated_asset_api_url(tmp_path, monkeypatch):

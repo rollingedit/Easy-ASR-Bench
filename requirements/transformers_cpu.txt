@@ -6,4 +6,3 @@ safetensors
 sentencepiece
 protobuf
 torchaudio
-torchcodec

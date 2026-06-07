@@ -3,15 +3,23 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 set APP_NAME=Easy ASR Bench
-set APP_VERSION=v0.3.2
+set APP_VERSION=v0.3.3
 set INSTALL_DIR=%LOCALAPPDATA%\Easy-ASR-Bench
 set INSTALLER_PS1=%~dp0installer\install.ps1
 set INSTALLER_URL=https://github.com/rollingedit/Easy-ASR-Bench/releases/download/%APP_VERSION%/install.ps1
-set INSTALLER_SHA256=sha256:e97ba0899369d62b4516644b14d2f66e9485bc46ce0fdf6bbd195650ff58263e
+set INSTALLER_SHA256=sha256:7c5aab37516e8163a33ead2567cd944ffd226febbb0835146fbc8eb675d3fef1
 set VERIFY_RELEASE=0
+set ASSET_DIR=
+set NEXT_IS_ASSET_DIR=0
 
 for %%A in (%*) do (
-  if /I "%%~A"=="--verify-release" set VERIFY_RELEASE=1
+  if "!NEXT_IS_ASSET_DIR!"=="1" (
+    set "ASSET_DIR=%%~A"
+    set NEXT_IS_ASSET_DIR=0
+  ) else (
+    if /I "%%~A"=="--verify-release" set VERIFY_RELEASE=1
+    if /I "%%~A"=="--asset-dir" set NEXT_IS_ASSET_DIR=1
+  )
 )
 
 if /I "%~1"=="--dry-run" goto dry_run
@@ -71,6 +79,10 @@ echo %APP_NAME% setup dry run
 echo Version: %APP_VERSION%
 echo Install folder: %INSTALL_DIR%
 echo Mode: validates installer inputs without changing files.
+if not "%ASSET_DIR%"=="" (
+  echo Staged release asset folder: %ASSET_DIR%
+  if exist "%ASSET_DIR%\install.ps1" set "INSTALLER_PS1=%ASSET_DIR%\install.ps1"
+)
 if not exist "%INSTALLER_PS1%" (
   if "%VERIFY_RELEASE%"=="0" (
     echo Installer script was not found beside setup.bat.
@@ -90,11 +102,20 @@ if not exist "%INSTALLER_PS1%" (
 call :verify_sha "%INSTALLER_PS1%" "%INSTALLER_SHA256%" "installer/install.ps1"
 if errorlevel 1 exit /b 1
 if "%VERIFY_RELEASE%"=="1" (
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^
-    -InstallDir "%INSTALL_DIR%" ^
-    -Version "%APP_VERSION%" ^
-    -DryRun ^
-    -VerifyRelease
+  if "%ASSET_DIR%"=="" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^
+      -InstallDir "%INSTALL_DIR%" ^
+      -Version "%APP_VERSION%" ^
+      -DryRun ^
+      -VerifyRelease
+  ) else (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^
+      -InstallDir "%INSTALL_DIR%" ^
+      -Version "%APP_VERSION%" ^
+      -DryRun ^
+      -VerifyRelease ^
+      -AssetDir "%ASSET_DIR%"
+  )
   exit /b %errorlevel%
 )
 powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^

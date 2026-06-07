@@ -6,6 +6,8 @@ import os
 import shutil
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 
@@ -28,7 +30,7 @@ DEPENDENCY_GROUPS = {
         "ONNX ASR model support using CPU-safe defaults",
     ),
     "transformers_cpu": DependencyGroup(
-        ("torch", "transformers", "safetensors", "sentencepiece", "google.protobuf", "torchaudio", "torchcodec"),
+        ("torch", "transformers", "safetensors", "sentencepiece", "google.protobuf", "torchaudio"),
         "requirements/transformers_cpu.txt",
         "Hugging Face safetensors ASR support with common audio/tokenizer extras",
     ),
@@ -50,12 +52,16 @@ DEPENDENCY_GROUPS = {
     "llama_cpp": DependencyGroup(
         ("llama_cpp",),
         "requirements/llama_cpp.txt",
-        "GGUF text LLM reference/correction support",
+        "GGUF ASR+mmproj and text LLM reference/correction support",
     ),
 }
 
 
 REQUIREMENT_FILES = {name: group.requirement_file for name, group in DEPENDENCY_GROUPS.items()}
+
+
+LLAMA_CPP_CUDA_WHEEL_INDEX = "https://abetlen.github.io/llama-cpp-python/whl/cu124"
+LLAMA_CPP_CUDA_WHEEL_PROBE_URL = f"{LLAMA_CPP_CUDA_WHEEL_INDEX}/llama-cpp-python/"
 
 
 CUDA_INSTALL_OVERRIDES = {
@@ -68,8 +74,8 @@ CUDA_INSTALL_OVERRIDES = {
         "description": "faster-whisper/CTranslate2 plus NVIDIA CUDA 12 cuBLAS/cuDNN Python wheels",
     },
     "llama_cpp": {
-        "requirement_files": ["requirements/llama_cpp_cuda_cu125.txt"],
-        "description": "llama-cpp-python CUDA wheel for GGUF reference LLMs",
+        "requirement_files": ["requirements/llama_cpp_cuda_cu124.txt"],
+        "description": "llama-cpp-python CUDA 12.4 prebuilt wheel for GGUF reference LLMs",
     },
     "openai_whisper": {
         "requirement_files": ["requirements/torch_cuda_cu128.txt", "requirements/openai_whisper.txt"],
@@ -211,6 +217,18 @@ def install_group_for_config(group: str, project_root: Path, config: dict) -> di
         override = ACCELERATOR_OVERRIDES[(group, decision["accelerator"])]
         requirement_files = list(override["requirement_files"])
         env = {**os.environ, **override.get("env", {})}
+        if group == "llama_cpp" and decision["accelerator"] == "cuda" and not llama_cpp_cuda_wheel_index_available():
+            requirement_files = [DEPENDENCY_GROUPS[group].requirement_file]
+            decision = {
+                **decision,
+                "use_accelerator": False,
+                "accelerator_fallback": "cpu",
+                "accelerator_fallback_reason": (
+                    f"llama-cpp-python CUDA wheel index was unavailable at {LLAMA_CPP_CUDA_WHEEL_PROBE_URL}; "
+                    "installing the CPU package instead of falling back to a local source build."
+                ),
+                "requirement_files": requirement_files,
+            }
     for requirement_file in requirement_files:
         req = project_root / requirement_file
         if not req.exists():
@@ -227,6 +245,16 @@ def recovery_command(group: str, use_cuda: bool = False) -> str:
     if use_cuda and group in CUDA_INSTALL_OVERRIDES:
         requirement_files = list(CUDA_INSTALL_OVERRIDES[group]["requirement_files"])
     return " && ".join(f'"{sys.executable}" -m pip install -r {requirement_file}' for requirement_file in requirement_files)
+
+
+def llama_cpp_cuda_wheel_index_available(timeout_seconds: int = 10) -> bool:
+    try:
+        request = urllib.request.Request(LLAMA_CPP_CUDA_WHEEL_PROBE_URL, headers={"User-Agent": "Easy-ASR-Bench-dependency-probe"})
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            status = int(getattr(response, "status", 200))
+            return 200 <= status < 400
+    except (OSError, urllib.error.URLError, urllib.error.HTTPError, ValueError):
+        return False
 
 
 def recovery_command_for_config(group: str, config: dict) -> str:

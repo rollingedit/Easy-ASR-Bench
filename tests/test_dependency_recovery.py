@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from app.config import DEFAULT_CONFIG
-from app.dependency_manager import ACCELERATOR_OVERRIDES, CUDA_INSTALL_OVERRIDES, acceleration_install_decision, cuda_install_decision, dependency_status, recovery_command
+from app.dependency_manager import ACCELERATOR_OVERRIDES, CUDA_INSTALL_OVERRIDES, acceleration_install_decision, cuda_install_decision, dependency_status, install_group_for_config, recovery_command
 from app.doctor import run_doctor
 from app.main import ensure_dependencies, warn_runtime_dependency_fallbacks
 from app.results_writer import runtime_environment
@@ -20,7 +20,8 @@ def test_dependency_status_includes_descriptions_and_repair_commands():
     assert recovery_command("llama_cpp").endswith("requirements/llama_cpp.txt")
     assert "requirements/torch_cuda_cu128.txt" in recovery_command("transformers_cpu", use_cuda=True)
     assert "requirements/faster_whisper_cuda.txt" in recovery_command("faster_whisper", use_cuda=True)
-    assert "requirements/llama_cpp_cuda_cu125.txt" in recovery_command("llama_cpp", use_cuda=True)
+    assert "requirements/llama_cpp_cuda_cu124.txt" in recovery_command("llama_cpp", use_cuda=True)
+    assert "torchcodec" not in status["transformers_cpu"]["missing"]
     assert "requirements/openai_whisper.txt" in recovery_command("openai_whisper", use_cuda=True)
 
 
@@ -493,6 +494,34 @@ def test_cuda_repair_triggers_for_llama_cpp_without_gpu_offload(monkeypatch):
     )
 
     assert missing == ["llama-cpp-python GPU offload build"]
+
+
+def test_llama_cuda_install_falls_back_to_cpu_when_wheel_index_unavailable(tmp_path, monkeypatch):
+    (tmp_path / "requirements").mkdir()
+    (tmp_path / "requirements" / "llama_cpp.txt").write_text("llama-cpp-python\n", encoding="utf-8")
+    (tmp_path / "requirements" / "llama_cpp_cuda_cu124.txt").write_text(
+        "--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124\nllama-cpp-python\n",
+        encoding="utf-8",
+    )
+    calls = []
+
+    monkeypatch.setattr("app.dependency_manager.nvidia_gpu_detected", lambda: True)
+    monkeypatch.setattr("app.dependency_manager.llama_cpp_cuda_wheel_index_available", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.subprocess.check_call", lambda command, env=None: calls.append(command))
+
+    decision = install_group_for_config(
+        "llama_cpp",
+        tmp_path,
+        {
+            "runtime": {"provider": "cuda", "prefer_gpu": True},
+            "dependency_install": {"allow_cuda_install": True, "allow_accelerator_install": True},
+        },
+    )
+
+    assert decision["use_accelerator"] is False
+    assert decision["accelerator_fallback"] == "cpu"
+    assert "unavailable" in decision["accelerator_fallback_reason"]
+    assert calls and str(calls[0][-1]).endswith("requirements\\llama_cpp.txt")
 
 
 def test_runtime_environment_persists_cuda_diagnostics(monkeypatch):

@@ -29,7 +29,7 @@ MEDIA_EXTENSIONS = [
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "app": {
-        "version": "0.3.2",
+        "version": "0.3.3",
         "version_channel": "stable",
         "check_for_updates_on_setup": True,
         "check_for_updates_on_run": False,
@@ -114,6 +114,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "custom_model_paths": [],
         "auto_scan_saved_paths": True,
         "manual_external_llm_guide": True,
+    },
+    "llama_cpp": {
+        "context_size": 10240,
+        "timeout_seconds": 600,
+        "mtmd_cli_path": "",
     },
     "advanced": {
         "keep_temp_wavs": False,

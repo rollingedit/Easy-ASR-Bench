@@ -18,7 +18,7 @@ Add `modelbench.json` with CTC decoding metadata. Arbitrary ONNX files do not in
 
 ## Model Is Detected But Not Runnable
 
-That means Easy ASR Bench recognized the package family but does not have a packaged runtime adapter for it yet, or the folder is missing required sibling files. Check the missing-file list shown in the menu/report. Keep split ONNX sidecars, safetensors shards, tokenizer files, `mmproj` files, and runtime-specific config files in the same model folder.
+That means Easy ASR Bench recognized the package family but the folder is incomplete, platform-specific, safety-blocked, or outside the app's packaged runtime scope. Check the missing-file list shown in the menu/report. Keep split ONNX sidecars, safetensors shards, tokenizer files, `mmproj` files, and runtime-specific config files in the same model folder.
 
 ## GGUF Appears Under Reference LLMs
 

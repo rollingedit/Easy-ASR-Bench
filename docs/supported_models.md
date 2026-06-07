@@ -4,11 +4,12 @@
 
 - Known multi-file ONNX AR layouts: `int8`, `fp16w`, `fp32`, `f32`, `float32`
 - Known multi-file ONNX NAR layouts: `int8`, `fp16w`, `fp32`, `f32`, `float32`
-- Hugging Face Transformers ASR folders with `.safetensors`, including native FP32/float32 weights
-- Hugging Face Whisper Safetensors folders, including native FP32/float32 weights
+- Hugging Face Transformers ASR folders with `.safetensors`, including native FP32/float32 weights and complete sharded folders
+- Hugging Face Whisper Safetensors folders, including native FP32/float32 weights and complete sharded folders
 - faster-whisper / CTranslate2 folders
 - whisper.cpp GGML `.bin` files
 - Generic ONNX CTC ASR with `modelbench.json`
+- Audio/ASR GGUF packages with a matching `mmproj` projector through llama-cpp-python Qwen3 ASR support or `llama-mtmd-cli`
 
 ## Hugging Face Downloads
 
@@ -22,17 +23,17 @@ Ambiguous requirements are shown to the user instead of guessed. The app may off
 
 The tested Hugging Face links are representative stress cases, not a complete map of every possible future repo layout. Unknown or mixed package structures should still be audited and expanded with new regression tests when found.
 
-## Recognized, But Not Runnable Yet
+## Recognized, Explained, And Not Misclassified
 
-These package types are recognized so the app can explain what was found, list missing sibling files, and recommend a runnable export or future adapter path:
+These package types are recognized so the app can explain what was found, list missing sibling files, and avoid presenting the wrong runtime path:
 
 - NeMo `.nemo`
 - FunASR folders
 - sherpa-onnx Whisper folders
 - Split Whisper/Transformers.js ONNX, Granite-style split ONNX, Qwen split ONNX, and ORT edge graph packages
 - Core ML / WhisperKit `.mlmodelc`
-- Audio/ASR GGUF packages with matching `mmproj`
-- Sharded Hugging Face Safetensors folders with `model.safetensors.index.json`
+- Incomplete or mismatched Audio/ASR GGUF packages, including missing or nonmatching `mmproj` projectors
+- Incomplete sharded Hugging Face Safetensors folders with Safetensors index JSON files
 
 ## Blocked by Default
 

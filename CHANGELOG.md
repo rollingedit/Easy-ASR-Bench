@@ -1,6 +1,36 @@
 # Changelog
 
-## v0.3.2 candidate
+## v0.3.3 candidate
+
+Model support:
+- Added Audio/ASR GGUF+`mmproj` adapter support. Complete matching packages now appear as runnable ASR candidates instead of recognized-unsupported entries.
+- The GGUF ASR adapter uses llama-cpp-python Qwen3 ASR chat handling when available and falls back to `llama-mtmd-cli` from llama.cpp when present.
+- GGUF text LLMs remain reference/correction models only; Audio/ASR GGUF packages are separated from text reference LLM discovery so they are not misclassified.
+- Incomplete or mismatched Audio/ASR GGUF packages stay out of the runnable list and report exact missing/nonmatching `mmproj` requirements.
+- Expanded sharded Safetensors validation to handle noncanonical index names such as `model.safetensors.index.fp32.json`, not only `model.safetensors.index.json`.
+- Complete sharded Hugging Face Whisper/Transformers Safetensors folders are treated as ASR candidates when the index and all shard files are present; incomplete folders report the missing shard names.
+
+Dependency and safety fixes:
+- Changed GGUF llama.cpp CUDA dependency bootstrap from the unavailable llama-cpp-python `cu125` wheel index to the available `cu124` wheel index.
+- Added a llama-cpp-python CUDA wheel-index probe during optional dependency install; if the prebuilt CUDA wheel index is unavailable, setup falls back to the CPU package with a visible reason instead of attempting a local source build on a normal user's machine.
+- Removed `torchcodec` from the Hugging Face Transformers ASR dependency group because Easy ASR Bench pre-decodes audio and passes arrays to the pipeline, avoiding TorchCodec's Windows FFmpeg shared-library hazard.
+- Populated the OpenAI Whisper `.pt` SHA256 allowlist from the official Whisper model URLs so the advertised checksum-verified safe path is real while unknown or wrong-hash `.pt` files remain blocked by default.
+- Changed Hugging Face large or unknown package confirmation from default-yes to typed `DOWNLOAD`, so Enter and `y` cancel instead of accidentally downloading ambiguous or multi-GB packages.
+
+Docs and validation:
+- Added raw GitHub byte diagnostics with CRLF/LF/bare-CR counts, physical line counts, byte counts, and first/last byte hex for critical public files.
+- Added raw GitHub versus release-ZIP byte comparison for critical public files in the release gate.
+- Added release verification transcript generation via `scripts/verify_github_release.py --write-transcript`, recording resolved release commit, release state, downloaded asset hashes, and completed automated checks.
+- Added staged release asset verification with `setup.bat --dry-run --verify-release --asset-dir <dir>` so the exact local assets can be checked before a draft release is made public.
+- Hardened release publishing so it refuses to replace assets on an already-public release unless `allow_replace_public=true` is explicitly selected.
+- Updated release publishing to upload and re-download `release-verification-vX.Y.Z.txt` before marking the release public/latest.
+- Expanded the release-smoke manual matrix into explicit Windows, install/update/repair/uninstall, bad-checksum, media, provider, and model-family rows so unrun runtime coverage cannot hide behind broad buckets.
+- Updated README and supported-model docs to remove vague "not runnable yet" wording and distinguish runnable ASR, incomplete packages, platform-specific packages, and blocked unsafe formats.
+- Updated setup docs and doctor wording so `llama_cpp` is described as both GGUF ASR+`mmproj` support and GGUF text reference/correction support.
+- Added regression coverage for GGUF ASR+`mmproj` discovery, matching-projector validation, llama-cpp-python transcription path, CLI output cleanup, sharded Safetensors missing-file detection, llama CUDA fallback, the HF dependency list, official Whisper `.pt` checksum verification, raw byte diagnostics, raw-vs-ZIP comparison, release transcript output, staged setup verification, public-release clobber refusal, expanded smoke matrix rows, and typed large-download confirmation.
+- Local candidate validation has passed: full pytest suite, release-file validation, repo/ZIP physical validation, version coherence, strict checksum build, setup dry-run, and strict doctor.
+
+## v0.3.2
 
 Release and installer safety:
 - Hardened standalone setup bootstrap: public setup now downloads `install.ps1` from the versioned GitHub release asset path instead of raw GitHub content and verifies its SHA256 before executing PowerShell.
@@ -82,7 +112,7 @@ Validation and documentation:
 - Added runtime warnings when requested/preferred GPU execution will fall back to CPU.
 - Added `Open_Latest_Report.bat` and included it in installer manifests, release ZIP entrypoints, and uninstall cleanup.
 - Made `Run.bat` print the `compare.html` path after report generation so users can find the HTML report immediately.
-- Expanded required dependency groups for ASR/LLM runtimes: Transformers now includes `accelerate`, `tokenizers`, `sentencepiece`, `protobuf`, `torchaudio`, and `torchcodec`; faster-whisper CUDA includes NVIDIA cuBLAS/cuDNN wheels; CUDA Torch uses the PyTorch CUDA 12.8 wheel index.
+- Expanded required dependency groups for ASR/LLM runtimes: Transformers includes `accelerate`, `tokenizers`, `sentencepiece`, `protobuf`, and `torchaudio`; faster-whisper CUDA includes NVIDIA cuBLAS/cuDNN wheels; CUDA Torch uses the PyTorch CUDA 12.8 wheel index.
 - Improved optional dependency failure handling so a failed optional install skips only the affected model and prints the exact manual repair command.
 - Added broad precision and quantization label detection for INT2/3/4/5/6/8, FP4/8/16/32, BF8, BF16/bfloat16, NF4, NVFP4/NVP4, Q2-Q8, K_M/K_S/K_L, and IQ variants.
 - Added native 32-bit support throughout model discovery and reporting: `fp32`, `f32`, `float32`, and safetensors `torch_dtype: "float32"` now map to `32-bit / FP32`.

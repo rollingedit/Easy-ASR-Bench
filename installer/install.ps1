@@ -1,13 +1,14 @@
 param(
   [string]$InstallDir = "$env:LOCALAPPDATA\Easy-ASR-Bench",
-  [string]$Version = "v0.3.2",
+  [string]$Version = "v0.3.3",
   [switch]$DryRun,
   [switch]$VerifyRelease,
   [switch]$Repair,
   [switch]$Uninstall,
   [switch]$RemoveUserData,
   [string]$ConfirmRemoveUserData = "",
-  [switch]$Doctor
+  [switch]$Doctor,
+  [string]$AssetDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -41,6 +42,18 @@ function Invoke-Download($Uri, $OutFile) {
     Write-SetupLog "Check your internet connection, TLS support, antivirus/proxy settings, or GitHub availability. Log: $Log"
     throw
   }
+}
+
+function Copy-ReleaseAsset($Name, $OutFile) {
+  if ($AssetDir) {
+    $source = Join-Path $AssetDir $Name
+    if (-not (Test-Path -LiteralPath $source)) {
+      throw "Staged release asset is missing: $source"
+    }
+    Copy-Item -LiteralPath $source -Destination $OutFile -Force
+    return
+  }
+  Invoke-Download "$ReleaseBase/$Name" $OutFile
 }
 
 function Resolve-Python {
@@ -153,12 +166,17 @@ function Assert-StagingPhysicalFiles($Root) {
 
 function Test-ReleaseAssets($Python) {
   Write-SetupLog "Verify-release dry run:"
-  Write-SetupLog "  release: $ReleaseBase"
+  if ($AssetDir) {
+    Write-SetupLog "  staged asset dir: $AssetDir"
+  }
+  else {
+    Write-SetupLog "  release: $ReleaseBase"
+  }
   Remove-Item -LiteralPath $TempRoot -Recurse -Force -ErrorAction SilentlyContinue
   New-Item -ItemType Directory -Force -Path $Stage | Out-Null
-  Invoke-Download "$ReleaseBase/manifest.json" $Manifest
+  Copy-ReleaseAsset "manifest.json" $Manifest
   Write-SetupLog "[OK] manifest downloaded"
-  Invoke-Download "$ReleaseBase/checksums.json" $Checksums
+  Copy-ReleaseAsset "checksums.json" $Checksums
   Write-SetupLog "[OK] checksums downloaded"
   $manifestJson = Get-Content -Raw -LiteralPath $Manifest | ConvertFrom-Json
   $checksumsJson = Get-Content -Raw -LiteralPath $Checksums | ConvertFrom-Json
@@ -173,10 +191,10 @@ function Test-ReleaseAssets($Python) {
     Assert-Checksum $Manifest $checksumsJson.files.'manifest.json' "manifest.json"
     $releaseSetup = Join-Path $TempRoot "release-setup.bat"
     $releaseInstaller = Join-Path $TempRoot "release-install.ps1"
-    Invoke-Download "$ReleaseBase/setup.bat" $releaseSetup
+    Copy-ReleaseAsset "setup.bat" $releaseSetup
     Write-SetupLog "[OK] setup.bat downloaded"
     Assert-Checksum $releaseSetup $checksumsJson.files.'setup.bat' "setup.bat"
-    Invoke-Download "$ReleaseBase/install.ps1" $releaseInstaller
+    Copy-ReleaseAsset "install.ps1" $releaseInstaller
     Write-SetupLog "[OK] install.ps1 downloaded"
     Assert-Checksum $releaseInstaller $checksumsJson.files.'install.ps1' "install.ps1"
   }
@@ -184,7 +202,7 @@ function Test-ReleaseAssets($Python) {
     Write-SetupLog "Legacy manifest does not declare installer_asset; skipping standalone bootstrap asset verification."
   }
   $zipName = $manifestJson.app_zip
-  Invoke-Download "$ReleaseBase/$zipName" $Zip
+  Copy-ReleaseAsset $zipName $Zip
   Write-SetupLog "[OK] app ZIP downloaded"
   Assert-Checksum $Zip $checksumsJson.files.$zipName $zipName
   Expand-Archive -LiteralPath $Zip -DestinationPath $Stage -Force

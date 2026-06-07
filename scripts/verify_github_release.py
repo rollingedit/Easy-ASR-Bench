@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import urllib.error
@@ -74,6 +75,10 @@ def release_assets_by_name(release: dict) -> dict[str, dict]:
     return assets
 
 
+def asset_hashes(local_assets: dict[str, Path]) -> dict[str, str]:
+    return {name: sha256(path) for name, path in sorted(local_assets.items())}
+
+
 def fetch_release(repo: str, tag: str) -> dict:
     api = f"https://api.github.com/repos/{repo}/releases/tags/{tag}"
     try:
@@ -86,7 +91,46 @@ def fetch_release(repo: str, tag: str) -> dict:
         for release in releases:
             if release.get("tag_name") == tag:
                 return release
+    gh_release = fetch_release_with_gh(repo, tag)
+    if gh_release:
+        return gh_release
     raise AssertionError(f"GitHub release not found for tag {tag}")
+
+
+def fetch_release_with_gh(repo: str, tag: str) -> dict | None:
+    command = [
+        "gh",
+        "release",
+        "view",
+        tag,
+        "--repo",
+        repo,
+        "--json",
+        "tagName,isDraft,isPrerelease,databaseId,assets",
+    ]
+    try:
+        completed = subprocess.run(command, text=True, capture_output=True, check=False)
+    except FileNotFoundError:
+        return None
+    if completed.returncode != 0 or not completed.stdout.strip():
+        return None
+    data = json.loads(completed.stdout)
+    assets = []
+    for asset in data.get("assets", []):
+        assets.append(
+            {
+                "name": asset.get("name"),
+                "url": asset.get("apiUrl") or asset.get("url"),
+                "browser_download_url": asset.get("url"),
+            }
+        )
+    return {
+        "tag_name": data.get("tagName", tag),
+        "id": data.get("databaseId"),
+        "draft": data.get("isDraft"),
+        "prerelease": data.get("isPrerelease"),
+        "assets": assets,
+    }
 
 
 def download_asset(asset: dict, destination: Path) -> None:
@@ -175,9 +219,52 @@ def validate_release_zip(zip_path: Path, temp: Path) -> None:
     validate_root(app_root)
 
 
-def verify_release(repo: str, tag: str, expected_commit: str | None) -> None:
+def write_transcript(
+    output: Path,
+    repo: str,
+    tag: str,
+    expected_commit: str | None,
+    resolved_commit: str,
+    release: dict,
+    hashes: dict[str, str],
+    zip_name: str,
+) -> None:
+    lines = [
+        "Easy ASR Bench release verification transcript",
+        f"repo: {repo}",
+        f"tag: {tag}",
+        f"expected_commit: {expected_commit or ''}",
+        f"resolved_release_commit: {resolved_commit}",
+        f"release_id: {release.get('id', '')}",
+        f"release_draft: {release.get('draft', '')}",
+        f"release_prerelease: {release.get('prerelease', '')}",
+        "",
+        "downloaded_assets:",
+    ]
+    for name, digest in hashes.items():
+        lines.append(f"  {name} {digest}")
+    lines.extend(
+        [
+            "",
+            "checks:",
+            "  tag_commit_match: pass" if expected_commit else "  tag_commit_match: not_requested",
+            "  required_assets_present: pass",
+            "  manifest_and_checksums_valid: pass",
+            "  release_smoke_asset_valid: pass",
+            "  asset_hashes_match_checksums_json: pass",
+            f"  zip_physical_validation: pass ({zip_name})",
+            "",
+            "manual_matrix_note: VM, GPU/provider, model, and media rows are not marked pass by this transcript.",
+        ]
+    )
+    output.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+
+def verify_release(repo: str, tag: str, expected_commit: str | None, transcript_path: Path | None = None) -> None:
     release = fetch_release(repo, tag)
-    assert_commit_matches(repo, tag, expected_commit)
+    resolved_commit = resolve_tag_commit(repo, tag)
+    if expected_commit and resolved_commit and not resolved_commit.startswith(expected_commit) and not expected_commit.startswith(resolved_commit):
+        raise AssertionError(f"Release tag target mismatch. Expected {expected_commit}, got {resolved_commit}")
 
     temp = Path(tempfile.mkdtemp(prefix="easy-asr-release-"))
     try:
@@ -188,6 +275,8 @@ def verify_release(repo: str, tag: str, expected_commit: str | None) -> None:
         verify_smoke_asset(tag, expected_commit, manifest, local_assets)
         verify_checksum_manifest(checksums, local_assets)
         validate_release_zip(local_assets[zip_name], temp)
+        if transcript_path:
+            write_transcript(transcript_path, repo, tag, expected_commit, resolved_commit, release, asset_hashes(local_assets), zip_name)
     finally:
         shutil.rmtree(temp, ignore_errors=True)
 
@@ -197,9 +286,10 @@ def main() -> int:
     parser.add_argument("--repo", required=True, help="owner/repo")
     parser.add_argument("--tag", required=True)
     parser.add_argument("--expected-commit")
+    parser.add_argument("--write-transcript", type=Path)
     args = parser.parse_args()
     try:
-        verify_release(args.repo, args.tag, args.expected_commit)
+        verify_release(args.repo, args.tag, args.expected_commit, args.write_transcript)
     except Exception as exc:
         print(f"GitHub release verification failed: {exc}", file=sys.stderr)
         return 1

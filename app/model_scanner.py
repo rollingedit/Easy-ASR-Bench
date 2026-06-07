@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .adapters import BUILTIN_ADAPTERS
 from .adapters.base import ModelCandidate
+from .adapters.gguf_asr_mmproj import find_gguf_asr_pair
 from .precision_detector import detect_from_path, detect_safetensors_folder_precision, indexed_safetensor_missing_files
 
 
@@ -20,6 +21,7 @@ ADAPTER_PRIORITY = {
     "whisper_cpp": 65,
     "openai_whisper_pt": 60,
     "generic_onnx_manifest": 50,
+    "gguf_asr_mmproj": 40,
     "gguf_llm_reference": 10,
     "none": 0,
 }
@@ -329,20 +331,13 @@ def recognize_sherpa_onnx_package(root: Path) -> ModelCandidate | None:
 
 
 def recognize_asr_gguf_projector_package(root: Path) -> ModelCandidate | None:
-    ggufs = [item for item in root.glob("*.gguf") if item.is_file()]
-    if not ggufs:
+    pair = find_gguf_asr_pair(root)
+    if pair is None:
         return None
-    projectors = [item for item in ggufs if item.name.lower().startswith(("mmproj", "mmproj-"))]
-    main_models = [item for item in ggufs if item not in projectors]
-    asr_named = any(any(signal in item.name.lower() for signal in ["asr", "audio", "whisper"]) for item in ggufs)
-    if not projectors and not asr_named:
+    main_model, projector, missing = pair
+    if main_model is not None and projector is not None and not missing:
         return None
-    missing = []
-    if not main_models:
-        missing.append("main ASR/audio model .gguf")
-    if not projectors:
-        missing.append("matching mmproj .gguf")
-    raw, bucket = detect_from_path(main_models[0] if main_models else root)
+    raw, bucket = detect_from_path(main_model if main_model else root)
     return unsupported_asr_candidate(
         root,
         candidate_id=f"asr_gguf_mmproj__{root.name}",
