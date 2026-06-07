@@ -61,6 +61,28 @@ def test_installer_verify_release_checks_uploaded_bootstrap_assets():
     assert "Legacy manifest does not declare installer_asset" in installer
     assert "Assert-StagingPhysicalFiles" in installer
     assert "Python 3.10-3.14" in installer
+    assert "Validating installed app after local setup" in installer
+    assert "Installed app validation failed" in installer
+
+
+def test_setup_discovers_supported_python_matrix():
+    setup = (ROOT / "setup.bat").read_text(encoding="utf-8")
+
+    assert "for %%V in (3.14 3.13 3.12 3.11 3.10)" in setup
+    assert "winget install -e --id Python.Python.3.12" in setup
+    assert "Python 3.10 through 3.14 was not found" in setup
+
+
+def test_release_smoke_writer_and_verifier_require_smoke_asset():
+    smoke_writer = (ROOT / "scripts" / "write_release_smoke.py").read_text(encoding="utf-8")
+    verifier = (ROOT / "scripts" / "verify_github_release.py").read_text(encoding="utf-8")
+    publish = (ROOT / ".github" / "workflows" / "publish-release.yml").read_text(encoding="utf-8")
+
+    assert "easy_asr_bench.release_smoke.v1" in smoke_writer
+    assert "\"not_run\"" in smoke_writer
+    assert "release-smoke-$tag.json" in publish
+    assert "Release smoke asset is missing" in verifier
+    assert "asset_hashes_verified" in verifier
 
 
 def test_release_verifier_peels_annotated_tags():

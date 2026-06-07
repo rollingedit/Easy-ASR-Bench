@@ -412,6 +412,41 @@ def test_interactive_download_requires_confirmation_for_large_choice(tmp_path: P
     assert called["downloaded"] is False
 
 
+def test_interactive_download_inspection_failure_returns_to_user_without_crash(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("app.hf_model_downloader.list_repo_files", lambda ref: (_ for _ in ()).throw(RuntimeError("network down")))
+    messages: list[str] = []
+
+    result = download_hf_model_interactive(
+        tmp_path,
+        input_func=lambda prompt: "owner/model",
+        print_func=messages.append,
+    )
+
+    assert result is None
+    assert any("Could not inspect that Hugging Face model" in message for message in messages)
+    assert any("network down" in message for message in messages)
+
+
+def test_interactive_download_unknown_choice_requires_confirmation(tmp_path: Path, monkeypatch):
+    files = ["custom/export.foo", "custom/weights.custom"]
+    monkeypatch.setattr("app.hf_model_downloader.list_repo_files", lambda ref: files)
+    called = {"downloaded": False}
+
+    def fake_download(ref, choice, destination, print_func=print):
+        called["downloaded"] = True
+        return []
+
+    monkeypatch.setattr("app.hf_model_downloader.download_choice", fake_download)
+    answers = iter(["https://huggingface.co/owner/model/tree/main/custom", "n"])
+    messages: list[str] = []
+
+    result = download_hf_model_interactive(tmp_path, input_func=lambda prompt: next(answers), print_func=messages.append)
+
+    assert result is None
+    assert called["downloaded"] is False
+    assert any("unknown package layout" in message for message in messages)
+
+
 def test_offer_missing_file_repair_downloads_exact_repo_matches(tmp_path: Path, monkeypatch):
     destination = tmp_path / "model"
     destination.mkdir()

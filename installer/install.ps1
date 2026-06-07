@@ -1,6 +1,6 @@
 param(
   [string]$InstallDir = "$env:LOCALAPPDATA\Easy-ASR-Bench",
-  [string]$Version = "v0.3.1",
+  [string]$Version = "v0.3.2",
   [switch]$DryRun,
   [switch]$VerifyRelease,
   [switch]$Repair,
@@ -436,6 +436,20 @@ try {
   Invoke-Step "Running local setup" {
     $p = Start-Process -FilePath "cmd.exe" -ArgumentList "/c setup.bat --local" -Wait -PassThru
     if ($p.ExitCode -ne 0) { throw "local setup failed with exit code $($p.ExitCode)" }
+  }
+  Invoke-Step "Validating installed app after local setup" {
+    $installedPython = Join-Path $InstallDir ".venv\Scripts\python.exe"
+    $installedValidator = Join-Path $InstallDir "scripts\validate_release_files.py"
+    if (-not (Test-Path $installedPython)) {
+      throw "Installed Python runtime was not created."
+    }
+    if (-not (Test-Path $installedValidator)) {
+      throw "Installed release validator is missing."
+    }
+    & $installedPython $installedValidator
+    if ($LASTEXITCODE -ne 0) {
+      throw "Installed app validation failed with exit code $LASTEXITCODE"
+    }
   }
 }
 catch {

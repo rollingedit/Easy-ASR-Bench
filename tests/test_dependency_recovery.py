@@ -293,6 +293,115 @@ def test_optional_install_failure_prints_repair_and_skips_only_affected(monkeypa
     assert "Good model" not in output
 
 
+def test_disabled_auto_install_skips_only_models_with_missing_groups(monkeypatch, tmp_path: Path, capsys):
+    from app.adapters.base import ModelCandidate
+
+    class FakeAdapter:
+        name = "fake"
+
+        def required_dependency_groups(self, candidate):
+            return list(candidate.metadata.get("groups", []))
+
+    good = ModelCandidate(
+        candidate_id="good",
+        display_name="Good model",
+        family_name="Good",
+        backend="test",
+        container_format="test",
+        task="automatic-speech-recognition",
+        precision="fp32",
+        quantization_label="fp32",
+        path=tmp_path / "good",
+        adapter_name="fake",
+        runnable=True,
+        metadata={"groups": []},
+    )
+    bad = ModelCandidate(
+        candidate_id="bad",
+        display_name="Bad model",
+        family_name="Bad",
+        backend="test",
+        container_format="test",
+        task="automatic-speech-recognition",
+        precision="fp32",
+        quantization_label="fp32",
+        path=tmp_path / "bad",
+        adapter_name="fake",
+        runnable=True,
+        metadata={"groups": ["onnx"]},
+    )
+
+    monkeypatch.setattr("app.main.adapter_for", lambda candidate: FakeAdapter())
+    monkeypatch.setattr("app.dependency_manager.missing_modules", lambda group: ["onnxruntime"] if group == "onnx" else [])
+
+    kept, _ = ensure_dependencies(
+        [good, bad],
+        {"dependency_install": {"auto_install_missing_runtime_dependencies": False}},
+    )
+
+    output = capsys.readouterr().out
+    assert kept == [good]
+    assert "Automatic dependency repair is disabled" in output
+    assert "Skipping Bad model" in output
+
+
+def test_reference_llm_dependency_failure_does_not_drop_asr_models(monkeypatch, tmp_path: Path, capsys):
+    from app.adapters.base import ModelCandidate
+
+    class FakeAdapter:
+        name = "fake"
+
+        def required_dependency_groups(self, candidate):
+            return list(candidate.metadata.get("groups", []))
+
+    asr = ModelCandidate(
+        candidate_id="asr",
+        display_name="ASR model",
+        family_name="ASR",
+        backend="test",
+        container_format="test",
+        task="automatic-speech-recognition",
+        precision="fp32",
+        quantization_label="fp32",
+        path=tmp_path / "asr",
+        adapter_name="fake",
+        runnable=True,
+        metadata={"groups": []},
+    )
+    llm = ModelCandidate(
+        candidate_id="llm",
+        display_name="Reference LLM",
+        family_name="LLM",
+        backend="llama.cpp",
+        container_format="gguf",
+        task="text-generation",
+        precision="q4",
+        quantization_label="Q4",
+        path=tmp_path / "llm.gguf",
+        adapter_name="fake",
+        runnable=True,
+        category="reference_llm",
+        metadata={"groups": ["llama_cpp"]},
+    )
+
+    monkeypatch.setattr("app.main.adapter_for", lambda candidate: FakeAdapter())
+    monkeypatch.setattr("builtins.input", lambda prompt: "")
+    monkeypatch.setattr("app.dependency_manager.missing_modules", lambda group: ["llama_cpp"] if group == "llama_cpp" else [])
+    monkeypatch.setattr("app.dependency_manager.install_group_for_config", lambda group, root, config: (_ for _ in ()).throw(RuntimeError("pip failed")))
+
+    kept, kept_llm = ensure_dependencies(
+        [asr],
+        {"dependency_install": {"auto_install_missing_runtime_dependencies": True}},
+        reference_llm=llm,
+    )
+
+    output = capsys.readouterr().out
+    assert kept == [asr]
+    assert kept_llm is None
+    assert "Skipping Reference LLM" in output
+    assert "ASR model" not in output
+
+
 def test_optional_install_uses_cuda_requirements_when_allowed(monkeypatch, tmp_path: Path, capsys):
     from app.adapters.base import ModelCandidate
 

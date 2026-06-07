@@ -131,6 +131,22 @@ def test_faster_whisper_vocabulary_txt_detected(tmp_path: Path):
     assert any(candidate.adapter_name == "faster_whisper" for candidate in runnable)
 
 
+def test_nested_models_with_same_folder_name_get_unique_candidate_ids(tmp_path: Path):
+    for rel in ["Group A/same", "Group B/same"]:
+        model = tmp_path / rel
+        model.mkdir(parents=True)
+        (model / "model.bin").write_text("", encoding="utf-8")
+        (model / "config.json").write_text("{}", encoding="utf-8")
+        (model / "tokenizer.json").write_text("{}", encoding="utf-8")
+
+    runnable, unsupported = scan_models(tmp_path)
+    ids = [candidate.candidate_id for candidate in runnable + unsupported]
+
+    assert len(ids) == len(set(ids))
+    assert any("group_a" in candidate_id for candidate_id in ids)
+    assert any("group_b" in candidate_id for candidate_id in ids)
+
+
 def test_hf_safetensors_missing_shard_is_reported(tmp_path: Path):
     model = tmp_path / "wav2vec2-sharded"
     model.mkdir()

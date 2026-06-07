@@ -1,10 +1,10 @@
 {
   "schema": "easy_asr_bench.checksums.v1",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "files": {
-    "Easy-ASR-Bench-v0.3.1-win.zip": "sha256:647bcb78e9ba0a318e11710847c4f1bf9b1687bd9533927cba1d623f86bc94b9",
-    "setup.bat": "sha256:664261f1f71d3e0bcae0d6a5a845ed5038ad4b2d01bca1ccb19d308cf99d82c6",
-    "install.ps1": "sha256:4dad4fc3eeb67485c297c9e5d9b5b2c3e53a9bd204bf6dc29bd60c13d52f2029",
-    "manifest.json": "sha256:7663fceb53fcad08ed8a6f876148de35ba256e7765d3c2db5d93f158e3498c41"
+    "Easy-ASR-Bench-v0.3.2-win.zip": "sha256:f74b9b9a46f828360ca1427ae460be055be243ffc3dcbdc500cc43ef9136f6ce",
+    "setup.bat": "sha256:6cba4f0763aae9ad44094d3cf5b6dceeb6cb7c11347847d36ffe04f1948a6311",
+    "install.ps1": "sha256:66f22103940874301924915c9c0f1dd081c982e9704d953f38c46167822391d1",
+    "manifest.json": "sha256:ac3544824f58828e508f527b2a85b784eeda283905c6be405d1f10f6a8418a12"
   }
 }

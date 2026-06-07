@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.3.1 candidate
+## v0.3.2 candidate
 
 Release and installer safety:
 - Hardened standalone setup bootstrap: public setup now downloads `install.ps1` from the versioned GitHub release asset path instead of raw GitHub content and verifies its SHA256 before executing PowerShell.
@@ -9,12 +9,15 @@ Release and installer safety:
 - Updated GitHub release publishing to upload `install.ps1` as a release asset and verify uploaded release asset hashes after publication.
 - Changed release publishing so uploaded draft assets are verified before the release is marked public/latest.
 - Added a public `scripts/verify_github_release.py` verifier for downloaded GitHub release assets, including annotated-tag handling for expected-commit checks.
+- Added `release-smoke-vX.Y.Z.json` generation and release verification so every new release carries machine-readable automated validation evidence without pretending unrun VM/GPU/model rows passed.
 - Added release physical-file validation for repo and ZIP bytes, including CRLF launcher checks, LF source/docs/config checks, YAML/JSON/Python parsing, requirements formatting, and minimum physical line counts for critical files.
 - Added raw GitHub source validation for pushed commits so collapsed or CR-only public bytes are caught from `raw.githubusercontent.com`, not only from the checkout.
 - Added release version-coherence validation so `app.__version__`, `setup.bat`, `install.ps1`, manifest, checksums, and ZIP names must agree.
+- Made release CI use strict committed checksum validation and fail if release metadata is generated but not committed.
 - Kept checksum validation scoped to release/bootstrap artifacts and unsafe checkpoint allowlists; normal user-supplied ASR/LLM models are still structure/runtime validated rather than hash-policed.
 - Hardened uninstall behavior: standalone `setup.bat --uninstall` can locate the installed uninstaller, and destructive user-data removal requires an explicit confirmation string.
 - Added PowerShell staging validation before activation so clean systems without Python still get basic ZIP layout, line-ending, and critical-file line-count checks before local setup runs.
+- Added installed-app validation after local setup so systems that bootstrap Python during install still run the Python release validator before setup reports success.
 
 Runtime and report correctness:
 - Improved media error reporting for no-audio videos, ffprobe failures, and FFmpeg conversion failures.
@@ -25,7 +28,9 @@ Runtime and report correctness:
 
 Validation and documentation:
 - Added `docs/release_verification.md` with local gates, GitHub release asset verification, and manual Windows QA rows that must not be claimed as verified unless actually run.
-- Added regression coverage for release bootstrap assets, version coherence, raw source validation, publish workflow ordering, annotated Git tag verification, Unicode scoring edge cases, long HTML report pagination guards, LLM reference validation guards, Windows pasted path parsing, and queue fast-key skipping.
+- Added `docs/hf_downloader_validation.md` and fixture file-list tests for split GGUF, ASR GGUF+projector, sharded Safetensors, multi-variant ONNX, and unknown inspection-only layouts.
+- Added fixture E2E pipeline tests with fake adapters so one model can fail while reports still write JSON/TXT/CSV/HTML and media preparation failures return cleanly.
+- Added regression coverage for release bootstrap assets, version coherence, raw source validation, publish workflow ordering, release-smoke artifacts, annotated Git tag verification, Unicode scoring edge cases, long HTML report pagination guards, LLM reference validation guards, Windows pasted path parsing, candidate-ID uniqueness for nested model folders, dependency fallback skipping, and queue fast-key skipping.
 
 ## v0.3.0
 

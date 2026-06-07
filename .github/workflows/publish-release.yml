@@ -35,10 +35,16 @@ jobs:
       - name: Build release ZIP
         run: python scripts/build_release_zip.py --version ${{ inputs.tag }} --update-metadata
 
+      - name: Ensure release metadata was committed
+        run: git diff --exit-code -- setup.bat installer/manifest.json installer/checksums.json
+
       - name: Stage release bootstrap assets
         shell: pwsh
         run: |
           Copy-Item installer/install.ps1 install.ps1
+
+      - name: Write release smoke artifact
+        run: python scripts/write_release_smoke.py --tag ${{ inputs.tag }} --commit ${{ github.sha }} --output release-smoke-${{ inputs.tag }}.json
 
       - name: Write release notes
         run: python scripts/write_release_notes.py ${{ inputs.tag }} --output release_notes/${{ inputs.tag }}.md
@@ -57,7 +63,7 @@ jobs:
           } else {
             gh release create $tag --title "Easy ASR Bench $tag" --notes-file $notes --draft
           }
-          gh release upload $tag $zip setup.bat install.ps1 installer/manifest.json installer/checksums.json --clobber
+          gh release upload $tag $zip setup.bat install.ps1 installer/manifest.json installer/checksums.json release-smoke-$tag.json --clobber
 
       - name: Verify uploaded draft release assets
         shell: pwsh

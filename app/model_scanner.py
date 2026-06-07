@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from .adapters import BUILTIN_ADAPTERS
@@ -42,6 +43,37 @@ TOKENIZER_FILES = {"tokenizer.json", "tokenizer.model", "tokenizer_config.json",
 
 def candidate_root(candidate: ModelCandidate) -> Path:
     return candidate.path.parent.resolve() if candidate.path.is_file() else candidate.path.resolve()
+
+
+def _candidate_path_suffix(candidate: ModelCandidate, models_root: Path) -> str:
+    root = candidate_root(candidate)
+    try:
+        rel = root.relative_to(models_root.resolve())
+    except ValueError:
+        rel = root
+    suffix = "__".join(part.lower().replace(" ", "_") for part in rel.parts if part)
+    return suffix or "root"
+
+
+def ensure_unique_candidate_ids(candidates: list[ModelCandidate], models_root: Path) -> list[ModelCandidate]:
+    counts: dict[str, int] = {}
+    for candidate in candidates:
+        counts[candidate.candidate_id] = counts.get(candidate.candidate_id, 0) + 1
+    seen: set[str] = set()
+    unique: list[ModelCandidate] = []
+    for candidate in candidates:
+        candidate_id = candidate.candidate_id
+        if counts[candidate_id] > 1:
+            base = candidate_id
+            candidate_id = f"{base}__{_candidate_path_suffix(candidate, models_root)}"
+            counter = 2
+            while candidate_id in seen:
+                candidate_id = f"{base}__{_candidate_path_suffix(candidate, models_root)}__{counter}"
+                counter += 1
+            candidate = replace(candidate, candidate_id=candidate_id)
+        seen.add(candidate.candidate_id)
+        unique.append(candidate)
+    return unique
 
 
 def missing_names(root: Path, names: list[str]) -> list[str]:
@@ -622,7 +654,8 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
         for candidate in discovered
         if not candidate.runnable and candidate_root(candidate) not in runnable_roots
     ]
-    return runnable, partial + list(unique_unsupported.values())
+    unsupported_output = partial + list(unique_unsupported.values())
+    return ensure_unique_candidate_ids(runnable, models_root), ensure_unique_candidate_ids(unsupported_output, models_root)
 
 
 def dedupe_runnable(candidates: list[ModelCandidate]) -> list[ModelCandidate]:
