@@ -412,6 +412,44 @@ def test_interactive_download_requires_confirmation_for_large_choice(tmp_path: P
     assert called["downloaded"] is False
 
 
+def test_interactive_download_rejects_y_for_large_choice(tmp_path: Path, monkeypatch):
+    files = ["config.json", "tokenizer.json", "preprocessor_config.json"]
+    files.extend(f"onnx/encoder_model_{index}.onnx" for index in range(21))
+    monkeypatch.setattr("app.hf_model_downloader.list_repo_files", lambda ref: files)
+    called = {"downloaded": False}
+
+    def fake_download(ref, choice, destination, print_func=print):
+        called["downloaded"] = True
+        return []
+
+    monkeypatch.setattr("app.hf_model_downloader.download_choice", fake_download)
+    answers = iter(["owner/model", "y"])
+
+    result = download_hf_model_interactive(tmp_path, input_func=lambda prompt: next(answers), print_func=lambda text: None)
+
+    assert result is None
+    assert called["downloaded"] is False
+
+
+def test_interactive_download_accepts_typed_download_for_large_choice(tmp_path: Path, monkeypatch):
+    files = ["config.json", "tokenizer.json", "preprocessor_config.json"]
+    files.extend(f"onnx/encoder_model_{index}.onnx" for index in range(21))
+    monkeypatch.setattr("app.hf_model_downloader.list_repo_files", lambda ref: files)
+    called = {"downloaded": False}
+
+    def fake_download(ref, choice, destination, print_func=print):
+        called["downloaded"] = True
+        return []
+
+    monkeypatch.setattr("app.hf_model_downloader.download_choice", fake_download)
+    answers = iter(["owner/model", "DOWNLOAD"])
+
+    result = download_hf_model_interactive(tmp_path, input_func=lambda prompt: next(answers), print_func=lambda text: None)
+
+    assert result is not None
+    assert called["downloaded"] is True
+
+
 def test_interactive_download_inspection_failure_returns_to_user_without_crash(tmp_path: Path, monkeypatch):
     monkeypatch.setattr("app.hf_model_downloader.list_repo_files", lambda ref: (_ for _ in ()).throw(RuntimeError("network down")))
     messages: list[str] = []

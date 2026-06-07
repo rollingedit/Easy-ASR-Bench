@@ -34,6 +34,7 @@ METADATA_NAMES = {
 
 LARGE_CHOICE_FILE_COUNT = 20
 SAME_PACKAGE_REPAIR_LIMIT = 12
+TYPED_DOWNLOAD_CONFIRMATION = "DOWNLOAD"
 
 
 @dataclass(frozen=True)
@@ -720,8 +721,9 @@ def download_hf_model_interactive(models_root: Path, input_func=input, print_fun
         print_func(f"Selected package has {len(selected.files)} file(s).")
         if selected.task_hint == "unknown":
             print_func("This is an unknown package layout and may not be runnable.")
-        answer = input_func(f"Download this package now? [{key('Y')}/{key('n')}] ").strip().lower()
-        if answer in {"n", "no"}:
+        print_func("Large or unknown packages require typed confirmation to prevent accidental multi-GB downloads.")
+        answer = input_func(f"Type {key(TYPED_DOWNLOAD_CONFIRMATION)} to download, or press Enter to cancel: ").strip()
+        if answer != TYPED_DOWNLOAD_CONFIRMATION:
             print_func("Download cancelled.")
             return None
     destination = destination_for(models_root, ref, selected)

@@ -26,10 +26,11 @@ It runs every selected ASR model on the same normalized audio and the same chunk
 - Known multi-file ONNX ASR layouts, including AR folders with `int8`, `fp16w`, `fp32`, `f32`, or `float32` precision folders
 - Known multi-file ONNX ASR layouts, including NAR folders with `int8`, `fp16w`, `fp32`, `f32`, or `float32` precision folders
 - Hugging Face Transformers ASR folders using `.safetensors` weights, including native FP32/float32 weights
-- Hugging Face Whisper Safetensors folders, including native FP32/float32 weights
+- Hugging Face Whisper and Transformers Safetensors folders, including sharded folders when the index and all shard files are present
 - faster-whisper / CTranslate2 folders
 - whisper.cpp GGML `.bin` models
 - Generic ONNX CTC manifest v1 models with a valid `modelbench.json` manifest using the built-in CTC recipe
+- Audio/ASR GGUF packages with a matching `mmproj` projector through llama-cpp-python Qwen3 ASR support or `llama-mtmd-cli`
 
 Precision and quantization labels such as INT4, INT5, INT6, INT8, FP4, NF4, NVFP4/NVP4, FP8, BF8, BF16/bfloat16, FP16, FP32, Q4/Q5/Q6/Q8, K_M/K_S variants, and IQ variants are detected for grouping/reporting when the underlying model backend supports them. Easy ASR Bench does not invent a runtime for an unsupported model format; it labels the model accurately and installs the dependency group for the matching backend.
 
@@ -39,17 +40,17 @@ For complete Hugging Face Safetensors folders that do not look like text-generat
 
 - OpenAI Whisper `.pt` checkpoint files are detected, but blocked by default because `.pt` uses pickle-backed loading. They run only when a checksum is explicitly allowlisted by the app or when you deliberately enable unsafe trusted-file loading in `config.json`.
 
-### Recognized But Not Runnable Yet
+### Recognized, Explained, And Not Misclassified
 
-The scanner also recognizes common ASR packages that are real model formats but do not have a packaged runtime adapter yet. These are shown with the expected missing files and a recommendation instead of being hidden as unknown files.
+The scanner also recognizes common model packages that should not be silently treated as unknown files or as the wrong model type. When one of these layouts is incomplete or outside the app's packaged runtime scope, Easy ASR Bench reports the exact package family, expected sibling files, and the concrete next action instead of pretending it is runnable.
 
 - NeMo `.nemo` archives
 - FunASR folders with `model.pt`, `config.yaml`, `am.mvn`, and tokenizer/BPE files
 - sherpa-onnx Whisper packages with matching encoder, decoder, tokens, and optional weights
 - Split Whisper/Transformers.js ONNX, Granite-style split ONNX, Qwen split ONNX, and ORT edge graph packages
 - Core ML / WhisperKit `.mlmodelc` packages, which are not runnable in this Windows-first app
-- Audio/ASR GGUF packages that require a matching `mmproj` file; these are not the same as GGUF text reference LLMs
-- Sharded Hugging Face Safetensors folders, including missing shard detection from `model.safetensors.index.json`
+- Incomplete or mismatched Audio/ASR GGUF packages, including missing or nonmatching `mmproj` projectors
+- Incomplete sharded Hugging Face Safetensors folders, including missing shard detection from Safetensors index JSON files
 
 ### GGUF Reference Models
 
@@ -210,7 +211,7 @@ GPU acceleration is detected, not assumed. If `config.json` requests or prefers 
 
 Easy ASR Bench is GPU-first. The default config prefers GPU and allows accelerator package installation when a supported provider is detected. CPU is a fallback, not the goal.
 
-When GPU setup is possible, ONNX models use CUDA on NVIDIA, OpenVINO on Intel, or DirectML on Windows GPUs including AMD, Intel, and NVIDIA. Hugging Face/OpenAI Whisper models use the PyTorch CUDA helper on NVIDIA. AMD's native Windows PyTorch ROCm path is currently limited to AMD's supported Python/GPU matrix, so the packaged flow does not silently install it for every AMD system. faster-whisper installs CUDA cuBLAS/cuDNN Python runtime wheels on NVIDIA; AMD ROCm CTranslate2 requires a ROCm build path and is not treated as a simple Windows pip install. GGUF reference LLMs use llama-cpp-python CUDA wheels on NVIDIA and expose a Vulkan build path for AMD/Intel/NVIDIA systems when the Vulkan runtime and Vulkan SDK build tools are detected.
+When GPU setup is possible, ONNX models use CUDA on NVIDIA, OpenVINO on Intel, or DirectML on Windows GPUs including AMD, Intel, and NVIDIA. Hugging Face/OpenAI Whisper models use the PyTorch CUDA helper on NVIDIA. AMD's native Windows PyTorch ROCm path is currently limited to AMD's supported Python/GPU matrix, so the packaged flow does not silently install it for every AMD system. faster-whisper installs CUDA cuBLAS/cuDNN Python runtime wheels on NVIDIA; AMD ROCm CTranslate2 requires a ROCm build path and is not treated as a simple Windows pip install. GGUF reference LLMs use llama-cpp-python CUDA 12.4 wheels on NVIDIA when the wheel index is reachable; if the prebuilt CUDA wheel index is unavailable, setup falls back to the CPU package instead of attempting a local source build. GGUF reference LLMs also expose a Vulkan build path for AMD/Intel/NVIDIA systems when the Vulkan runtime and Vulkan SDK build tools are detected.
 
 `whisper.cpp` via `pywhispercpp` remains CPU-only in the packaged dependency flow because current GPU support requires source/build flags rather than a stable simple wheel install. Use faster-whisper or HF/OpenAI Whisper for GPU ASR.
 

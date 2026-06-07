@@ -164,6 +164,24 @@ def test_hf_safetensors_missing_shard_is_reported(tmp_path: Path):
     assert "model-00002-of-00002.safetensors" in candidate.missing_files
 
 
+def test_hf_safetensors_unusual_index_name_missing_shard_is_reported(tmp_path: Path):
+    model = tmp_path / "wav2vec2-sharded-fp32"
+    model.mkdir()
+    (model / "config.json").write_text(json.dumps({"model_type": "wav2vec2", "architectures": ["Wav2Vec2ForCTC"]}), encoding="utf-8")
+    (model / "model-00001-of-00002.safetensors").write_text("", encoding="utf-8")
+    (model / "model.safetensors.index.fp32.json").write_text(
+        json.dumps({"weight_map": {"a": "model-00001-of-00002.safetensors", "b": "model-00002-of-00002.safetensors"}}),
+        encoding="utf-8",
+    )
+    (model / "tokenizer.json").write_text("{}", encoding="utf-8")
+
+    runnable, unsupported = scan_models(tmp_path)
+
+    assert runnable == []
+    candidate = next(candidate for candidate in unsupported if candidate.adapter_name == "hf_transformers_asr")
+    assert "model-00002-of-00002.safetensors" in candidate.missing_files
+
+
 def test_standalone_safetensors_explained(tmp_path: Path):
     (tmp_path / "random.safetensors").write_text("", encoding="utf-8")
     runnable, unsupported = scan_models(tmp_path)
@@ -243,10 +261,12 @@ def test_asr_gguf_with_mmproj_is_not_text_reference_llm(tmp_path: Path):
 
     runnable, unsupported = scan_models(tmp_path)
 
-    assert not any(candidate.adapter_name == "gguf_llm_reference" for candidate in unsupported)
-    candidate = next(candidate for candidate in unsupported if candidate.container_format == "gguf+mmproj")
-    assert candidate.category == "recognized_unsupported_asr"
+    candidate = next(candidate for candidate in runnable if candidate.adapter_name == "gguf_asr_mmproj")
+    assert candidate.container_format == "gguf+mmproj"
+    assert candidate.category == "asr"
     assert candidate.missing_files == []
+    assert candidate.metadata["mmproj_path"].endswith("mmproj-Qwen3-ASR-1.7B-Q8_0.gguf")
+    assert not any(candidate.adapter_name == "gguf_llm_reference" for candidate in unsupported)
 
 
 def test_asr_named_gguf_without_mmproj_reports_projector(tmp_path: Path):
@@ -257,6 +277,19 @@ def test_asr_named_gguf_without_mmproj_reports_projector(tmp_path: Path):
     candidate = next(candidate for candidate in unsupported if candidate.container_format == "gguf+mmproj")
     assert "matching mmproj .gguf" in candidate.missing_files
     assert not any(candidate.adapter_name == "gguf_llm_reference" for candidate in unsupported)
+
+
+def test_asr_gguf_with_mismatched_mmproj_reports_projector(tmp_path: Path):
+    model = tmp_path / "qwen3-asr-gguf"
+    model.mkdir()
+    (model / "Qwen3-ASR-1.7B-Q8_0.gguf").write_bytes(b"gguf")
+    (model / "mmproj-Qwen3-ASR-1.7B-Q4_K_M.gguf").write_bytes(b"gguf")
+
+    runnable, unsupported = scan_models(tmp_path)
+
+    assert not any(candidate.adapter_name == "gguf_asr_mmproj" for candidate in runnable)
+    candidate = next(candidate for candidate in unsupported if candidate.container_format == "gguf+mmproj")
+    assert "matching mmproj .gguf" in candidate.missing_files
 
 
 def test_nemo_archive_is_recognized_as_unsupported_asr(tmp_path: Path):

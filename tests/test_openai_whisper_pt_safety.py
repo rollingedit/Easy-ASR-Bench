@@ -11,6 +11,12 @@ import app.adapters.openai_whisper_pt as openai_pt
 from app.adapters.openai_whisper_pt import OpenAIWhisperPTAdapter
 
 
+def test_official_openai_whisper_allowlist_is_populated():
+    assert openai_pt.KNOWN_OFFICIAL_SHA256["tiny.pt"] == "65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9"
+    assert openai_pt.KNOWN_OFFICIAL_SHA256["large-v3.pt"] == "e5b1a55b89c1367dacf97e3e19bfd829a01529dbfdeefa8caeb59b3f1b81dadb"
+    assert "large-v3-turbo.pt" in openai_pt.KNOWN_OFFICIAL_SHA256
+
+
 def write_checkpoint(path: Path, data: bytes = b"checkpoint") -> str:
     path.write_bytes(data)
     return hashlib.sha256(data).hexdigest()

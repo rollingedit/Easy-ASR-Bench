@@ -42,7 +42,7 @@ def test_installer_uses_tls12_and_basic_parsing_for_downloads():
             assert "-UseBasicParsing" in line
 
 
-def test_readme_does_not_claim_openai_pt_is_runnable_with_empty_allowlist():
+def test_readme_keeps_openai_pt_out_of_default_runnable_models():
     readme = Path("README.md").read_text(encoding="utf-8")
     runnable_section = readme.split("### Runnable ASR Models", 1)[1].split("### Blocked By Default", 1)[0]
 

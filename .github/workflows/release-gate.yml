@@ -42,6 +42,7 @@ jobs:
         run: |
           $version = python -c "import app; print('v' + app.__version__)"
           python scripts/build_release_zip.py --version $version --strict-checksums
+          python scripts/validate_raw_github_files.py --repo rollingedit/Easy-ASR-Bench --commit ${{ github.sha }} --zip dist/Easy-ASR-Bench-$version-win.zip
 
       - name: Upload built release ZIP
         uses: actions/upload-artifact@v4
@@ -66,6 +67,7 @@ jobs:
           gh release download $tag --pattern setup.bat --pattern install.ps1 --dir release-asset
           gh release download $tag --pattern $zipName --dir release-asset
           gh release download $tag --pattern "release-smoke-$tag.json" --dir release-asset
+          gh release download $tag --pattern "release-verification-$tag.txt" --dir release-asset
           foreach ($asset in @($zipName, "setup.bat", "install.ps1", "manifest.json")) {
             $actual = "sha256:" + (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path "release-asset" $asset)).Hash.ToLowerInvariant()
             $expected = $checksums.files.$asset
@@ -76,6 +78,10 @@ jobs:
           $smoke = Get-Content -Raw (Join-Path "release-asset" "release-smoke-$tag.json") | ConvertFrom-Json
           if ($smoke.schema -ne "easy_asr_bench.release_smoke.v1" -or $smoke.tag -ne $tag -or $smoke.asset_hashes_verified -ne $true) {
             throw "Published release smoke artifact is missing required proof fields."
+          }
+          $transcript = Get-Content -Raw (Join-Path "release-asset" "release-verification-$tag.txt")
+          if (-not $transcript.Contains("Easy ASR Bench release verification transcript") -or -not $transcript.Contains("downloaded_assets:")) {
+            throw "Published release verification transcript is missing required proof fields."
           }
           python scripts/validate_physical_files.py --zip (Join-Path "release-asset" $zipName)
 

@@ -7,6 +7,11 @@ on:
         description: "Release tag, for example v0.2.7"
         required: true
         type: string
+      allow_replace_public:
+        description: "Allow replacing assets on an already-public release"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   publish:
@@ -42,6 +47,12 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item installer/install.ps1 install.ps1
+          New-Item -ItemType Directory -Force -Path dist/release-assets | Out-Null
+          Copy-Item dist/Easy-ASR-Bench-${{ inputs.tag }}-win.zip dist/release-assets/
+          Copy-Item setup.bat dist/release-assets/
+          Copy-Item installer/install.ps1 dist/release-assets/install.ps1
+          Copy-Item installer/manifest.json dist/release-assets/
+          Copy-Item installer/checksums.json dist/release-assets/
 
       - name: Write release smoke artifact
         run: python scripts/write_release_smoke.py --tag ${{ inputs.tag }} --commit ${{ github.sha }} --output release-smoke-${{ inputs.tag }}.json
@@ -57,8 +68,12 @@ jobs:
           $tag = "${{ inputs.tag }}"
           $zip = "dist/Easy-ASR-Bench-$tag-win.zip"
           $notes = "release_notes/$tag.md"
-          gh release view $tag *> $null
+          $existingJson = gh release view $tag --json isDraft 2>$null
           if ($LASTEXITCODE -eq 0) {
+            $existing = $existingJson | ConvertFrom-Json
+            if ($existing.isDraft -ne $true -and "${{ inputs.allow_replace_public }}" -ne "true") {
+              throw "Refusing to replace assets on an already-public release. Use a new tag, or rerun with allow_replace_public=true."
+            }
             gh release edit $tag --title "Easy ASR Bench $tag" --notes-file $notes
           } else {
             gh release create $tag --title "Easy ASR Bench $tag" --notes-file $notes --draft
@@ -73,7 +88,25 @@ jobs:
           python scripts/verify_github_release.py `
             --repo rollingedit/Easy-ASR-Bench `
             --tag ${{ inputs.tag }} `
-            --expected-commit ${{ github.sha }}
+            --expected-commit ${{ github.sha }} `
+            --write-transcript release-verification-${{ inputs.tag }}.txt
+
+      - name: Verify standalone setup against staged release assets before publish
+        shell: cmd
+        run: setup.bat --dry-run --verify-release --asset-dir dist\release-assets
+
+      - name: Upload release verification transcript
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload ${{ inputs.tag }} release-verification-${{ inputs.tag }}.txt --clobber
+          Remove-Item -LiteralPath release-verification-${{ inputs.tag }}.txt -Force
+          gh release download ${{ inputs.tag }} --pattern release-verification-${{ inputs.tag }}.txt --dir uploaded-transcript
+          $transcript = Get-Content -Raw (Join-Path uploaded-transcript release-verification-${{ inputs.tag }}.txt)
+          if (-not $transcript.Contains("Easy ASR Bench release verification transcript") -or -not $transcript.Contains("downloaded_assets:")) {
+            throw "Uploaded release verification transcript is missing required proof fields."
+          }
 
       - name: Publish verified release
         shell: pwsh
