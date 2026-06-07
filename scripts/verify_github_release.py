@@ -36,6 +36,8 @@ def request_json(url: str) -> dict:
 
 def download(url: str, destination: Path) -> None:
     headers = {"User-Agent": "Easy-ASR-Bench-release-verifier"}
+    if "api.github.com" in url and "/releases/assets/" in url:
+        headers["Accept"] = "application/octet-stream"
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -71,11 +73,25 @@ def release_assets_by_name(release: dict) -> dict[str, dict]:
     return assets
 
 
+def download_asset(asset: dict, destination: Path) -> None:
+    urls = [asset.get("url"), asset.get("browser_download_url")]
+    last_error: Exception | None = None
+    for url in [item for item in urls if item]:
+        try:
+            download(url, destination)
+            return
+        except Exception as exc:
+            last_error = exc
+    if last_error:
+        raise last_error
+    raise AssertionError(f"Release asset {asset.get('name', '<unknown>')} has no downloadable URL")
+
+
 def download_assets(assets: dict[str, dict], destination: Path) -> dict[str, Path]:
     local_assets: dict[str, Path] = {}
     for name, asset in assets.items():
         path = destination / name
-        download(asset["browser_download_url"], path)
+        download_asset(asset, path)
         local_assets[name] = path
     return local_assets
 
