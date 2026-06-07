@@ -12,9 +12,9 @@ Use a complete Hugging Face ASR folder with:
 - `.safetensors` weights
 - tokenizer and processor files
 
-## Generic ONNX Not Runnable
+## Generic ONNX CTC Manifest Not Runnable
 
-Add `modelbench.json`. Arbitrary ONNX files do not include enough information for preprocessing and decoding.
+Add `modelbench.json` with CTC decoding metadata. Arbitrary ONNX files do not include enough information for preprocessing and decoding, and non-CTC graphs require dedicated adapters.
 
 ## Model Is Detected But Not Runnable
 

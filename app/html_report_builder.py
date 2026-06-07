@@ -83,6 +83,10 @@ let scored = null;
 let latestScores = null;
 let chunkPage = 0;
 const pageSize = 25;
+const transcriptPageSize = 5000;
+const alignmentPageSize = 500;
+const transcriptPages = {{}};
+const alignmentPages = {{}};
 function tab(id) {{ for (const s of document.querySelectorAll('section')) s.classList.toggle('active', s.id===id); }}
 function words(s, normalized=true) {{
   s = String(s || '');
@@ -180,10 +184,28 @@ function renderPairwise() {{
 }}
 function renderTranscripts() {{
   document.getElementById('transcriptsBody').innerHTML = (results.runs || []).map(run => {{
-    const s = latestScores?.[run.model.candidate_id];
-    const diff = s?.alignment ? `<div class="diffline">${{renderAlignment(s.alignment)}}</div>` : `<pre>${{escapeHtml(fullText(run))}}</pre>`;
-    return `<h3>${{safe(run.model.display_name)}} <span class="badge">${{safe(run.model.precision)}}</span></h3>${{diff}}`;
+    const id = run.model.candidate_id;
+    const s = latestScores?.[id];
+    const body = s?.alignment ? renderAlignmentPage(id, s.alignment) : renderTranscriptTextPage(id, fullText(run));
+    return `<h3>${{safe(run.model.display_name)}} <span class="badge">${{safe(run.model.precision)}}</span></h3>${{body}}`;
   }}).join('');
+}}
+function renderTranscriptTextPage(runId, text) {{
+  const pages = Math.max(1, Math.ceil(String(text).length / transcriptPageSize));
+  const page = Math.min(transcriptPages[runId] || 0, pages - 1);
+  transcriptPages[runId] = page;
+  const start = page * transcriptPageSize;
+  const slice = String(text).slice(start, start + transcriptPageSize);
+  const controls = `<div class="pager"><button onclick="transcriptPages['${{safe(runId)}}']=Math.max(0,(${{page}})-1);renderTranscripts()">Prev</button><span>Transcript page ${{page+1}} / ${{pages}}</span><button onclick="transcriptPages['${{safe(runId)}}']=Math.min(${{pages-1}},(${{page}})+1);renderTranscripts()">Next</button></div>`;
+  return `${{controls}}<pre>${{escapeHtml(slice)}}</pre>`;
+}}
+function renderAlignmentPage(runId, items) {{
+  const pages = Math.max(1, Math.ceil((items || []).length / alignmentPageSize));
+  const page = Math.min(alignmentPages[runId] || 0, pages - 1);
+  alignmentPages[runId] = page;
+  const slice = (items || []).slice(page * alignmentPageSize, (page + 1) * alignmentPageSize);
+  const controls = `<div class="pager"><button onclick="alignmentPages['${{safe(runId)}}']=Math.max(0,(${{page}})-1);renderTranscripts()">Prev</button><span>Alignment page ${{page+1}} / ${{pages}}</span><button onclick="alignmentPages['${{safe(runId)}}']=Math.min(${{pages-1}},(${{page}})+1);renderTranscripts()">Next</button></div>`;
+  return `${{controls}}<div class="diffline">${{renderAlignment(slice)}}</div>`;
 }}
 function renderChunks() {{
   const chunks = results.chunk_plan?.chunks || [];

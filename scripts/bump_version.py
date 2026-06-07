@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILES = [
+    "app/version.py",
     "app/__init__.py",
     "app/config.py",
     "config.json",
@@ -38,15 +39,16 @@ def update_json(path: Path, version: str) -> None:
 
 
 def current_version() -> str:
-    init_text = (ROOT / "app" / "__init__.py").read_text(encoding="utf-8")
-    match = re.search(r'__version__\s*=\s*"([^"]+)"', init_text)
+    version_text = (ROOT / "app" / "version.py").read_text(encoding="utf-8")
+    match = re.search(r'VERSION\s*=\s*"([^"]+)"', version_text)
     if not match:
-        raise SystemExit("Could not find app.__version__")
+        raise SystemExit("Could not find app.version.VERSION")
     return match.group(1)
 
 
 def tracked_text_files() -> list[Path]:
     release_inputs = [
+        "app/version.py",
         "app/__init__.py",
         "app/config.py",
         "config.json",
@@ -85,7 +87,7 @@ def bump(tag: str) -> None:
     if old == version:
         print(f"Version already set to {version}")
         return
-    replace_regex(ROOT / "app" / "__init__.py", r'__version__\s*=\s*"[^"]+"', f'__version__ = "{version}"')
+    replace_regex(ROOT / "app" / "version.py", r'VERSION\s*=\s*"[^"]+"', f'VERSION = "{version}"')
     replace_regex(ROOT / "app" / "config.py", r'"version":\s*"[^"]+"', f'"version": "{version}"')
     update_json(ROOT / "config.json", version)
     replace_regex(ROOT / "pyproject.toml", r'version\s*=\s*"[^"]+"', f'version = "{version}"')

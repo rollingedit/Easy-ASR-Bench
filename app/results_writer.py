@@ -36,6 +36,10 @@ DEPENDENCY_PACKAGES = [
 
 
 def candidate_to_dict(candidate) -> dict:
+    runtime_precision_supported = bool(candidate.runnable)
+    runtime_precision_reason = candidate.metadata.get("runtime_precision_reason", "")
+    if not runtime_precision_supported and not runtime_precision_reason:
+        runtime_precision_reason = "Detected precision is reported for identification; runtime support depends on the selected adapter and complete required files."
     return {
         "candidate_id": candidate.candidate_id,
         "display_name": candidate.display_name,
@@ -44,7 +48,10 @@ def candidate_to_dict(candidate) -> dict:
         "container_format": candidate.container_format,
         "task": candidate.task,
         "precision": candidate.precision,
+        "detected_precision": candidate.precision,
         "precision_bucket": candidate.quantization_label,
+        "runtime_precision_supported": runtime_precision_supported,
+        "runtime_precision_reason": runtime_precision_reason,
         "path": str(candidate.path),
         "adapter_name": candidate.adapter_name,
         "warnings": list(candidate.warnings),

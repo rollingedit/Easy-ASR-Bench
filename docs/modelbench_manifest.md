@@ -1,6 +1,6 @@
-# Generic ONNX Manifest
+# Generic ONNX CTC Manifest v1
 
-Generic ONNX ASR models require `modelbench.json`.
+Generic ONNX CTC ASR models require `modelbench.json`. This adapter supports CTC-style ASR ONNX only; seq2seq, RNNT/transducer, Whisper encoder-decoder, Qwen split ONNX, sherpa-onnx, and custom decoder-loop graphs require dedicated adapters.
 
 Easy ASR Bench does not guess arbitrary ONNX preprocessing and decoding. The manifest tells the app which built-in safe recipe to use.
 

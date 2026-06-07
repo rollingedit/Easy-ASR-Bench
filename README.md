@@ -29,7 +29,7 @@ It runs every selected ASR model on the same normalized audio and the same chunk
 - Hugging Face Whisper Safetensors folders, including native FP32/float32 weights
 - faster-whisper / CTranslate2 folders
 - whisper.cpp GGML `.bin` models
-- Generic ONNX ASR models with a valid `modelbench.json` manifest using the built-in CTC recipe
+- Generic ONNX CTC manifest v1 models with a valid `modelbench.json` manifest using the built-in CTC recipe
 
 Precision and quantization labels such as INT4, INT5, INT6, INT8, FP4, NF4, NVFP4/NVP4, FP8, BF8, BF16/bfloat16, FP16, FP32, Q4/Q5/Q6/Q8, K_M/K_S variants, and IQ variants are detected for grouping/reporting when the underlying model backend supports them. Easy ASR Bench does not invent a runtime for an unsupported model format; it labels the model accurately and installs the dependency group for the matching backend.
 
@@ -123,9 +123,9 @@ Models/
 
 Easy ASR Bench scans `Models` recursively, so you can organize models in nested folders by family, app, format, or quality tier.
 
-## Generic ONNX Manifest
+## Generic ONNX CTC Manifest v1
 
-Generic ONNX ASR models need `modelbench.json` so Easy ASR Bench knows how to preprocess, feed inputs, select outputs, and decode them safely.
+Generic ONNX CTC manifest v1 models need `modelbench.json` so Easy ASR Bench knows how to preprocess, feed inputs, select outputs, and decode them safely. This adapter supports CTC-style ASR ONNX only. Whisper encoder-decoder, transducer/RNNT, seq2seq, sherpa-onnx, Qwen split ONNX, and custom decoder-loop graphs require dedicated adapters.
 
 Minimal CTC manifest:
 
@@ -223,7 +223,7 @@ Easy ASR Bench does not execute arbitrary Python files from model folders. Safet
 - **No runnable ASR models:** put a complete supported model folder in `Models`.
 - **Dependency missing:** accept the install prompt when a selected model needs an optional dependency group, or run `setup.bat --doctor` and use the printed repair command.
 - **Standalone `.safetensors` file:** use the complete Hugging Face model folder, not only the weights file.
-- **Generic `.onnx` file:** add `modelbench.json` with CTC decoding metadata and a vocab file.
+- **Generic `.onnx` file:** add `modelbench.json` with CTC decoding metadata and a vocab file. Non-CTC ONNX graphs require a dedicated adapter.
 - **GPU unavailable:** run `setup.bat --doctor`. It reports NVIDIA, AMD, Intel, Vulkan, Torch CUDA, ONNX Runtime providers, and dependency repair commands. If setup cannot make GPU work, CPU fallback is reported explicitly.
 - **Cannot find `compare.html`:** run a benchmark first, then open `Open_Latest_Report.bat` or go to the newest folder under `Output`.
 - **Media conversion failed:** check that the file opens normally and that there is enough disk space in `Temp`.

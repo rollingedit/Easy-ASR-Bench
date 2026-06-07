@@ -31,3 +31,22 @@ def test_case_only_difference_affects_strict_not_normalized():
 
     assert scores["normalized_wer"] == 0
     assert scores["strict_wer"] > 0
+
+
+def test_char_for_cjk_tokenizer_splits_cjk_without_spaces():
+    text = "\u4f60\u597d\u4e16\u754c"
+
+    assert normalize_words(text, tokenizer="char_for_cjk") == ["\u4f60", "\u597d", "\u4e16", "\u754c"]
+    assert wer(text, "\u4f60\u597d\u4e16", normalized=True, tokenizer="char_for_cjk") == 0.25
+
+
+def test_hebrew_niqqud_survives_normalization():
+    text = "\u05e9\u05b8\u05c1\u05dc\u05d5\u05b9\u05dd"
+
+    assert normalize_words(text) == [text]
+
+
+def test_thai_no_space_sentence_can_use_char_tokenizer():
+    text = "\u0e2a\u0e27\u0e31\u0e2a\u0e14\u0e35"
+
+    assert len(normalize_words(text, tokenizer="char_for_cjk")) > 1

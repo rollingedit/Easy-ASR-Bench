@@ -63,7 +63,7 @@ Release checksums protect the setup/bootstrap assets that Easy ASR Bench publish
 
 Setup writes logs to `Logs/setup.log`.
 
-Default uninstall removes app/runtime files but preserves user data folders and `config.json`. A standalone downloaded `setup.bat --uninstall` can use the installed uninstaller when the installer script is not beside `setup.bat`. Destructive user-data removal requires the explicit PowerShell installer flags `-RemoveUserData -ConfirmRemoveUserData "DELETE USER DATA"`.
+Default uninstall removes app/runtime files but preserves user data folders and `config.json`. A standalone downloaded `setup.bat --uninstall` can use the installed uninstaller when the installer script is not beside `setup.bat`. Destructive user-data removal requires the explicit PowerShell installer flags `-RemoveUserData -ConfirmRemoveUserData "DELETE EASY ASR BENCH USER DATA"`.
 
 Updates write `Logs/install-preservation-report.json` listing preserved user folders, file counts, and byte counts.
 

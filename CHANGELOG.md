@@ -13,9 +13,11 @@ Release and installer safety:
 - Added release physical-file validation for repo and ZIP bytes, including CRLF launcher checks, LF source/docs/config checks, YAML/JSON/Python parsing, requirements formatting, and minimum physical line counts for critical files.
 - Added raw GitHub source validation for pushed commits so collapsed or CR-only public bytes are caught from `raw.githubusercontent.com`, not only from the checkout.
 - Added release version-coherence validation so `app.__version__`, `setup.bat`, `install.ps1`, manifest, checksums, and ZIP names must agree.
+- Added `app/version.py` as the release version source used by `app.__version__` and release coherence checks.
 - Made release CI use strict committed checksum validation and fail if release metadata is generated but not committed.
 - Kept checksum validation scoped to release/bootstrap artifacts and unsafe checkpoint allowlists; normal user-supplied ASR/LLM models are still structure/runtime validated rather than hash-policed.
 - Hardened uninstall behavior: standalone `setup.bat --uninstall` can locate the installed uninstaller, and destructive user-data removal requires an explicit confirmation string.
+- Changed destructive user-data removal confirmation to the app-specific phrase `DELETE EASY ASR BENCH USER DATA`.
 - Added PowerShell staging validation before activation so clean systems without Python still get basic ZIP layout, line-ending, and critical-file line-count checks before local setup runs.
 - Added installed-app validation after local setup so systems that bootstrap Python during install still run the Python release validator before setup reports success.
 
@@ -24,13 +26,18 @@ Runtime and report correctness:
 - Reported Granite AR/NAR chunk exceptions in structured run errors instead of only embedding them in transcript text.
 - Configured ONNX Runtime DirectML sessions with DirectML-safe session options: memory pattern disabled and sequential execution.
 - Fixed faster-whisper CPU fallback so requested FP16 uses the effective CPU-safe compute type when constructing the model.
+- Added a whisper.cpp runtime probe for the `pywhispercpp.Model.transcribe` API shape before loading a model.
+- Tightened Generic ONNX support to explicit "Generic ONNX CTC manifest v1" wording and rejects non-CTC manifests before runtime.
+- Added transcript and alignment paging in `compare.html` so long reports do not inject full transcript/alignment content into the DOM at once.
+- Added detected precision vs runtime precision support fields in result model metadata.
+- Added optional `char_for_cjk` scoring tokenization for CJK/Thai-style no-space text while keeping the default tokenizer unchanged.
 - Improved Unicode scoring normalization and long HTML report guards.
 
 Validation and documentation:
 - Added `docs/release_verification.md` with local gates, GitHub release asset verification, and manual Windows QA rows that must not be claimed as verified unless actually run.
 - Added `docs/hf_downloader_validation.md` and fixture file-list tests for split GGUF, ASR GGUF+projector, sharded Safetensors, multi-variant ONNX, and unknown inspection-only layouts.
 - Added fixture E2E pipeline tests with fake adapters so one model can fail while reports still write JSON/TXT/CSV/HTML and media preparation failures return cleanly.
-- Added regression coverage for release bootstrap assets, version coherence, raw source validation, publish workflow ordering, release-smoke artifacts, annotated Git tag verification, Unicode scoring edge cases, long HTML report pagination guards, LLM reference validation guards, Windows pasted path parsing, candidate-ID uniqueness for nested model folders, dependency fallback skipping, and queue fast-key skipping.
+- Added regression coverage for release bootstrap assets, version coherence, raw source validation, publish workflow ordering, release-smoke artifacts, annotated Git tag verification, OpenAI Whisper `.pt` safety, whisper.cpp runtime probing, Generic ONNX CTC manifest scope, precision-vs-runtime support, multilingual scoring edge cases, long HTML transcript/alignment pagination, LLM reference validation guards, Windows pasted path parsing, candidate-ID uniqueness for nested model folders, dependency fallback skipping, and queue fast-key skipping.
 
 ## v0.3.0
 

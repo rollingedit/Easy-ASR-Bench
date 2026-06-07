@@ -24,13 +24,14 @@ class GenericOnnxManifestAdapter:
             missing = validate_manifest(data, manifest.parent)
             raw, bucket = normalize_precision_label(str(data.get("precision", "unknown")))
             runnable = not missing and data.get("task") == "automatic-speech-recognition"
+            warnings = [] if runnable else ["Generic ONNX CTC manifest v1 is incomplete or not runnable."]
             candidates.append(
                 ModelCandidate(
-                    candidate_id=f"manifest_onnx__{manifest.parent.name}".lower().replace(" ", "_"),
+                    candidate_id=f"manifest_onnx_ctc__{manifest.parent.name}".lower().replace(" ", "_"),
                     display_name=str(data.get("display_name", manifest.parent.name)),
                     family_name=manifest.parent.name,
                     backend="onnxruntime",
-                    container_format="onnx",
+                    container_format="onnx-ctc-manifest",
                     task=str(data.get("task", "unknown")),
                     precision=raw,
                     quantization_label=bucket,
@@ -38,8 +39,8 @@ class GenericOnnxManifestAdapter:
                     adapter_name=self.name,
                     runnable=runnable,
                     missing_files=missing,
-                    warnings=[] if runnable else ["Generic ONNX manifest is incomplete or not ASR."],
-                    help_text="Generic ONNX support requires modelbench.json with built-in ctc decoding metadata.",
+                    warnings=warnings,
+                    help_text="Generic ONNX CTC manifest v1 supports only CTC-style ASR ONNX. Whisper encoder-decoder, transducer/RNNT, seq2seq, sherpa-onnx, Qwen split ONNX, and custom decoder-loop graphs require dedicated adapters.",
                     metadata={"manifest": data},
                 )
             )
@@ -48,11 +49,11 @@ class GenericOnnxManifestAdapter:
     def _bad_candidate(self, manifest: Path, warning: str) -> ModelCandidate:
         raw, bucket = normalize_precision_label("unknown")
         return ModelCandidate(
-            candidate_id=f"manifest_onnx__{manifest.parent.name}".lower().replace(" ", "_"),
+            candidate_id=f"manifest_onnx_ctc__{manifest.parent.name}".lower().replace(" ", "_"),
             display_name=manifest.parent.name,
             family_name=manifest.parent.name,
             backend="onnxruntime",
-            container_format="onnx",
+            container_format="onnx-ctc-manifest",
             task="unknown",
             precision=raw,
             quantization_label=bucket,
@@ -146,7 +147,10 @@ def validate_manifest(data: dict, root: Path) -> list[str]:
     if not files.get("model") or not (root / files.get("model", "")).exists():
         missing.append("files.model")
     decoding = data.get("decoding", {})
-    if decoding.get("type") == "ctc":
+    decoding_type = decoding.get("type")
+    if decoding_type != "ctc":
+        missing.append("decoding.type=ctc; this adapter supports only CTC-style ASR ONNX manifests in v1")
+    if decoding_type == "ctc":
         if "blank_token_id" not in decoding:
             missing.append("decoding.blank_token_id")
         vocab_file = decoding.get("vocab_file") or decoding.get("tokenizer_json")

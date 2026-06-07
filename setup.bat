@@ -7,7 +7,7 @@ set APP_VERSION=v0.3.2
 set INSTALL_DIR=%LOCALAPPDATA%\Easy-ASR-Bench
 set INSTALLER_PS1=%~dp0installer\install.ps1
 set INSTALLER_URL=https://github.com/rollingedit/Easy-ASR-Bench/releases/download/%APP_VERSION%/install.ps1
-set INSTALLER_SHA256=sha256:66f22103940874301924915c9c0f1dd081c982e9704d953f38c46167822391d1
+set INSTALLER_SHA256=sha256:e97ba0899369d62b4516644b14d2f66e9485bc46ce0fdf6bbd195650ff58263e
 set VERIFY_RELEASE=0
 
 for %%A in (%*) do (

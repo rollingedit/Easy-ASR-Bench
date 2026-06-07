@@ -90,7 +90,19 @@ class OpenAIWhisperPTAdapter:
             out.append(ChunkTranscript(str(metadata["chunk_id"]), float(metadata["start_seconds"]), float(metadata["end_seconds"]), text.strip()))
         audio_seconds = sum(float(item["end_seconds"]) - float(item["start_seconds"]) for item in chunk_metadata)
         device = str(getattr(self.model, "device", "cpu")) if self.model is not None else "cpu"
-        return ModelRunResult(self.candidate, out, {"provider": "openai-whisper", "device": device, "audio_seconds": audio_seconds, "chunk_count": len(chunks), "inference_seconds": inference_seconds, "total_wall_seconds": inference_seconds, "peak_process_memory_mb": peak_ram, "audio_seconds_per_wall_second": audio_seconds / max(0.001, inference_seconds)}, errors)
+        metrics = {
+            "provider": "openai-whisper",
+            "device": device,
+            "audio_seconds": audio_seconds,
+            "chunk_count": len(chunks),
+            "inference_seconds": inference_seconds,
+            "total_wall_seconds": inference_seconds,
+            "peak_process_memory_mb": peak_ram,
+            "audio_seconds_per_wall_second": audio_seconds / max(0.001, inference_seconds),
+            "unsafe_pt_loading_enabled": bool(self.runtime_config.get("security", {}).get("allow_pickle_or_pt_files", False)),
+            "checkpoint_sha256_verified": bool(self.candidate and is_verified_official_checkpoint(self.candidate.path)),
+        }
+        return ModelRunResult(self.candidate, out, metrics, errors)
 
     def unload(self) -> None:
         self.model = None

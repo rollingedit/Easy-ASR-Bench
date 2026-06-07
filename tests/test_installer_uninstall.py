@@ -12,5 +12,6 @@ def test_destructive_uninstall_requires_explicit_confirmation():
     text = Path("installer/install.ps1").read_text(encoding="utf-8")
 
     assert "ConfirmRemoveUserData" in text
-    assert "DELETE USER DATA" in text
+    assert "DELETE EASY ASR BENCH USER DATA" in text
+    assert 'ConfirmRemoveUserData -ne "DELETE USER DATA"' not in text
     assert "Destructive uninstall refused" in text
