@@ -1,5 +1,5 @@
 param(
-  [string]$Tag = "v0.3.5",
+  [string]$Tag = "v0.3.6",
   [string]$Output = "qa\windows_matrix\evidence",
   [switch]$DryRun
 )
