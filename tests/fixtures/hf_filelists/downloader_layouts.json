@@ -1,0 +1,118 @@
+[
+  {
+    "name": "split_gguf_reference_llm",
+    "repo": "unsloth/Qwen3.5-27B-GGUF",
+    "subfolder": "BF16",
+    "files": [
+      "BF16/Qwen3.5-27B-BF16-00001-of-00002.gguf",
+      "BF16/Qwen3.5-27B-BF16-00002-of-00002.gguf",
+      "Q4_K_M/Qwen3.5-27B-Q4_K_M.gguf"
+    ],
+    "expected_subfolder": "BF16",
+    "expected_task_hint": "reference_llm",
+    "expected_kind": "gguf",
+    "must_include": [
+      "BF16/Qwen3.5-27B-BF16-00001-of-00002.gguf",
+      "BF16/Qwen3.5-27B-BF16-00002-of-00002.gguf"
+    ],
+    "must_exclude": [
+      "Q4_K_M/Qwen3.5-27B-Q4_K_M.gguf"
+    ]
+  },
+  {
+    "name": "asr_gguf_with_projector",
+    "repo": "owner/qwen-asr",
+    "subfolder": "",
+    "files": [
+      "Qwen3-ASR-1.7B-Q8_0.gguf",
+      "mmproj-Qwen3-ASR-1.7B-Q8_0.gguf",
+      "Qwen3-ASR-1.7B-Q4_K_M.gguf"
+    ],
+    "expected_subfolder": "",
+    "expected_task_hint": "asr_audio",
+    "expected_kind": "gguf",
+    "must_include": [
+      "Qwen3-ASR-1.7B-Q8_0.gguf",
+      "mmproj-Qwen3-ASR-1.7B-Q8_0.gguf"
+    ],
+    "must_exclude": [
+      "Qwen3-ASR-1.7B-Q4_K_M.gguf"
+    ]
+  },
+  {
+    "name": "sharded_safetensors_index",
+    "repo": "openai/whisper-large-v3",
+    "subfolder": "",
+    "files": [
+      "config.json",
+      "tokenizer.json",
+      "preprocessor_config.json",
+      "model.safetensors.index.fp32.json",
+      "model.fp32-00001-of-00002.safetensors",
+      "model.fp32-00002-of-00002.safetensors",
+      "model.fp16.safetensors"
+    ],
+    "expected_subfolder": "",
+    "expected_task_hint": "metadata_required",
+    "expected_kind": "safetensors_index",
+    "must_include": [
+      "config.json",
+      "tokenizer.json",
+      "preprocessor_config.json",
+      "model.safetensors.index.fp32.json"
+    ],
+    "must_exclude": [
+      "model.fp16.safetensors"
+    ]
+  },
+  {
+    "name": "multi_variant_onnx_int8",
+    "repo": "onnx-community/cohere-transcribe",
+    "subfolder": "onnx/int8",
+    "files": [
+      "config.json",
+      "preprocessor_config.json",
+      "tokenizer.json",
+      "onnx/int8/encoder.onnx",
+      "onnx/int8/encoder.onnx_data",
+      "onnx/int8/decoder_model_merged.onnx",
+      "onnx/fp16/encoder.onnx",
+      "onnx/fp16/encoder.onnx_data",
+      "model.safetensors"
+    ],
+    "expected_subfolder": "onnx/int8",
+    "expected_task_hint": "metadata_required",
+    "expected_kind": "onnx",
+    "must_include": [
+      "onnx/int8/encoder.onnx",
+      "onnx/int8/encoder.onnx_data",
+      "onnx/int8/decoder_model_merged.onnx",
+      "config.json"
+    ],
+    "must_exclude": [
+      "onnx/fp16/encoder.onnx",
+      "onnx/fp16/encoder.onnx_data",
+      "model.safetensors"
+    ]
+  },
+  {
+    "name": "unknown_large_folder",
+    "repo": "owner/experimental",
+    "subfolder": "custom",
+    "files": [
+      "custom/export.foo",
+      "custom/weights.custom",
+      "custom/readme.md",
+      "config.json",
+      "tokenizer.json"
+    ],
+    "expected_subfolder": "custom",
+    "expected_task_hint": "unknown",
+    "expected_kind": "folder",
+    "must_include": [
+      "custom/export.foo",
+      "custom/weights.custom"
+    ],
+    "must_exclude": []
+  }
+]

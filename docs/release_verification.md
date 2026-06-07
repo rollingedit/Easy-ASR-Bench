@@ -14,6 +14,7 @@ python -m compileall app tests scripts
 python -m pytest --basetemp .pytest_tmp -p no:cacheprovider
 python scripts\build_release_zip.py --version vX.Y.Z --strict-checksums
 python scripts\validate_physical_files.py --zip dist\Easy-ASR-Bench-vX.Y.Z-win.zip
+python scripts\write_release_smoke.py --tag vX.Y.Z --commit <commit> --output release-smoke-vX.Y.Z.json
 cmd /c setup.bat --dry-run --local
 cmd /c setup.bat --dry-run --verify-release
 python -m app.doctor --config config.json --strict
@@ -40,8 +41,10 @@ The release must upload:
 - `manifest.json`
 - `checksums.json`
 - `Easy-ASR-Bench-vX.Y.Z-win.zip`
+- `release-smoke-vX.Y.Z.json`
 
 `setup.bat` must verify `install.ps1` before executing it. The app ZIP hash must match `checksums.json`.
+The smoke JSON records automated release-candidate checks and leaves Windows VM, GPU/provider, model, and media rows as `not_run` until they are actually executed. Do not edit those rows to `pass` unless the matching downloaded-release test was run.
 
 ## Manual Windows QA
 

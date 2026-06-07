@@ -24,7 +24,7 @@ MIN_LINES = {
     "app/scoring.py": 80,
     "app/hf_model_downloader.py": 300,
     "scripts/validate_physical_files.py": 150,
-    "scripts/verify_github_release.py": 80,
+    "scripts/verify_github_release.py": 150,
     ".github/workflows/release-gate.yml": 75,
     ".github/workflows/publish-release.yml": 50,
     "requirements/core.txt": 5,

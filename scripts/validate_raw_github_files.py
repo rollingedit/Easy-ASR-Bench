@@ -10,7 +10,7 @@ DEFAULT_EXPECTATIONS = {
     "setup.bat": 200,
     "installer/install.ps1": 250,
     "scripts/validate_physical_files.py": 150,
-    "scripts/verify_github_release.py": 80,
+    "scripts/verify_github_release.py": 150,
     ".github/workflows/release-gate.yml": 75,
     ".github/workflows/publish-release.yml": 50,
     "app/model_scanner.py": 600,

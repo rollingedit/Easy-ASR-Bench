@@ -1,0 +1,129 @@
+import json
+from pathlib import Path
+
+import numpy as np
+
+from app.adapters.base import ChunkTranscript, ModelCandidate, ModelRunResult
+from app.main import process_file_with_candidates
+from app.media import AudioChunk
+
+
+class PassingAdapter:
+    name = "fake_pass"
+
+    def __init__(self):
+        self.loaded = False
+
+    def required_dependency_groups(self, candidate):
+        return []
+
+    def load(self, candidate, runtime_config):
+        self.loaded = True
+
+    def transcribe_chunks(self, chunks, chunk_metadata):
+        candidate = self.candidate
+        return ModelRunResult(
+            candidate=candidate,
+            transcript_chunks=[
+                ChunkTranscript(
+                    chunk_id=meta["chunk_id"],
+                    start_seconds=meta["start_seconds"],
+                    end_seconds=meta["end_seconds"],
+                    text=f"transcript {meta['chunk_id']}",
+                )
+                for meta in chunk_metadata
+            ],
+            metrics={"inference_seconds": 0.01, "audio_seconds": 1.0, "peak_process_memory_mb": 123},
+        )
+
+    def unload(self):
+        self.loaded = False
+
+
+class FailingAdapter(PassingAdapter):
+    name = "fake_fail"
+
+    def load(self, candidate, runtime_config):
+        raise RuntimeError("model load failed")
+
+
+def candidate(candidate_id: str, adapter_name: str) -> ModelCandidate:
+    return ModelCandidate(
+        candidate_id=candidate_id,
+        display_name=candidate_id,
+        family_name="Fixture",
+        backend="fixture",
+        container_format="fixture",
+        task="automatic-speech-recognition",
+        precision="fp32",
+        quantization_label="32-bit / FP32",
+        path=Path(candidate_id),
+        adapter_name=adapter_name,
+        runnable=True,
+    )
+
+
+def test_mock_e2e_pipeline_writes_reports_when_one_model_fails(tmp_path, monkeypatch):
+    source = tmp_path / "input.wav"
+    source.write_bytes(b"fixture")
+    temp = tmp_path / "Temp"
+    output = tmp_path / "Output"
+    chunk = AudioChunk(0, 0.0, 1.0, np.zeros(16000, dtype=np.float32))
+    wav_path = temp / "normalized.wav"
+    wav_path.parent.mkdir()
+    wav_path.write_bytes(b"wav")
+
+    monkeypatch.setattr("app.main.wait_for_stable_file", lambda path, seconds: None)
+    monkeypatch.setattr("app.media.prepare_audio", lambda source, temp_dir, config: (wav_path, np.zeros(16000, dtype=np.float32), [chunk]))
+    monkeypatch.setattr("app.media.audio_duration_seconds", lambda samples: 1.0)
+
+    def fake_adapter_for(model):
+        adapter = PassingAdapter() if model.adapter_name == "fake_pass" else FailingAdapter()
+        adapter.candidate = model
+        return adapter
+
+    monkeypatch.setattr("app.main.adapter_for", fake_adapter_for)
+    config = {
+        "folders": {"temp": str(temp), "output": str(output)},
+        "input": {"file_stability_wait_seconds": 0},
+        "runtime": {"provider": "auto"},
+        "advanced": {"keep_temp_wavs": False},
+    }
+
+    report_dir = process_file_with_candidates(
+        source,
+        [candidate("good-model", "fake_pass"), candidate("bad-model", "fake_fail")],
+        config,
+    )
+
+    assert report_dir is not None
+    for name in ["results.json", "results.txt", "benchmark.csv", "compare.html", "results_llm_prompt_part_001.txt"]:
+        assert (report_dir / name).exists()
+    results = json.loads((report_dir / "results.json").read_text(encoding="utf-8"))
+    assert [run["model"]["candidate_id"] for run in results["runs"]] == ["good-model", "bad-model"]
+    good, bad = results["runs"]
+    assert good["transcript_chunks"][0]["text"] == "transcript 0001"
+    assert bad["transcript_chunks"] == []
+    assert any("model load failed" in error for error in bad["errors"])
+    assert not wav_path.exists()
+
+
+def test_mock_e2e_pipeline_returns_none_when_media_preparation_fails(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "broken.mp4"
+    source.write_bytes(b"fixture")
+    monkeypatch.setattr("app.main.wait_for_stable_file", lambda path, seconds: None)
+    monkeypatch.setattr("app.media.prepare_audio", lambda source, temp_dir, config: (_ for _ in ()).throw(RuntimeError("no audio stream")))
+
+    report_dir = process_file_with_candidates(
+        source,
+        [candidate("good-model", "fake_pass")],
+        {
+            "folders": {"temp": str(tmp_path / "Temp"), "output": str(tmp_path / "Output")},
+            "input": {"file_stability_wait_seconds": 0},
+            "runtime": {"provider": "auto"},
+            "advanced": {"keep_temp_wavs": False},
+        },
+    )
+
+    assert report_dir is None
+    assert "File failed" in capsys.readouterr().out

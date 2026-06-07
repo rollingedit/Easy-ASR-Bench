@@ -85,7 +85,7 @@ After a download, the app rescans the package. If it still looks incomplete and 
 
 If the missing requirement is ambiguous, the app reports it instead of guessing. For tightly scoped same-package files, such as selected ONNX sidecars, parent metadata, or a matching ASR GGUF projector, it can offer a separate repair prompt without pulling alternate weight variants. It also writes `hf_missing_file_request.json` and `hf_missing_file_prompt.txt` beside the package. Those files can be pasted into a local or external LLM to get structured recommendations; the app accepts only exact filenames from the repo file list and asks again before downloading them.
 
-The downloader has been stress-checked against representative real Hugging Face repos with GGUF quant folders, split GGUF parts, Safetensors shards, ONNX sidecars, and mixed ASR/LLM layouts. That is not a promise that every future repo layout is known; unknown layouts are handled conservatively and should be reviewed rather than silently treated as runnable.
+The downloader has fixture coverage for representative Hugging Face layouts with GGUF quant folders, split GGUF parts, Safetensors shards, ONNX sidecars, and mixed ASR/LLM layouts. That is not a promise that every future repo layout is known; unknown layouts are handled conservatively and should be reviewed rather than silently treated as runnable. Live Hugging Face smoke results should be recorded in the release smoke artifact when they are actually run.
 
 ## Model Folder Examples
 
