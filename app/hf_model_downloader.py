@@ -35,6 +35,7 @@ METADATA_NAMES = {
 LARGE_CHOICE_FILE_COUNT = 20
 SAME_PACKAGE_REPAIR_LIMIT = 12
 TYPED_DOWNLOAD_CONFIRMATION = "DOWNLOAD"
+RECOMMENDED_BASELINE_REPO = "Systran/faster-whisper-tiny.en"
 
 
 @dataclass(frozen=True)
@@ -281,6 +282,31 @@ def build_download_choices(files: list[str], ref: HFModelRef) -> list[DownloadCh
                 files=selected_files,
                 task_hint="metadata_required",
                 notes=_metadata_notes(selected_files),
+            )
+        )
+
+    ctranslate2_folders = sorted({_dirname(name) for name in relevant if _basename(name).lower() == "model.bin"})
+    for folder in ctranslate2_folders:
+        folder_prefix = f"{folder}/" if folder else ""
+        package_files = [
+            name
+            for name in relevant
+            if name.startswith(folder_prefix)
+            and _dirname(name) == folder
+            and (_basename(name).lower() == "model.bin" or _basename(name) in METADATA_NAMES)
+        ]
+        names = {_basename(name).lower() for name in package_files}
+        if "config.json" not in names or not (names & {"tokenizer.json", "vocabulary.json", "vocabulary.txt", "vocab.json"}):
+            continue
+        selected_files = tuple(sorted(package_files))
+        choices.append(
+            DownloadChoice(
+                label=f"faster-whisper/CTranslate2 package: {folder or '(repo root)'}",
+                kind="ctranslate2",
+                primary_files=tuple(name for name in selected_files if _basename(name).lower() == "model.bin"),
+                files=selected_files,
+                task_hint="asr_audio",
+                notes=("Downloads the runnable faster-whisper model package for local ASR.",),
             )
         )
 
@@ -682,8 +708,7 @@ def list_repo_files(ref: HFModelRef) -> list[str]:
     return list(HfApi().list_repo_files(ref.repo_id, revision=ref.revision))
 
 
-def download_hf_model_interactive(models_root: Path, input_func=input, print_func=print) -> Path | None:
-    raw = input_func(prompt_label("Hugging Face model URL or repo id> ")).strip()
+def download_hf_model_from_ref(models_root: Path, raw: str, input_func=input, print_func=print) -> Path | None:
     try:
         ref = parse_hf_model_ref(raw)
         files = list_repo_files(ref)
@@ -735,3 +760,13 @@ def download_hf_model_interactive(models_root: Path, input_func=input, print_fun
     print_func(f"Downloaded {len(downloaded)} file(s) to {destination}")
     offer_missing_file_repair(ref, selected, files, destination, input_func=input_func, print_func=print_func)
     return destination
+
+
+def download_hf_model_interactive(models_root: Path, input_func=input, print_func=print) -> Path | None:
+    raw = input_func(prompt_label("Hugging Face model URL or repo id> ")).strip()
+    return download_hf_model_from_ref(models_root, raw, input_func=input_func, print_func=print_func)
+
+
+def download_recommended_baseline(models_root: Path, input_func=input, print_func=print) -> Path | None:
+    print_func(f"Recommended CPU baseline: {RECOMMENDED_BASELINE_REPO}")
+    return download_hf_model_from_ref(models_root, RECOMMENDED_BASELINE_REPO, input_func=input_func, print_func=print_func)

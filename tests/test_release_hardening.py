@@ -118,11 +118,13 @@ def test_setup_discovers_supported_python_matrix():
 
 def test_release_smoke_writer_and_verifier_require_smoke_asset():
     smoke_writer = (ROOT / "scripts" / "write_release_smoke.py").read_text(encoding="utf-8")
+    manual_rows = (ROOT / "qa" / "release_manual_rows_v2.json").read_text(encoding="utf-8")
     verifier = (ROOT / "scripts" / "verify_github_release.py").read_text(encoding="utf-8")
     publish = (ROOT / ".github" / "workflows" / "publish-release.yml").read_text(encoding="utf-8")
 
     assert "easy_asr_bench.release_smoke.v2" in smoke_writer
-    assert "\"not_run\"" in smoke_writer
+    assert "release_manual_rows_v2.json" in smoke_writer
+    assert "\"not_run\"" in manual_rows
     assert "manual_rows" in smoke_writer
     assert "release-smoke-$tag.json" in publish
     assert "--require-all-pass" in publish

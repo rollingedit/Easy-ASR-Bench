@@ -36,6 +36,29 @@ def test_discover_queue_skips_done_fast_key_without_rehashing(tmp_path: Path, mo
     assert called["hash"] is False
 
 
+def test_discover_queue_queues_new_file_by_fast_key_before_full_hash(tmp_path: Path, monkeypatch):
+    source = tmp_path / "large.wav"
+    source.write_bytes(b"media")
+    state = QueueState(tmp_path / "state.json")
+
+    called = {"hash": False}
+
+    def fail_hash(path):
+        called["hash"] = True
+        raise AssertionError("new files should not be fully hashed before processing starts")
+
+    monkeypatch.setattr("app.queue_manager.wait_for_stable_file", lambda path, seconds: None)
+    monkeypatch.setattr("app.queue_manager.sha256_file", fail_hash)
+
+    queued = discover_queue([tmp_path], {".wav"}, recursive=True, stability_seconds=0, state=state, skip_done=True)
+
+    assert queued == [source]
+    assert called["hash"] is False
+    item = QueueState(tmp_path / "state.json").data["items"][0]
+    assert item["sha256"] == ""
+    assert item["fast_key"]
+
+
 def test_queue_state_preserves_failed_item_for_resume_visibility(tmp_path: Path):
     source = tmp_path / "audio.wav"
     source.write_bytes(b"bad")

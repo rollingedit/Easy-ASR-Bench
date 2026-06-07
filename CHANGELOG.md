@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.3.7
+
+User-path hardening:
+- Changed prerelease builds to report `prerelease` from runtime environment and doctor output instead of trusting stale `config.json` channel values.
+- Added failed-file report generation for pre-model failures so bad media, preprocessing errors, or similar file-level failures still write `results.json`, `results.txt`, `benchmark.csv`, and `compare.html` with cause and next-action text.
+- Changed batch/queue status detection so structured failed-file reports are marked `failed` in queue state and batch dashboards instead of being mislabeled as completed just because an output folder exists.
+- Added more specific failed-file stages for no-audio/media-probe, FFmpeg/decode, and path/permission failures.
+- Expanded setup completion into direct first-run choices for running the app, pasting a Hugging Face model link, opening `Models`, opening `Input`, or quitting.
+- Added a dedicated first-run wizard with a recommended CPU baseline download path, Hugging Face paste flow, folder-open actions, and automatic continuation into the app after a successful model download.
+- Added faster-whisper/CTranslate2 package detection to the Hugging Face downloader so baseline ASR repos with `model.bin`, `config.json`, and tokenizer/vocabulary files can be downloaded as one runnable package.
+- Added app commands for model download and folder-opening actions so setup can route users through product actions without exposing Python commands.
+- Reworked optional dependency recovery prompts into explicit install, skip affected models, show repair command, and quit-batch choices.
+- Changed queue discovery and direct batch processing to enqueue by fast file identity before full SHA256 hashing, avoiding long startup stalls on large media while preserving result-level source hashes.
+- Added focused regression coverage for release-channel truth, stale-config doctor output, first-run guidance, setup choices, dependency prompt choices, and failed-file reports.
+
 ## v0.3.6
 
 Release proof hardening:

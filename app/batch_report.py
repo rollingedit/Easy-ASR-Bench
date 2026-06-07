@@ -40,6 +40,14 @@ def _load_result_summary(output_path: str | None) -> dict:
     return {
         "duration_seconds": data.get("source", {}).get("duration_seconds"),
         "chunks": len(data.get("chunk_plan", {}).get("chunks", [])),
+        "errors": [
+            {
+                "stage": error.get("stage", "unknown") if isinstance(error, dict) else "unknown",
+                "message": error.get("message", "") if isinstance(error, dict) else str(error),
+                "status": error.get("status", "failed") if isinstance(error, dict) else "failed",
+            }
+            for error in data.get("errors", [])
+        ],
         "runs": [
             {
                 "display_name": run.get("model", {}).get("display_name", ""),
@@ -97,12 +105,22 @@ def render_batch_html(payload: dict, report_dir: Path) -> str:
             if model_rows
             else "<p class=\"muted\">No model rows were written for this file.</p>"
         )
+        error_rows = []
+        for error in summary.get("errors", []):
+            error_rows.append(
+                "<div class=\"error-summary\">"
+                f"<strong>{_safe(error.get('stage'))}</strong>"
+                f"<span>{_safe(error.get('message'))}</span>"
+                "</div>"
+            )
+        error_summary = "".join(error_rows)
         card = (
             f"<article class=\"file-card\" data-search=\"{_safe((str(item.get('source_path', '')) + ' ' + status).lower())}\">"
             f"<div class=\"file-head\"><span class=\"status {status_class}\">{_safe(status)}</span>{link}</div>"
             f"<h2>{_safe(Path(str(item.get('source_path', ''))).name)}</h2>"
             f"<p class=\"path\">{_safe(item.get('source_path'))}</p>"
             f"<div class=\"facts\"><span>{_safe(_fmt(summary.get('duration_seconds')))}s</span><span>{_safe(summary.get('chunks', 'n/a'))} chunks</span><span>{_safe(summary.get('unsupported_count', 0))} skipped</span></div>"
+            f"{error_summary}"
             f"{model_table}"
             "</article>"
         )
@@ -140,6 +158,9 @@ main {{ max-width:1400px; margin:0 auto; padding:20px 32px 48px; }}
 .path {{ color:var(--muted); font-size:12px; overflow-wrap:anywhere; margin:0 0 10px; }}
 .facts {{ display:flex; flex-wrap:wrap; gap:8px; margin:0 0 10px; }}
 .facts span {{ background:#eef2f7; border-radius:999px; padding:3px 8px; font-size:12px; color:#27384f; }}
+.error-summary {{ border:1px solid #f0b4ba; background:#fff4f5; border-radius:8px; padding:8px 10px; margin:0 0 10px; color:#7f1d2b; }}
+.error-summary strong {{ display:block; font-size:12px; text-transform:uppercase; margin-bottom:3px; }}
+.error-summary span {{ display:block; overflow-wrap:anywhere; }}
 .toolbar {{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 14px; }}
 .toolbar input {{ border:1px solid var(--line); border-radius:6px; padding:8px 10px; min-height:36px; min-width:260px; }}
 .pager {{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 14px; }}

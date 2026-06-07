@@ -187,6 +187,13 @@ function renderOverview() {{
   const runs = results.runs || [];
   const fastest = [...runs].sort((a,b)=>(b.metrics?.audio_seconds_per_wall_second||0)-(a.metrics?.audio_seconds_per_wall_second||0))[0];
   const lowRam = [...runs].sort((a,b)=>(a.metrics?.peak_process_memory_mb||Infinity)-(b.metrics?.peak_process_memory_mb||Infinity))[0];
+  const errors = results.errors || [];
+  const errorPanel = errors.length ? `<h3>Run Status</h3>${{errors.map(error => {{
+    if (typeof error === 'string') return `<div class="warn">${{safe(error)}}</div>`;
+    const causes = (error.likely_causes || []).map(item => `<li>${{safe(item)}}</li>`).join('');
+    const actions = (error.next_actions || []).map(item => `<li>${{safe(item)}}</li>`).join('');
+    return `<div class="warn"><b>${{safe(error.status || 'failed')}}</b><br>Stage: ${{safe(error.stage || 'unknown')}}<br>Problem: ${{safe(error.message || '')}}<h3>Likely causes</h3><ul>${{causes}}</ul><h3>Next actions</h3><ul>${{actions}}</ul><p>No source files were modified.</p></div>`;
+  }}).join('')}}` : '';
   document.getElementById('overview').innerHTML = `<h2>Overview</h2><div class="grid">
     <div class="card"><div class="label">Source</div><div class="value">${{safe(source.name || '')}}</div></div>
     <div class="card"><div class="label">Duration</div><div class="value">${{fmt(source.duration_seconds || 0)}}s</div></div>
@@ -194,7 +201,7 @@ function renderOverview() {{
     <div class="card"><div class="label">Chunks</div><div class="value">${{(results.chunk_plan?.chunks || []).length}}</div></div>
     <div class="card"><div class="label">Fastest</div><div class="value">${{safe(fastest?.model?.display_name || 'n/a')}}</div></div>
     <div class="card"><div class="label">Lowest RAM</div><div class="value">${{safe(lowRam?.model?.display_name || 'n/a')}}</div></div>
-  </div>`;
+  </div>${{errorPanel}}`;
 }}
 function safe(s) {{ return escapeHtml(s); }}
 function renderScoreboard(scores=null) {{

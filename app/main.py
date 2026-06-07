@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
+import os
 import sys
 import time
 import traceback
@@ -11,6 +13,8 @@ from .adapters import BUILTIN_ADAPTERS
 from .adapters.base import ModelCandidate, ModelRunResult
 from .config import load_config
 from .console_style import key, prompt_label
+from .hf_model_downloader import download_hf_model_interactive
+from .interactive_menu import MenuAction, choose_one
 from .model_scanner import scan_models
 from .model_selector import choose_candidates
 from .model_status import candidate_reason, model_status_label
@@ -55,6 +59,15 @@ def setup_logging(logs_dir: Path) -> None:
             logging.StreamHandler(sys.stdout),
         ],
     )
+
+
+def latest_log_path(config: dict) -> Path | None:
+    try:
+        logs_dir = folder_config(config, "logs", "logs_folder")
+    except Exception:
+        logs_dir = Path("Logs")
+    candidates = sorted(logs_dir.glob("run_*.log"), key=lambda path: path.stat().st_mtime, reverse=True) if logs_dir.exists() else []
+    return candidates[0] if candidates else None
 
 
 def folder_config(config: dict, key: str, legacy_key: str | None = None) -> Path:
@@ -119,9 +132,13 @@ def ensure_dependencies(candidates: list[ModelCandidate], config: dict, referenc
         acceleration_decision = acceleration_install_decision(config, group)
         log_path = _dependency_install_log_path(config, group)
         plan = build_install_plan(group, project_root, config, group_candidates.get(group, []), log_path)
-        decision = _dependency_install_confirmation(group)
+        decision = _dependency_install_confirmation(group, recovery_command_for_config(group, config))
+        if decision == "quit":
+            print(f"Quit requested while installing {group}. Skipping all remaining models that need missing dependency groups.")
+            failed_groups.update(missing)
+            break
         if decision != "install":
-            print(f"Skipped dependency install for {group}. {plan.fallback_if_declined}")
+            print(f"Skipped dependency install for {group}. Only models requiring this dependency group are skipped; other selected models continue.")
             failed_groups.add(group)
             continue
         accelerator = acceleration_decision.get("accelerator") if acceleration_decision["use_accelerator"] else ""
@@ -157,20 +174,46 @@ def _dependency_install_log_path(config: dict, group: str) -> str:
     return str(logs_dir / f"dependency_install_{group}_{stamp}.log")
 
 
-def _dependency_install_confirmation(group: str) -> str:
+def _dependency_install_confirmation(group: str, repair_command: str | None = None) -> str:
     if not sys.stdin.isatty():
         print(f"Skipping dependency install for {group}: noninteractive input cannot confirm optional installs.")
-        return "skip"
+        return "skip_group"
+    menu_result = choose_one(
+        f"Install missing runtime package group: {group}",
+        [
+            "Install now",
+            "Skip affected models",
+            "Show repair command",
+            "Quit batch",
+        ],
+        actions=[MenuAction("I", "install"), MenuAction("S", "skip affected models"), MenuAction("R", "show repair command"), MenuAction("Q", "quit batch")],
+    )
+    if menu_result == 0 or menu_result == "i":
+        return "install"
+    if menu_result == 1 or menu_result == "s":
+        return "skip_group"
+    if menu_result == 3 or menu_result == "q":
+        return "quit"
+    if menu_result == 2 or menu_result == "r":
+        print(f"Manual repair command: {repair_command or 'Run setup.bat --doctor for a repair command.'}")
     try:
-        answer = input(f"{key('Enter')} installs {group}; type {key('s')} to skip: ").strip().lower()
+        answer = input(
+            f"{key('I')} install, {key('S')} skip affected models, {key('R')} show repair command, {key('Q')} quit batch: "
+        ).strip().lower()
     except EOFError:
         print(f"Skipping dependency install for {group}: input closed before confirmation.")
-        return "skip"
-    if answer in {"s", "skip", "n", "no"}:
-        return "skip"
+        return "skip_group"
+    if answer in {"", "i", "install", "y", "yes"}:
+        return "install"
+    if answer in {"s", "skip", "skip affected", "skip affected models", "n", "no"}:
+        return "skip_group"
+    if answer in {"r", "repair", "show repair"}:
+        print(f"Manual repair command: {repair_command or 'Run setup.bat --doctor for a repair command.'}")
+        return _dependency_install_confirmation(group, repair_command)
     if answer in {"q", "quit", "exit"}:
-        return "skip"
-    return "install"
+        return "quit"
+    print(f"Unrecognized choice for {group}; skipping affected models so the rest of the batch can continue.")
+    return "skip_group"
 
 
 def warn_runtime_dependency_fallbacks(config: dict) -> None:
@@ -220,6 +263,59 @@ def runtime_config_for_candidate(config: dict) -> dict:
     return runtime
 
 
+def classify_file_failure(exc: Exception) -> tuple[str, list[str], list[str]]:
+    message = str(exc).lower()
+    if "no audio stream" in message:
+        return (
+            "media_probe",
+            [
+                "The video has no audio track.",
+                "The audio stream is unsupported, missing, or corrupt.",
+            ],
+            [
+                "Try a file with an audio stream.",
+                "If this is expected to contain audio, check it in a media player or extract audio with another tool.",
+            ],
+        )
+    if "ffmpeg" in message or "ffprobe" in message or "decode" in message or "conversion failed" in message:
+        return (
+            "ffmpeg_convert",
+            [
+                "FFmpeg could not inspect or decode this media file.",
+                "The media file may be corrupt, encrypted, unsupported, or incomplete.",
+            ],
+            [
+                "Try converting the file to WAV, MP3, or MP4 with a known-good tool.",
+                "Run setup.bat --doctor to verify media dependencies.",
+            ],
+        )
+    if isinstance(exc, (FileNotFoundError, PermissionError, OSError)):
+        return (
+            "path_or_file_access",
+            [
+                "The file path is unavailable, locked, or no longer readable.",
+                "The output, temp, or input folder may not be writable.",
+            ],
+            [
+                "Move the file to a local folder such as Input and try again.",
+                "Close programs that may be locking the file and confirm folder permissions.",
+            ],
+        )
+    return (
+        "pre_model_processing",
+        [
+            "The file path is unavailable, locked, or no longer readable.",
+            "The media file has no supported audio stream, is corrupt, or FFmpeg could not decode it.",
+            "A preprocessing dependency failed before model benchmarking could start.",
+        ],
+        [
+            "Try a known-good WAV, MP3, or MP4 with an audio track.",
+            "If this is a video, confirm it has an audio stream.",
+            "Check the linked log for the exact preprocessing error.",
+        ],
+    )
+
+
 def process_file_with_candidates(
     source: Path,
     candidates: list[ModelCandidate],
@@ -229,7 +325,7 @@ def process_file_with_candidates(
 ) -> Path | None:
     from .benchmark import peak_vram_mb, process_memory_mb, reset_peak_vram, timer
     from .media import audio_duration_seconds, prepare_audio
-    from .results_writer import build_results, write_all_reports
+    from .results_writer import build_failed_file_results, build_results, write_all_reports
 
     source = source.resolve()
     temp_dir = folder_config(config, "temp", "temp_folder")
@@ -312,11 +408,30 @@ def process_file_with_candidates(
         print(f"Wrote reports to {output_path}")
         print(f"Open HTML comparison: {output_path / 'compare.html'}")
         return output_path
-    except Exception:
+    except Exception as exc:
         logging.error("Failed processing %s", source)
         logging.exception("File failed")
-        print("File failed. See the latest log in Logs for the full error.")
-        return None
+        stage, likely_causes, next_actions = classify_file_failure(exc)
+        try:
+            failed_results = build_failed_file_results(
+                source_path=source,
+                stage=stage,
+                error_type=exc.__class__.__name__,
+                message=str(exc) or exc.__class__.__name__,
+                likely_causes=likely_causes,
+                next_actions=next_actions,
+                log_path=latest_log_path(config),
+                selected_models=candidates,
+                unsupported_models=unsupported_models,
+            )
+            output_path = write_all_reports(failed_results, output_dir)
+            print(f"File failed before model benchmarking. Wrote failure report to {output_path}")
+            print(f"Open failure report: {output_path / 'compare.html'}")
+            return output_path
+        except Exception:
+            logging.exception("Failed writing failed-file report")
+            print("File failed and the failure report could not be written. See the latest log in Logs for the full error.")
+            return None
 
 
 def collect_input_files(args: argparse.Namespace, config: dict) -> list[Path]:
@@ -357,6 +472,33 @@ def interactive_prompt_for_files(config: dict) -> list[Path]:
     return files
 
 
+def print_first_run_guidance(config: dict, runnable: list[ModelCandidate], unsupported: list[ModelCandidate], models_root: Path) -> None:
+    print()
+    print("Easy ASR Bench")
+    print("Models and media stay local. Network is used only for setup, optional packages, or a model download you choose.")
+    if runnable:
+        print()
+        print("Runnable ASR model found.")
+        print(f"Put audio/video files in {folder_config(config, 'input')} or paste paths when prompted.")
+        return
+    incomplete = [candidate for candidate in unsupported if model_status_label(candidate) == "Recognized incomplete"]
+    reference_llms = [candidate for candidate in unsupported if candidate.category == "reference_llm"]
+    print()
+    print("No runnable ASR model is installed yet.")
+    print("Detected files:")
+    print(f"  - {len(incomplete)} incomplete model folder(s)")
+    print(f"  - {len(reference_llms)} reference/correction LLM(s)")
+    print("  - 0 runnable ASR models")
+    print()
+    print("Next steps:")
+    print(f"  [{key('P')}] Paste a Hugging Face model/repo link from the model downloader option")
+    print(f"  [{key('M')}] Open {models_root} and add a complete ASR model folder, then run again")
+    print(f"  [{key('I')}] Put audio/video files in {folder_config(config, 'input')}")
+    print(f"  [{key('Q')}] Quit")
+    print()
+    print("Unsupported or incomplete files are shown separately and will not be used as ASR models.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("paths", nargs="*")
@@ -364,6 +506,10 @@ def main() -> None:
     parser.add_argument("--interactive", action="store_true")
     parser.add_argument("--scan-only", action="store_true")
     parser.add_argument("--doctor", action="store_true")
+    parser.add_argument("--first-run", action="store_true")
+    parser.add_argument("--download-model", action="store_true")
+    parser.add_argument("--open-models", action="store_true")
+    parser.add_argument("--open-input", action="store_true")
     parser.add_argument("--watch", action="store_true")
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
@@ -382,7 +528,26 @@ def _main(args: argparse.Namespace) -> None:
 
         raise SystemExit(run_doctor(Path(args.config), strict=False))
     models_root = folder_config(config, "models")
+    if args.open_models:
+        open_folder(models_root)
+        return
+    if args.open_input:
+        open_folder(folder_config(config, "input"))
+        return
+    if args.download_model:
+        destination = download_hf_model_interactive(models_root)
+        if destination is not None:
+            print(f"Model package saved. Run Easy ASR Bench again to rescan: {destination}")
+        return
+    if args.first_run:
+        from .first_run import run_first_run_wizard
+
+        if not run_first_run_wizard(config):
+            return
+        args.interactive = True
     runnable, unsupported = scan_models(models_root)
+    if args.interactive:
+        print_first_run_guidance(config, runnable, unsupported, models_root)
     if args.scan_only:
         print_scan_summary(runnable, unsupported)
         return
@@ -418,8 +583,9 @@ def _main(args: argparse.Namespace) -> None:
                 )
                 for file_path in files:
                     output = process_file_with_candidates(file_path, selected, config, unsupported, reference_llm)
-                    state.mark(file_path.resolve(), "done" if output else "failed", str(output or ""))
-                    batch_rows.append({"source_path": str(file_path.resolve()), "status": "done" if output else "failed", "output_path": str(output or "")})
+                    status = output_status(output)
+                    state.mark(file_path.resolve(), status, str(output or ""))
+                    batch_rows.append({"source_path": str(file_path.resolve()), "status": status, "output_path": str(output or "")})
                 if args.once and len(batch_rows) > 1:
                     write_batch_summary(config, batch_rows)
                 if args.once:
@@ -431,12 +597,13 @@ def _main(args: argparse.Namespace) -> None:
         state = queue_state(config)
         for file_path in files:
             from .queue_manager import QueueItem
-            from .utils import file_key, sha256_file
+            from .utils import file_key
 
-            state.upsert(QueueItem(str(file_path.resolve()), sha256_file(file_path), file_key(file_path)))
+            state.upsert(QueueItem(str(file_path.resolve()), "", file_key(file_path)))
             output = process_file_with_candidates(file_path, selected, config, unsupported, reference_llm)
-            state.mark(file_path.resolve(), "done" if output else "failed", str(output or ""))
-            batch_rows.append({"source_path": str(file_path.resolve()), "status": "done" if output else "failed", "output_path": str(output or "")})
+            status = output_status(output)
+            state.mark(file_path.resolve(), status, str(output or ""))
+            batch_rows.append({"source_path": str(file_path.resolve()), "status": status, "output_path": str(output or "")})
         if len(files) > 1:
             write_batch_summary(config, batch_rows[-len(files) :])
         if not args.interactive:
@@ -450,6 +617,27 @@ def write_batch_summary(config: dict, rows: list[dict]) -> None:
     output_dir = write_batch_report(folder_config(config, "output"), rows)
     print(f"Wrote batch overview to {output_dir}")
     print(f"Open batch dashboard: {output_dir / 'index.html'}")
+
+
+def open_folder(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    if os.name == "nt":
+        os.startfile(str(path))  # type: ignore[attr-defined]
+        return
+    print(path)
+
+
+def output_status(output_path: Path | None) -> str:
+    if output_path is None:
+        return "failed"
+    results_path = output_path / "results.json"
+    try:
+        results = json.loads(results_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "done"
+    if results.get("errors") and not results.get("runs"):
+        return "failed"
+    return "done"
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 param(
   [string]$InstallDir = "$env:LOCALAPPDATA\Easy-ASR-Bench",
-  [string]$Version = "v0.3.6",
+  [string]$Version = "v0.3.7",
   [switch]$DryRun,
   [switch]$VerifyRelease,
   [switch]$Repair,

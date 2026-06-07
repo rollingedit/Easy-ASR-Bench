@@ -29,6 +29,23 @@ def make_result(folder: Path, model_name: str, model_count: int = 1) -> None:
     (folder / "compare.html").write_text("<!doctype html>", encoding="utf-8")
 
 
+def make_failed_result(folder: Path) -> None:
+    folder.mkdir(parents=True)
+    (folder / "results.json").write_text(
+        json.dumps(
+            {
+                "source": {"duration_seconds": 0},
+                "chunk_plan": {"chunks": []},
+                "runs": [],
+                "unsupported_models": [],
+                "errors": [{"status": "failed_before_model_run", "stage": "media_probe", "message": "No audio stream was found."}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (folder / "compare.html").write_text("<!doctype html>", encoding="utf-8")
+
+
 def test_batch_report_renders_side_by_side_file_cards_with_model_summaries(tmp_path: Path):
     first = tmp_path / "out1"
     second = tmp_path / "out2"
@@ -56,6 +73,20 @@ def test_write_batch_report_writes_index_and_json(tmp_path: Path):
 
     assert (report_dir / "index.html").exists()
     assert json.loads((report_dir / "batch.json").read_text(encoding="utf-8"))["files"][0]["status"] == "failed"
+
+
+def test_batch_report_shows_failed_file_stage_and_problem(tmp_path: Path):
+    failed = tmp_path / "failed"
+    make_failed_result(failed)
+
+    html = render_batch_html(
+        {"files": [{"source_path": str(tmp_path / "silent.mp4"), "status": "failed", "output_path": str(failed)}]},
+        tmp_path,
+    )
+
+    assert "media_probe" in html
+    assert "No audio stream was found." in html
+    assert "error-summary" in html
 
 
 def test_batch_report_json_scripts_are_parseable_json_not_html_entities(tmp_path: Path):

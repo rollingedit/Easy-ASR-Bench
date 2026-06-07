@@ -5,6 +5,7 @@ from app.adapters.base import ModelCandidate
 from app.hf_model_downloader import (
     DownloadChoice,
     HFModelRef,
+    RECOMMENDED_BASELINE_REPO,
     build_download_choices,
     build_smart_download_choices,
     destination_for,
@@ -92,6 +93,30 @@ def test_build_choices_warns_when_required_metadata_is_missing():
     assert any("config.json" in note for note in choice.notes)
     assert any("tokenizer" in note for note in choice.notes)
     assert any("processor" in note for note in choice.notes)
+
+
+def test_build_choices_detects_faster_whisper_ctranslate2_package():
+    files = [
+        "config.json",
+        "model.bin",
+        "tokenizer.json",
+        "vocabulary.txt",
+        "README.md",
+    ]
+
+    choices = build_download_choices(files, HFModelRef(RECOMMENDED_BASELINE_REPO))
+
+    choice = next(choice for choice in choices if choice.kind == "ctranslate2")
+    assert choice.task_hint == "asr_audio"
+    assert set(choice.files) == {"config.json", "model.bin", "tokenizer.json", "vocabulary.txt"}
+
+
+def test_faster_whisper_choice_requires_runnable_metadata():
+    files = ["model.bin", "README.md"]
+
+    choices = build_download_choices(files, HFModelRef("owner/incomplete-faster-whisper"))
+
+    assert not any(choice.kind == "ctranslate2" for choice in choices)
 
 
 def test_build_choices_groups_split_safetensors_parts_as_one_choice():
