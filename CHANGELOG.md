@@ -1,5 +1,34 @@
 # Changelog
 
+## v0.3.4
+
+Release proof:
+- Added `scripts/validate_release_smoke.py` plus `tests/fixtures/release_required_rows_v2.json` so release smoke artifacts must contain the required Windows, media, provider, model, failure-isolation, and dependency-decline rows.
+- Added `scripts/verify_release_transcript.py` so release verification transcripts are checked against downloaded assets and `checksums.json`, and transcript self-hashes are rejected.
+- Added detached `release-verification-manifest-vX.Y.Z.json` generation and validation so the transcript hash is recorded after the transcript exists, without embedding a self-hash inside the transcript.
+- Updated release workflows to require all mandatory smoke rows to pass with app version, release commit, log/result hash evidence, and environment summaries before a public release can be published or accepted by the release gate.
+- Removed transcript self-hashes from generated release verification transcripts; transcript hashes belong in detached release metadata, not inside the transcript being hashed.
+- Changed release-note generation to read the smoke artifact and list pass rows under verified and all other rows under not verified.
+
+Runtime/provider behavior:
+- Added `app/runtime_plan.py` with explicit hardware facts and resolved runtime plans for faster-whisper and llama.cpp/GGUF paths.
+- Changed ONNX `auto` provider order to prefer CUDA on NVIDIA, OpenVINO before DirectML on Intel, DirectML on AMD/generic Windows GPUs, then CPU.
+- Changed faster-whisper loading so `prefer_gpu` alone does not prove CUDA; CUDA load failures retry CPU when fallback is allowed and record the actual provider/device.
+- Changed GGUF ASR llama.cpp loading so full GPU offload is used only when the backend is verified GPU-capable; otherwise it uses CPU-safe `n_gpu_layers=0`.
+
+Model detection and install UX:
+- Added manifest-first GGUF ASR pairing through `model_package.json`; mixed folders with multiple plausible GGUF/mmproj pairs are now ambiguous instead of runnable.
+- Changed complete unknown Hugging Face Safetensors folders to `asr_probe_required` rather than runnable ASR unless config metadata identifies an ASR architecture.
+- Added a deliberate probe option for complete unknown Safetensors ASR folders so users can try a runtime probe without the scanner pretending the model is already runnable.
+- Added explicit user-facing model-state buckets for runnable ASR, dependency-needed, ASR probe-required, reference LLM, incomplete, unsafe, and unsupported packages.
+- Added `app/install_plan.py` and changed optional dependency installation prompts to show packages, requirement files, indexes, install location, network destinations, PATH changes, size class, and fallback behavior before the user presses Enter to install or `s` to skip.
+- Added a central core dependency import map so doctor/core health checks cover every package in `requirements/core.txt` or explicitly document exclusions.
+
+Reporting and QA:
+- Added a 500-chunk offline `compare.html` fixture test proving the large-report page remains self-contained and paginated.
+- Polished `compare.html` with clearer tabs, table wrappers, model filters for transcript/chunk views, better status badges, and scroll-safe layout for many models and chunks.
+- Added a multi-file batch dashboard at `Output/batch__*/index.html` so runs with many audio/video files show paged side-by-side file cards, per-file model summaries, search/filtering, and links to full per-file `compare.html` reports.
+
 ## v0.3.3 candidate
 
 Model support:

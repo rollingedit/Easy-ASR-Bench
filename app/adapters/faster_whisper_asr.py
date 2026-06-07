@@ -7,6 +7,7 @@ from typing import Sequence
 from .base import ChunkTranscript, ModelCandidate, ModelRunResult
 from ..benchmark import process_memory_mb
 from ..precision_detector import normalize_precision_label
+from ..runtime_plan import resolve_runtime_plan
 
 
 class FasterWhisperASRAdapter:
@@ -18,6 +19,7 @@ class FasterWhisperASRAdapter:
         self.device = "cpu"
         self.requested_compute_type = "default"
         self.effective_compute_type = "default"
+        self.load_warnings: list[str] = []
 
     def discover(self, models_root: Path) -> list[ModelCandidate]:
         candidates: list[ModelCandidate] = []
@@ -61,7 +63,8 @@ class FasterWhisperASRAdapter:
         except ModuleNotFoundError as exc:
             raise RuntimeError("faster-whisper support requires requirements/faster_whisper.txt.") from exc
         self.candidate = candidate
-        device = "cuda" if runtime_config.get("provider") == "cuda" or bool(runtime_config.get("prefer_gpu", False)) else "cpu"
+        plan = resolve_runtime_plan("faster_whisper", runtime_config)
+        device = "cuda" if plan.actual_provider == "cuda" and plan.backend_verified else "cpu"
         compute_aliases = {"fp16": "float16", "f16": "float16", "fp32": "float32", "f32": "float32"}
         compute_type = compute_aliases.get(candidate.precision.lower(), candidate.precision)
         compute_type = compute_type if compute_type in {"int8", "int8_float16", "float16", "float32"} else "default"
@@ -73,8 +76,30 @@ class FasterWhisperASRAdapter:
         self.device = device
         self.requested_compute_type = compute_type
         self.effective_compute_type = effective_compute_type
+        if plan.fallback_reason:
+            warnings.append(plan.fallback_reason)
+        self.runtime_plan = plan
         self.load_warnings = warnings
-        self.model = WhisperModel(str(candidate.path), device=device, compute_type=effective_compute_type)
+        try:
+            self.model = WhisperModel(str(candidate.path), device=device, compute_type=effective_compute_type)
+        except Exception as exc:
+            if device == "cuda" and plan.fallback_allowed:
+                fallback_compute = "int8" if effective_compute_type in {"float16", "int8_float16"} else effective_compute_type
+                self.load_warnings.append(f"CUDA load failed; retried CPU: {exc}")
+                self.device = "cpu"
+                self.effective_compute_type = fallback_compute
+                self.runtime_plan = plan.__class__(
+                    **{
+                        **plan.__dict__,
+                        "actual_provider": "cpu",
+                        "device": "cpu",
+                        "backend_verified": False,
+                        "fallback_reason": f"CUDA load failed; retried CPU: {exc}",
+                    }
+                )
+                self.model = WhisperModel(str(candidate.path), device="cpu", compute_type=fallback_compute)
+            else:
+                raise
         return self
 
     def transcribe_chunks(self, chunks: Sequence, chunk_metadata: list[dict]) -> ModelRunResult:
@@ -99,6 +124,9 @@ class FasterWhisperASRAdapter:
         metrics = {
             "provider": "faster-whisper",
             "device": self.device,
+            "requested_provider": getattr(self, "runtime_plan", None).requested_provider if getattr(self, "runtime_plan", None) else "unknown",
+            "actual_provider": getattr(self, "runtime_plan", None).actual_provider if getattr(self, "runtime_plan", None) else self.device,
+            "backend_verified": getattr(self, "runtime_plan", None).backend_verified if getattr(self, "runtime_plan", None) else False,
             "requested_compute_type": self.requested_compute_type,
             "effective_compute_type": self.effective_compute_type,
             "audio_seconds": audio_seconds,

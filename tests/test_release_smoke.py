@@ -26,13 +26,14 @@ def test_write_release_smoke_records_automated_passes_and_manual_not_run(tmp_pat
     write_release_smoke.write_smoke("v0.3.1", output)
     data = json.loads(output.read_text(encoding="utf-8"))
 
-    assert data["schema"] == "easy_asr_bench.release_smoke.v1"
+    assert data["schema"] == "easy_asr_bench.release_smoke.v2"
+    assert {"id": "win11_clean_no_python_setup", "status": "not_run"} in data["manual_rows"]
     assert data["tag"] == "v0.3.1"
     assert data["commit"] == "abc123"
     assert data["asset_hashes_verified"] is True
     assert all(check["status"] == "pass" for check in data["checks"])
-    assert data["manual_matrix"]["windows_11_clean_no_python"] == "not_run"
-    assert data["manual_matrix"]["windows_existing_python_3_14"] == "not_run"
+    assert data["manual_matrix"]["win11_clean_no_python_setup"] == "not_run"
+    assert data["manual_matrix"]["win10_existing_python_setup"] == "not_run"
     assert data["manual_matrix"]["provider_smoke"]["nvidia_cuda_torch_onnx_faster_whisper_llama"] == "not_run"
     assert data["manual_matrix"]["model_smoke"]["gguf_reference_llm"] == "not_run"
     assert data["manual_matrix"]["model_smoke"]["audio_asr_gguf_mmproj"] == "not_run"
@@ -187,7 +188,7 @@ def test_verify_github_release_accepts_complete_mocked_release_with_smoke(tmp_pa
     asset_bytes["checksums.json"] = json.dumps(checksums).encode()
     asset_bytes["release-smoke-v0.3.1.json"] = json.dumps(
         {
-            "schema": "easy_asr_bench.release_smoke.v1",
+            "schema": "easy_asr_bench.release_smoke.v2",
             "tag": "v0.3.1",
             "commit": "abc123",
             "asset_hashes_verified": True,
@@ -295,7 +296,7 @@ def test_verify_github_release_rejects_tampered_asset_hash(tmp_path, monkeypatch
             destination.write_text(
                 json.dumps(
                     {
-                        "schema": "easy_asr_bench.release_smoke.v1",
+                        "schema": "easy_asr_bench.release_smoke.v2",
                         "tag": "v0.3.1",
                         "commit": "abc123",
                         "asset_hashes_verified": True,

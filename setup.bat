@@ -3,11 +3,11 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 set APP_NAME=Easy ASR Bench
-set APP_VERSION=v0.3.3
+set APP_VERSION=v0.3.4
 set INSTALL_DIR=%LOCALAPPDATA%\Easy-ASR-Bench
 set INSTALLER_PS1=%~dp0installer\install.ps1
 set INSTALLER_URL=https://github.com/rollingedit/Easy-ASR-Bench/releases/download/%APP_VERSION%/install.ps1
-set INSTALLER_SHA256=sha256:7c5aab37516e8163a33ead2567cd944ffd226febbb0835146fbc8eb675d3fef1
+set INSTALLER_SHA256=sha256:62d44c2738fd85ea08a012e1244e8192fe7ad376108e41dce7772ec6d42e636d
 set VERIFY_RELEASE=0
 set ASSET_DIR=
 set NEXT_IS_ASSET_DIR=0

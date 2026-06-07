@@ -42,7 +42,14 @@ class HFTransformersASRAdapter:
             if text_generation:
                 continue
             raw, bucket = detect_safetensors_folder_precision(folder)
-            runnable = config.exists() and not missing
+            runnable = config.exists() and not missing and task_ok
+            category = "asr" if runnable else ("asr_probe_required" if config.exists() and not missing else "recognized_incomplete")
+            task = "automatic-speech-recognition" if task_ok else "unknown"
+            warnings = []
+            if not task_ok:
+                warnings.append(warning or "config.json does not identify a supported ASR architecture.")
+            if missing:
+                warnings.append("Safetensors folder is missing required ASR metadata/files.")
             candidates.append(
                 ModelCandidate(
                     candidate_id=f"hf_asr__{folder.name}".lower().replace(" ", "_"),
@@ -50,16 +57,21 @@ class HFTransformersASRAdapter:
                     family_name=folder.name,
                     backend="transformers",
                     container_format="safetensors",
-                    task="automatic-speech-recognition" if runnable else "unknown",
+                    task=task,
                     precision=raw,
                     quantization_label=bucket,
                     path=folder,
                     adapter_name=self.name,
                     runnable=runnable,
+                    category=category,
                     runnable_after_dependency_install=runnable,
                     missing_files=missing,
-                    warnings=[] if runnable else [warning or "Safetensors folder is missing ASR metadata."],
-                    help_text="Use a complete Hugging Face ASR model folder with config, tokenizer/processor files, and safetensors weights. Complete non-text-generation folders are allowed to try the Transformers ASR pipeline even when the scanner cannot prove the architecture from metadata.",
+                    warnings=warnings,
+                    help_text=(
+                        "Use a complete Hugging Face ASR model folder with config, tokenizer/processor files, and safetensors weights. "
+                        "Complete folders whose config does not identify an ASR architecture are probe-required, not automatically runnable."
+                    ),
+                    metadata={"model_status": category, "asr_probe_required": category == "asr_probe_required"},
                 )
             )
         return candidates

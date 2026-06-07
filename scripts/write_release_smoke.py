@@ -61,6 +61,17 @@ def verify_assets(tag: str) -> tuple[bool, dict[str, str]]:
     return actual == files and checksums.get("version") == tag.lstrip("v"), actual
 
 
+def manual_rows_from_matrix(matrix: dict) -> list[dict]:
+    rows: list[dict] = []
+    for key, value in matrix.items():
+        if isinstance(value, dict):
+            for nested_key, nested_value in value.items():
+                rows.append({"id": nested_key, "status": nested_value})
+        else:
+            rows.append({"id": key, "status": value})
+    return rows
+
+
 def write_smoke(tag: str, output: Path, commit: str | None = None) -> None:
     tag = tag if tag.startswith("v") else f"v{tag}"
     zip_path = ROOT / "dist" / f"Easy-ASR-Bench-{tag}-win.zip"
@@ -82,30 +93,36 @@ def write_smoke(tag: str, output: Path, commit: str | None = None) -> None:
         raise SystemExit("One or more release smoke checks failed")
 
     manual_matrix = {
-        "windows_10_clean_no_python": "not_run",
-        "windows_11_clean_no_python": "not_run",
-        "windows_existing_python_3_10": "not_run",
-        "windows_existing_python_3_11": "not_run",
-        "windows_existing_python_3_12": "not_run",
-        "windows_existing_python_3_13": "not_run",
-        "windows_existing_python_3_14": "not_run",
+        "win11_clean_no_python_setup": "not_run",
+        "win10_existing_python_setup": "not_run",
         "install_path_with_spaces": "not_run",
+        "setup_verify_release_bad_checksum": "not_run",
         "setup_double_click_equivalent": "not_run",
         "setup_dry_run_verify_release": "not_run",
         "setup_doctor_strict": "not_run",
         "update_preserves_user_data": "not_run",
         "repair_broken_venv": "not_run",
-        "uninstall_preserves_user_data": "not_run",
+        "uninstall_preserve_user_data": "not_run",
         "destructive_uninstall_requires_phrase": "not_run",
         "bad_checksum_fails_before_execution": "not_run",
         "tampered_installer_fails_before_execution": "not_run",
         "interrupted_download_rollback": "not_run",
         "broken_venv_repair": "not_run",
         "empty_models_folder": "not_run",
+        "empty_models": "not_run",
         "nested_models_folders": "not_run",
+        "nested_models_scan": "not_run",
         "wav_mp3_mp4_no_audio_corrupt_media": "not_run",
+        "wav_mp3_mp4_media": "not_run",
+        "corrupt_media_readable_error": "not_run",
+        "no_audio_video_readable_error": "not_run",
         "compare_html_offline_large_transcript": "not_run",
+        "compare_html_offline": "not_run",
         "batch_continues_after_one_model_or_chunk_fails": "not_run",
+        "one_model_failure_continues": "not_run",
+        "one_chunk_failure_continues": "not_run",
+        "llm_reference_json_import": "not_run",
+        "dependency_install_declined": "not_run",
         "provider_smoke": {
             "cpu_model_smoke": "not_run",
             "nvidia_cuda_torch_onnx_faster_whisper_llama": "not_run",
@@ -118,23 +135,31 @@ def write_smoke(tag: str, output: Path, commit: str | None = None) -> None:
         "model_smoke": {
             "hf_safetensors_asr": "not_run",
             "hf_whisper_safetensors": "not_run",
+            "hf_whisper_safetensors_cpu": "not_run",
             "sharded_safetensors_index": "not_run",
             "faster_whisper_ctranslate2": "not_run",
+            "faster_whisper_cpu": "not_run",
+            "faster_whisper_cuda_unavailable_cpu_fallback": "not_run",
             "whisper_cpp_ggml": "not_run",
             "openai_whisper_pt_checksum_verified": "not_run",
             "openai_whisper_pt_unknown_blocked": "not_run",
+            "openai_pt_unverified_blocked": "not_run",
             "generic_onnx_ctc_manifest_v1": "not_run",
+            "generic_onnx_manifest_cpu": "not_run",
             "generic_onnx_without_manifest_rejected": "not_run",
             "multi_file_onnx_ar_nar": "not_run",
             "audio_asr_gguf_mmproj": "not_run",
+            "gguf_asr_mmproj_pair": "not_run",
             "incomplete_audio_asr_gguf_mmproj_rejected": "not_run",
             "gguf_reference_llm": "not_run",
+            "gguf_text_llm_reference_only": "not_run",
+            "standalone_safetensors_incomplete": "not_run",
             "hf_text_llm_safetensors_unsupported": "not_run",
             "known_unsupported_asr_families_explained": "not_run",
         },
     }
     smoke = {
-        "schema": "easy_asr_bench.release_smoke.v1",
+        "schema": "easy_asr_bench.release_smoke.v2",
         "tag": tag,
         "commit": commit or current_commit(),
         "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -147,6 +172,7 @@ def write_smoke(tag: str, output: Path, commit: str | None = None) -> None:
         "asset_hashes": asset_hashes,
         "checks": checks,
         "manual_matrix": manual_matrix,
+        "manual_rows": manual_rows_from_matrix(manual_matrix),
         "notes": [
             "This artifact records automated release-candidate validation only.",
             "Rows marked not_run require manual Windows/hardware/model smoke testing before claiming production readiness.",

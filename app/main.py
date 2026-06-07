@@ -13,31 +13,35 @@ from .config import load_config
 from .console_style import key, prompt_label
 from .model_scanner import scan_models
 from .model_selector import choose_candidates
+from .model_status import candidate_reason, model_status_label
 from .utils import expand_inputs, parse_windows_path_list, sanitize_windows_drag_drop_path, wait_for_stable_file
 
 
 def print_scan_summary(runnable: list[ModelCandidate], unsupported: list[ModelCandidate]) -> None:
-    print("Runnable ASR candidates:")
-    asr = [candidate for candidate in runnable if candidate.category == "asr"]
-    refs = [candidate for candidate in runnable + unsupported if candidate.category == "reference_llm"]
-    if not asr:
-        print("  None")
-    for index, candidate in enumerate(asr, 1):
-        print(f"  [{index}] {candidate.display_name} | {candidate.precision} | {candidate.path}")
-    print()
-    print("Reference/correction LLM candidates:")
-    if not refs:
-        print("  None")
-    for index, candidate in enumerate(refs, 1):
-        print(f"  [L{index}] {candidate.display_name} | {candidate.precision} | {candidate.path}")
-    print()
-    print("Unsupported or incomplete candidates:")
-    unsupported_only = [candidate for candidate in unsupported if candidate.category != "reference_llm"]
-    if not unsupported_only:
-        print("  None")
-    for index, candidate in enumerate(unsupported_only, 1):
-        reason = "; ".join(candidate.warnings + ([f"Missing: {', '.join(candidate.missing_files)}"] if candidate.missing_files else []))
-        print(f"  [U{index}] {candidate.display_name} | {candidate.container_format} | {reason or 'unsupported'}")
+    buckets = [
+        ("Runnable ASR candidates", [candidate for candidate in runnable if candidate.category == "asr"]),
+        ("Needs dependency install", [candidate for candidate in unsupported if model_status_label(candidate) == "Needs dependency install"]),
+        ("ASR probe required", [candidate for candidate in unsupported if model_status_label(candidate) == "ASR probe required"]),
+        ("Reference/correction LLM candidates", [candidate for candidate in runnable + unsupported if candidate.category == "reference_llm"]),
+        ("Recognized incomplete", [candidate for candidate in unsupported if model_status_label(candidate) == "Recognized incomplete"]),
+        ("Unsafe blocked", [candidate for candidate in unsupported if model_status_label(candidate) == "Unsafe blocked"]),
+        ("Unsupported or inspection-only", [
+            candidate
+            for candidate in unsupported
+            if candidate.category != "reference_llm"
+            and model_status_label(candidate) not in {"Needs dependency install", "ASR probe required", "Recognized incomplete", "Unsafe blocked"}
+        ]),
+    ]
+    for title, items in buckets:
+        print(f"{title}:")
+        if not items:
+            print("  None")
+        for index, candidate in enumerate(items, 1):
+            if candidate.runnable:
+                print(f"  [{index}] {candidate.display_name} | {candidate.precision} | {candidate.path}")
+            else:
+                print(f"  [{index}] {candidate.display_name} | {candidate.container_format} | {candidate_reason(candidate)}")
+        print()
 
 
 def setup_logging(logs_dir: Path) -> None:
@@ -70,6 +74,7 @@ def adapter_for(candidate: ModelCandidate):
 
 def ensure_dependencies(candidates: list[ModelCandidate], config: dict, reference_llm: ModelCandidate | None = None) -> tuple[list[ModelCandidate], ModelCandidate | None]:
     from .dependency_manager import acceleration_install_decision, dependency_status, install_group_for_config, missing_modules_for_config, recovery_command_for_config
+    from .install_plan import build_install_plan, format_install_plan
 
     project_root = Path(__file__).resolve().parent.parent
     status = dependency_status()
@@ -87,6 +92,10 @@ def ensure_dependencies(candidates: list[ModelCandidate], config: dict, referenc
         return candidates, reference_llm
     print()
     print("Some selected models need additional runtime packages:")
+    group_candidates: dict[str, list[str]] = {group: [] for group in groups}
+    for candidate in all_candidates:
+        for group in candidate_groups.get(candidate.candidate_id, []):
+            group_candidates.setdefault(group, []).append(candidate.display_name)
     for group, modules in missing.items():
         detail = status.get(group, {})
         description = detail.get("description", "optional runtime support")
@@ -100,17 +109,20 @@ def ensure_dependencies(candidates: list[ModelCandidate], config: dict, referenc
             print(f"    repair: {recovery_command_for_config(group, config)}")
             if "accelerator" in acceleration_decision["reason"].lower() or "gpu" in acceleration_decision["reason"].lower() or "nvidia" in acceleration_decision["reason"].lower():
                 print(f"    accelerator note: {acceleration_decision['reason']}")
+        print(format_install_plan(build_install_plan(group, project_root, config, group_candidates.get(group, []))))
     if not config.get("dependency_install", {}).get("auto_install_missing_runtime_dependencies", True):
         print("Automatic dependency repair is disabled in config.json.")
-        failed_groups = set(missing)
-        return _drop_candidates_for_failed_dependency_groups(candidates, reference_llm, candidate_groups, failed_groups)
-    answer = input(f"Install missing dependency groups now? [{key('Y')}/{key('n')}] ").strip().lower()
-    if answer in {"n", "no"}:
         failed_groups = set(missing)
         return _drop_candidates_for_failed_dependency_groups(candidates, reference_llm, candidate_groups, failed_groups)
     failed_groups: set[str] = set()
     for group in missing:
         acceleration_decision = acceleration_install_decision(config, group)
+        plan = build_install_plan(group, project_root, config, group_candidates.get(group, []))
+        answer = input(f"{key('Enter')} installs {group}; type {key('s')} to skip: ").strip().lower()
+        if answer in {"s", "skip", "n", "no"}:
+            print(f"Skipped dependency install for {group}. {plan.fallback_if_declined}")
+            failed_groups.add(group)
+            continue
         accelerator = acceleration_decision.get("accelerator") if acceleration_decision["use_accelerator"] else ""
         install_label = f"{group} with {str(accelerator).upper()} packages" if accelerator else group
         print(f"Installing {install_label}...")
@@ -359,6 +371,7 @@ def _main(args: argparse.Namespace) -> None:
     if not selected:
         print("Cannot run selected models until their dependency groups are installed.")
         return
+    batch_rows: list[dict] = []
     while True:
         if args.watch:
             from .queue_manager import discover_queue
@@ -377,6 +390,9 @@ def _main(args: argparse.Namespace) -> None:
                 for file_path in files:
                     output = process_file_with_candidates(file_path, selected, config, unsupported, reference_llm)
                     state.mark(file_path.resolve(), "done" if output else "failed", str(output or ""))
+                    batch_rows.append({"source_path": str(file_path.resolve()), "status": "done" if output else "failed", "output_path": str(output or "")})
+                if args.once and len(batch_rows) > 1:
+                    write_batch_summary(config, batch_rows)
                 if args.once:
                     return
                 time.sleep(2)
@@ -391,9 +407,20 @@ def _main(args: argparse.Namespace) -> None:
             state.upsert(QueueItem(str(file_path.resolve()), sha256_file(file_path), file_key(file_path)))
             output = process_file_with_candidates(file_path, selected, config, unsupported, reference_llm)
             state.mark(file_path.resolve(), "done" if output else "failed", str(output or ""))
+            batch_rows.append({"source_path": str(file_path.resolve()), "status": "done" if output else "failed", "output_path": str(output or "")})
+        if len(files) > 1:
+            write_batch_summary(config, batch_rows[-len(files) :])
         if not args.interactive:
             return
         args.paths = []
+
+
+def write_batch_summary(config: dict, rows: list[dict]) -> None:
+    from .batch_report import write_batch_report
+
+    output_dir = write_batch_report(folder_config(config, "output"), rows)
+    print(f"Wrote batch overview to {output_dir}")
+    print(f"Open batch dashboard: {output_dir / 'index.html'}")
 
 
 if __name__ == "__main__":

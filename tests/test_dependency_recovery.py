@@ -280,7 +280,7 @@ def test_optional_install_failure_prints_repair_and_skips_only_affected(monkeypa
     )
 
     monkeypatch.setattr("app.main.adapter_for", lambda candidate: FakeAdapter())
-    monkeypatch.setattr("builtins.input", lambda prompt: "")
+    monkeypatch.setattr("builtins.input", lambda prompt: "s")
     monkeypatch.setattr("app.dependency_manager.missing_modules", lambda group: ["onnxruntime"] if group == "onnx" else [])
     monkeypatch.setattr("app.dependency_manager.install_group_for_config", lambda group, root, config: (_ for _ in ()).throw(RuntimeError("pip failed")))
 
@@ -288,8 +288,7 @@ def test_optional_install_failure_prints_repair_and_skips_only_affected(monkeypa
 
     output = capsys.readouterr().out
     assert kept == [good]
-    assert "Install failed for onnx" in output
-    assert "Manual repair command:" in output
+    assert "Skipped dependency install for onnx" in output
     assert "Skipping Bad model" in output
     assert "Good model" not in output
 
@@ -386,7 +385,7 @@ def test_reference_llm_dependency_failure_does_not_drop_asr_models(monkeypatch, 
     )
 
     monkeypatch.setattr("app.main.adapter_for", lambda candidate: FakeAdapter())
-    monkeypatch.setattr("builtins.input", lambda prompt: "")
+    monkeypatch.setattr("builtins.input", lambda prompt: "s")
     monkeypatch.setattr("app.dependency_manager.missing_modules", lambda group: ["llama_cpp"] if group == "llama_cpp" else [])
     monkeypatch.setattr("app.dependency_manager.install_group_for_config", lambda group, root, config: (_ for _ in ()).throw(RuntimeError("pip failed")))
 
@@ -458,6 +457,58 @@ def test_optional_install_uses_cuda_requirements_when_allowed(monkeypatch, tmp_p
     assert kept == [model]
     assert calls == [("onnx", True, "cuda")]
     assert "CUDA install:" in output
+
+
+def test_optional_install_empty_input_installs_and_failures_skip_only_affected(monkeypatch, tmp_path: Path, capsys):
+    from app.adapters.base import ModelCandidate
+
+    class FakeAdapter:
+        name = "fake"
+
+        def required_dependency_groups(self, candidate):
+            return list(candidate.metadata.get("groups", []))
+
+    good = ModelCandidate(
+        candidate_id="good",
+        display_name="Good model",
+        family_name="Good",
+        backend="test",
+        container_format="test",
+        task="automatic-speech-recognition",
+        precision="fp32",
+        quantization_label="fp32",
+        path=tmp_path / "good",
+        adapter_name="fake",
+        runnable=True,
+        metadata={"groups": []},
+    )
+    bad = ModelCandidate(
+        candidate_id="bad",
+        display_name="Bad model",
+        family_name="Bad",
+        backend="test",
+        container_format="test",
+        task="automatic-speech-recognition",
+        precision="fp32",
+        quantization_label="fp32",
+        path=tmp_path / "bad",
+        adapter_name="fake",
+        runnable=True,
+        metadata={"groups": ["onnx"]},
+    )
+
+    monkeypatch.setattr("app.main.adapter_for", lambda candidate: FakeAdapter())
+    monkeypatch.setattr("builtins.input", lambda prompt: "")
+    monkeypatch.setattr("app.dependency_manager.missing_modules", lambda group: ["onnxruntime"] if group == "onnx" else [])
+    monkeypatch.setattr("app.dependency_manager.install_group_for_config", lambda group, root, config: (_ for _ in ()).throw(RuntimeError("pip failed")))
+
+    kept, _ = ensure_dependencies([good, bad], {"dependency_install": {"auto_install_missing_runtime_dependencies": True}})
+
+    output = capsys.readouterr().out
+    assert kept == [good]
+    assert "Install failed for onnx" in output
+    assert "Manual repair command:" in output
+    assert "Skipping Bad model" in output
 
 
 def test_cuda_repair_triggers_for_cpu_only_torch(monkeypatch):

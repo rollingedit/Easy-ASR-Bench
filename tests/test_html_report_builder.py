@@ -42,4 +42,4 @@ def test_html_report_contains_chunk_pagination_for_long_reports():
 
     assert "const pageSize = 25" in html
     assert "chunkPage" in html
-    assert "Page ${chunkPage+1} / ${totalPages}" in html
+    assert "Chunk page ${chunkPage+1} / ${totalPages}" in html

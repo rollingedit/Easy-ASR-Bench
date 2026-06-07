@@ -15,6 +15,7 @@ python -m pytest --basetemp .pytest_tmp -p no:cacheprovider
 python scripts\build_release_zip.py --version vX.Y.Z --strict-checksums
 python scripts\validate_physical_files.py --zip dist\Easy-ASR-Bench-vX.Y.Z-win.zip
 python scripts\write_release_smoke.py --tag vX.Y.Z --commit <commit> --output release-smoke-vX.Y.Z.json
+python scripts\validate_release_smoke.py --smoke release-smoke-vX.Y.Z.json --required tests\fixtures\release_required_rows_v2.json
 cmd /c setup.bat --dry-run --local
 Remove-Item -LiteralPath dist\release-assets -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path dist\release-assets
@@ -28,6 +29,7 @@ python -m app.doctor --config config.json --strict
 ```
 
 The staged `--asset-dir` check must run before a draft release is published. It validates the same `setup.bat`, `install.ps1`, `manifest.json`, `checksums.json`, and ZIP bytes that will become release assets, without depending on public release URLs.
+`validate_release_smoke.py` verifies that every required release QA row exists. Public release publication and release-gate verification use `--require-all-pass --require-log-hashes --require-environment-summary`; that means every required row must be `pass` and must include app version, release commit, log/result hash evidence, and environment summary. If real Windows/model/provider/media evidence has not been collected, the correct status is `not_run`, and the release must remain unpublished or draft.
 
 ## GitHub Release Asset Gate
 
@@ -35,6 +37,8 @@ After GitHub Actions publishes the release, verify the actual uploaded assets:
 
 ```powershell
 python scripts\verify_github_release.py --repo rollingedit/Easy-ASR-Bench --tag vX.Y.Z --expected-commit <commit> --write-transcript release-verification-vX.Y.Z.txt
+python scripts\write_release_verification_manifest.py --tag vX.Y.Z --transcript release-verification-vX.Y.Z.txt --assets-dir release-asset --output release-verification-manifest-vX.Y.Z.json
+python scripts\verify_release_transcript.py --assets-dir release-asset --checksums release-asset\checksums.json --transcript release-asset\release-verification-vX.Y.Z.txt --detached-manifest release-verification-manifest-vX.Y.Z.json --strict
 ```
 
 For pushed commits, CI also fetches selected files from `raw.githubusercontent.com` at the exact commit SHA:
@@ -59,10 +63,12 @@ The release must upload:
 - `Easy-ASR-Bench-vX.Y.Z-win.zip`
 - `release-smoke-vX.Y.Z.json`
 - `release-verification-vX.Y.Z.txt`
+- `release-verification-manifest-vX.Y.Z.json`
 
 `setup.bat` must verify `install.ps1` before executing it. The app ZIP hash must match `checksums.json`.
 The smoke JSON records automated release-candidate checks and leaves Windows VM, GPU/provider, model, and media rows as `not_run` until they are actually executed. Do not edit those rows to `pass` unless the matching downloaded-release test was run.
 The verification transcript records actual downloaded release asset hashes and validation steps; it does not convert unrun manual matrix rows into passes.
+The transcript must not contain a hash of itself. `release-verification-manifest-vX.Y.Z.json` is the detached metadata that records the transcript hash after the transcript exists.
 
 ## Manual Windows QA
 

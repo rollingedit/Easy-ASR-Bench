@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import shutil
 import subprocess
 import tempfile
@@ -13,6 +14,7 @@ import soundfile as sf
 from .base import ChunkTranscript, ModelCandidate, ModelRunResult
 from ..benchmark import process_memory_mb
 from ..precision_detector import detect_from_path
+from ..runtime_plan import resolve_runtime_plan
 
 
 class GGUFASRMMProjAdapter:
@@ -30,7 +32,7 @@ class GGUFASRMMProjAdapter:
             pair = find_gguf_asr_pair(folder)
             if pair is None:
                 continue
-            main_model, projector, missing = pair
+            main_model, projector, missing, warnings = pair
             raw, bucket = detect_from_path(main_model if main_model else folder)
             runnable = main_model is not None and projector is not None and not missing
             candidates.append(
@@ -49,7 +51,7 @@ class GGUFASRMMProjAdapter:
                     runnable_after_dependency_install=runnable,
                     dependency_groups=["llama_cpp"],
                     missing_files=missing,
-                    warnings=[] if runnable else ["Audio/ASR GGUF package is incomplete or has no matching mmproj."],
+                    warnings=warnings if warnings else ([] if runnable else ["Audio/ASR GGUF package is incomplete or has no matching mmproj."]),
                     help_text="Use a matching ASR/audio .gguf model and mmproj .gguf projector. Runtime uses llama-cpp-python Qwen3ASRChatHandler when available, or llama-mtmd-cli from llama.cpp.",
                     metadata={
                         "model_path": str(main_model) if main_model else "",
@@ -133,10 +135,13 @@ class GGUFASRMMProjAdapter:
         self.backend = ""
 
 
-def find_gguf_asr_pair(folder: Path) -> tuple[Path | None, Path | None, list[str]] | None:
+def find_gguf_asr_pair(folder: Path) -> tuple[Path | None, Path | None, list[str], list[str]] | None:
     ggufs = [path for path in folder.glob("*.gguf") if path.is_file()]
     if not ggufs:
         return None
+    manifest_pair = find_manifest_gguf_pair(folder)
+    if manifest_pair is not None:
+        return manifest_pair
     projectors = [path for path in ggufs if path.name.lower().startswith(("mmproj", "mmproj-"))]
     main_models = [path for path in ggufs if path not in projectors]
     asr_named = any(any(signal in path.name.lower() for signal in ["asr", "audio", "whisper"]) for path in ggufs)
@@ -144,12 +149,40 @@ def find_gguf_asr_pair(folder: Path) -> tuple[Path | None, Path | None, list[str
         return None
     matching = [(main, projector) for main in main_models for projector in projectors if gguf_projector_matches(main, projector, main_models, projectors)]
     missing = []
+    warnings = []
     if not main_models:
         missing.append("main ASR/audio model .gguf")
     if not matching:
         missing.append("matching mmproj .gguf")
+    if len(matching) > 1:
+        missing.append("model_package.json exact GGUF ASR pairing manifest")
+        warnings.append("Multiple plausible GGUF ASR/mmproj pairs were found; add model_package.json to choose the exact pair.")
+        return None, None, sorted(set(missing)), warnings
     main_model, projector = matching[0] if matching else ((main_models[0] if main_models else None), None)
-    return main_model, projector, missing
+    return main_model, projector, missing, warnings
+
+
+def find_manifest_gguf_pair(folder: Path) -> tuple[Path | None, Path | None, list[str], list[str]] | None:
+    manifest = folder / "model_package.json"
+    if not manifest.exists():
+        return None
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return None, None, ["valid model_package.json"], [f"model_package.json could not be parsed: {exc}"]
+    artifacts = data.get("artifacts", {}) if isinstance(data, dict) else {}
+    main_name = artifacts.get("main_model")
+    projector_name = artifacts.get("projector")
+    if not isinstance(main_name, str) or not isinstance(projector_name, str):
+        return None, None, ["artifacts.main_model", "artifacts.projector"], ["model_package.json must name the exact main_model and projector."]
+    main = folder / main_name
+    projector = folder / projector_name
+    missing = []
+    if not main.exists():
+        missing.append(main_name)
+    if not projector.exists():
+        missing.append(projector_name)
+    return (main if main.exists() else None), (projector if projector.exists() else None), missing, []
 
 
 def gguf_projector_matches(main_model: Path, projector: Path, main_models: list[Path], projectors: list[Path]) -> bool:
@@ -183,7 +216,8 @@ def load_python_backend(model_path: Path, mmproj_path: Path, runtime_config: dic
         from llama_cpp.llama_chat_format import Qwen3ASRChatHandler
     except Exception:
         return None
-    n_gpu_layers = -1 if runtime_config.get("provider") == "cuda" or bool(runtime_config.get("prefer_gpu", True)) else 0
+    plan = resolve_runtime_plan("llama_cpp", runtime_config)
+    n_gpu_layers = -1 if plan.actual_provider in {"cuda", "vulkan", "hip"} and plan.backend_verified else 0
     return Llama(
         model_path=str(model_path),
         chat_handler=Qwen3ASRChatHandler(clip_model_path=str(mmproj_path), verbose=False),

@@ -49,7 +49,7 @@ def test_hf_safetensors_bfloat16_detected(tmp_path: Path):
     assert candidate.quantization_label == "16-bit / BF16"
 
 
-def test_complete_unknown_hf_safetensors_is_allowed_to_runtime_probe(tmp_path: Path):
+def test_complete_unknown_hf_safetensors_is_probe_required_not_auto_runnable(tmp_path: Path):
     model = tmp_path / "custom-audio-transformer"
     model.mkdir()
     (model / "config.json").write_text(
@@ -62,9 +62,11 @@ def test_complete_unknown_hf_safetensors_is_allowed_to_runtime_probe(tmp_path: P
 
     runnable, unsupported = scan_models(tmp_path)
 
-    candidate = next(candidate for candidate in runnable if candidate.adapter_name == "hf_transformers_asr")
-    assert candidate.task == "automatic-speech-recognition"
-    assert not any(item.path == model for item in unsupported)
+    assert not runnable
+    candidate = next(candidate for candidate in unsupported if candidate.adapter_name == "hf_transformers_asr")
+    assert candidate.task == "unknown"
+    assert candidate.category == "asr_probe_required"
+    assert candidate.runnable is False
 
 
 def test_whisper_cpp_detected(tmp_path: Path):

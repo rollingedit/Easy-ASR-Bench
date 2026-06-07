@@ -9,6 +9,7 @@ from .hf_model_downloader import download_hf_model_interactive
 from .interactive_menu import MenuAction, choose_many, choose_one
 from .llm_reference import merge_reference_llms, print_external_llm_guide, save_custom_reference_path, scan_custom_reference_llms
 from .model_scanner import scan_models
+from .model_status import candidate_reason, model_status_label
 
 
 def parse_selection(raw: str, max_index: int) -> list[int]:
@@ -94,6 +95,7 @@ def _choose_candidates_once(
     config_path: Path | None = None,
     models_root: Path | None = None,
 ) -> tuple[list[ModelCandidate], ModelCandidate | None, bool]:
+    probe_candidates = [candidate for candidate in unsupported if candidate.category == "asr_probe_required"]
     candidates = [candidate for candidate in candidates if candidate.category == "asr"]
     saved_reference_llms = scan_custom_reference_llms(config) if config is not None else []
     reference_llms = merge_reference_llms([candidate for candidate in unsupported if candidate.category == "reference_llm"], saved_reference_llms)
@@ -119,12 +121,11 @@ def _choose_candidates_once(
                 print(f"[{key('L' + str(index))}] {candidate.display_name}    {candidate.backend}    {candidate.precision}    {candidate.quantization_label}")
                 print(f"     Use: optional LLM-corrected reference generation, not direct transcription.")
         print()
-        print("Detected non-ASR, incomplete, or unsupported candidates:")
+        print("Detected non-runnable model packages:")
         print()
         for index, candidate in enumerate(unsupported, 1):
-            reason = "; ".join(candidate.warnings + ([f"Missing: {', '.join(candidate.missing_files)}"] if candidate.missing_files else []))
-            print(f"[{key('U' + str(index))}] {candidate.display_name}")
-            print(f"     Reason: {reason or 'Unsupported by current adapters.'}")
+            print(f"[{key('U' + str(index))}] {candidate.display_name}    {model_status_label(candidate)}")
+            print(f"     Reason: {candidate_reason(candidate)}")
     if models_root is not None:
         print()
         print(f"[{key('D')}] Paste a Hugging Face model link/repo id to download a model package")
@@ -133,33 +134,45 @@ def _choose_candidates_once(
             return [], None, False
         menu_choice = choose_one(
             "No runnable ASR models were found.",
-            ["Download a Hugging Face model package", "Stop for now"],
+            ["Probe a complete unknown ASR folder", "Download a Hugging Face model package", "Stop for now"] if probe_candidates else ["Download a Hugging Face model package", "Stop for now"],
         )
-        if menu_choice == 0:
+        if probe_candidates and menu_choice == 0:
+            selected = choose_probe_candidates(probe_candidates)
+            reference_llm = choose_reference_llm(reference_llms, config, config_path)
+            return selected, reference_llm, False
+        if (probe_candidates and menu_choice == 1) or (not probe_candidates and menu_choice == 0):
             if download_hf_model_interactive(models_root) is not None:
                 return [], None, True
-        elif menu_choice == 1:
+        elif (probe_candidates and menu_choice == 2) or (not probe_candidates and menu_choice == 1):
             return [], None, False
         while True:
             raw = input(prompt_label("Models> ")).strip().lower()
+            if raw in {"p", "probe"} and probe_candidates:
+                selected = choose_probe_candidates(probe_candidates)
+                reference_llm = choose_reference_llm(reference_llms, config, config_path)
+                return selected, reference_llm, False
             if raw in {"d", "download", "hf", "huggingface"}:
                 if download_hf_model_interactive(models_root) is not None:
                     return [], None, True
                 continue
             if raw in {"", "q", "quit", "exit"}:
                 return [], None, False
-            print(f"No runnable models yet. Choose {key('D')} to download from Hugging Face, or press {key('Enter')} to stop.")
+            probe_text = f", {key('P')} to probe a complete unknown ASR folder" if probe_candidates else ""
+            print(f"No runnable models yet. Choose {key('D')} to download from Hugging Face{probe_text}, or press {key('Enter')} to stop.")
     print()
     if len(candidates) > 9:
-        print(f"Choose models with spaces, commas, or ranges: {key('1 2 10')}, {key('1,2,10')}, {key('1-4')}. Compact digits are disabled for 10+ models. Use {key('D')} to download from Hugging Face.")
+        probe_text = f" Use {key('P')} to probe complete unknown ASR folders." if probe_candidates else ""
+        print(f"Choose models with spaces, commas, or ranges: {key('1 2 10')}, {key('1,2,10')}, {key('1-4')}. Compact digits are disabled for 10+ models. Use {key('D')} to download from Hugging Face.{probe_text}")
     else:
-        print(f"Choose models: numbers like {key('1 2 4')}, {key('1,2,4')}, {key('1-4')}, {key('1234')}, {key('A')} for all, {key('R')} for recommended, {key('D')} to download from Hugging Face.")
+        probe_text = f", {key('P')} to probe complete unknown ASR folders" if probe_candidates else ""
+        print(f"Choose models: numbers like {key('1 2 4')}, {key('1,2,4')}, {key('1-4')}, {key('1234')}, {key('A')} for all, {key('R')} for recommended, {key('D')} to download from Hugging Face{probe_text}.")
     menu_result = choose_many(
         "Choose ASR models",
         [f"{candidate.display_name} | {candidate.backend} | {candidate.precision} | {candidate.quantization_label}" for candidate in candidates],
         actions=[
             MenuAction("A", "select all"),
             MenuAction("R", "recommended"),
+            *([MenuAction("P", "probe complete unknown ASR folder")] if probe_candidates else []),
             *([MenuAction("D", "download from Hugging Face")] if models_root is not None else []),
         ],
     )
@@ -176,6 +189,10 @@ def _choose_candidates_once(
         selected = choose_precision_buckets([candidates[index - 1] for index in indexes])
         reference_llm = choose_reference_llm(reference_llms, config, config_path)
         return selected, reference_llm, False
+    elif menu_result == "p" and probe_candidates:
+        selected = choose_probe_candidates(probe_candidates)
+        reference_llm = choose_reference_llm(reference_llms, config, config_path)
+        return selected, reference_llm, False
     elif isinstance(menu_result, list):
         selected = choose_precision_buckets([candidates[index] for index in menu_result])
         reference_llm = choose_reference_llm(reference_llms, config, config_path)
@@ -186,6 +203,10 @@ def _choose_candidates_once(
             if download_hf_model_interactive(models_root) is not None:
                 return [], None, True
             continue
+        if raw.lower() in {"p", "probe"} and probe_candidates:
+            selected = choose_probe_candidates(probe_candidates)
+            reference_llm = choose_reference_llm(reference_llms, config, config_path)
+            return selected, reference_llm, False
         if raw.lower() in {"r", "recommended"}:
             indexes = recommended_candidates(candidates)
         else:
@@ -196,6 +217,27 @@ def _choose_candidates_once(
     selected = choose_precision_buckets([candidates[index - 1] for index in indexes])
     reference_llm = choose_reference_llm(reference_llms, config, config_path)
     return selected, reference_llm, False
+
+
+def choose_probe_candidates(candidates: list[ModelCandidate]) -> list[ModelCandidate]:
+    print()
+    print("Complete unknown ASR folders available for runtime probe:")
+    for index, candidate in enumerate(candidates, 1):
+        print(f"[{key(str(index))}] {candidate.display_name} | {candidate.backend} | {candidate.path}")
+    menu_result = choose_many(
+        "Choose ASR folders to probe",
+        [f"{candidate.display_name} | {candidate.backend} | {candidate.path}" for candidate in candidates],
+    )
+    if isinstance(menu_result, list):
+        return [candidates[index] for index in menu_result]
+    while True:
+        raw = input(prompt_label("Probe> ")).strip()
+        indexes = parse_selection(raw, len(candidates))
+        if indexes:
+            return [candidates[index - 1] for index in indexes]
+        if raw.lower() in {"", "q", "quit", "exit"}:
+            return []
+        print("Choose one or more probe candidate numbers, or press Enter to cancel.")
 
 
 def choose_precision_buckets(candidates: list[ModelCandidate]) -> list[ModelCandidate]:

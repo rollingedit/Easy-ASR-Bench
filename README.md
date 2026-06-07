@@ -34,7 +34,7 @@ It runs every selected ASR model on the same normalized audio and the same chunk
 
 Precision and quantization labels such as INT4, INT5, INT6, INT8, FP4, NF4, NVFP4/NVP4, FP8, BF8, BF16/bfloat16, FP16, FP32, Q4/Q5/Q6/Q8, K_M/K_S variants, and IQ variants are detected for grouping/reporting when the underlying model backend supports them. Easy ASR Bench does not invent a runtime for an unsupported model format; it labels the model accurately and installs the dependency group for the matching backend.
 
-For complete Hugging Face Safetensors folders that do not look like text-generation LLMs, Easy ASR Bench allows a runtime probe through the Transformers ASR pipeline instead of blocking only because the metadata is unfamiliar. If the model cannot actually run, that failure is captured in the report with the traceback and the rest of the batch continues.
+Complete Hugging Face Safetensors folders that do not look like text-generation LLMs but also do not identify a known ASR architecture are listed as **ASR probe required**, not as normal runnable models. In interactive mode you can deliberately choose the probe option. If the model cannot actually run, that failure is captured in the report with the traceback and the rest of the batch continues.
 
 ### Blocked By Default
 
@@ -187,6 +187,17 @@ Output/
     compare.html
 ```
 
+When a run processes multiple audio/video files, Easy ASR Bench also writes a batch dashboard:
+
+```text
+Output/
+  batch__20260606_143012/
+    index.html
+    batch.json
+```
+
+The batch dashboard shows several files side by side, pages through large file sets, filters by path/status, summarizes every model per file with speed/RAM/VRAM/errors, and links to the full `compare.html` for detailed transcript review.
+
 ## Windows Launchers
 
 - `setup.bat`: install or repair the app
@@ -203,7 +214,7 @@ Output/
 
 ## Dependencies And GPU Support
 
-Setup installs the core runtime first. Model-specific packages are installed only when a selected model needs them, and the app prompts before installing those optional dependency groups.
+Setup installs the core runtime first. Model-specific packages are installed only when a selected model needs them. Before installing an optional dependency group, the app shows the package names, requirement files, package indexes, install location, network destinations, PATH changes, size class, and fallback behavior. Press Enter once to install the disclosed group, or type `s` to skip only the affected models.
 
 If an optional dependency install fails, Easy ASR Bench skips only the affected model and continues with any other runnable models. `setup.bat --doctor` lists each dependency group, what it enables, what is missing, and the manual repair command.
 

@@ -1,3 +1,4 @@
+import json
 import sys
 import types
 from pathlib import Path
@@ -33,6 +34,38 @@ def test_gguf_asr_adapter_rejects_mismatched_projector_quant(tmp_path: Path):
 
     assert candidate.runnable is False
     assert "matching mmproj .gguf" in candidate.missing_files
+
+
+def test_gguf_asr_adapter_marks_multiple_pairs_ambiguous_without_manifest(tmp_path: Path):
+    model = tmp_path / "qwen-asr"
+    model.mkdir()
+    (model / "Qwen3-ASR-1.7B-Q8_0.gguf").write_bytes(b"gguf")
+    (model / "mmproj-Qwen3-ASR-1.7B-Q8_0.gguf").write_bytes(b"gguf")
+    (model / "Qwen3-ASR-1.7B-Q4_K_M.gguf").write_bytes(b"gguf")
+    (model / "mmproj-Qwen3-ASR-1.7B-Q4_K_M.gguf").write_bytes(b"gguf")
+
+    candidate = GGUFASRMMProjAdapter().discover(tmp_path)[0]
+
+    assert candidate.runnable is False
+    assert "model_package.json exact GGUF ASR pairing manifest" in candidate.missing_files
+
+
+def test_gguf_asr_adapter_uses_manifest_pair_when_multiple_pairs_exist(tmp_path: Path):
+    model = tmp_path / "qwen-asr"
+    model.mkdir()
+    (model / "Qwen3-ASR-1.7B-Q8_0.gguf").write_bytes(b"gguf")
+    (model / "mmproj-Qwen3-ASR-1.7B-Q8_0.gguf").write_bytes(b"gguf")
+    (model / "Qwen3-ASR-1.7B-Q4_K_M.gguf").write_bytes(b"gguf")
+    (model / "mmproj-Qwen3-ASR-1.7B-Q4_K_M.gguf").write_bytes(b"gguf")
+    (model / "model_package.json").write_text(
+        json.dumps({"schema": "easy_asr_bench.model_package.v1", "artifacts": {"main_model": "Qwen3-ASR-1.7B-Q4_K_M.gguf", "projector": "mmproj-Qwen3-ASR-1.7B-Q4_K_M.gguf"}}),
+        encoding="utf-8",
+    )
+
+    candidate = GGUFASRMMProjAdapter().discover(tmp_path)[0]
+
+    assert candidate.runnable is True
+    assert candidate.metadata["model_path"].endswith("Qwen3-ASR-1.7B-Q4_K_M.gguf")
 
 
 def test_gguf_asr_python_backend_transcribes_chunks(tmp_path: Path, monkeypatch):
