@@ -11,7 +11,7 @@ on:
         required: false
         type: string
   release:
-    types: [published]
+    types: [published, prereleased]
 
 jobs:
   validate:
@@ -60,6 +60,8 @@ jobs:
           if ("${{ inputs.release_tag }}" -ne "") {
             $tag = "${{ inputs.release_tag }}"
           }
+          $releaseInfo = gh release view $tag --json isPrerelease | ConvertFrom-Json
+          $releaseIsPrerelease = [bool]$releaseInfo.isPrerelease
           gh release download $tag --pattern manifest.json --pattern checksums.json --dir release-asset
           $manifest = Get-Content -Raw release-asset/manifest.json | ConvertFrom-Json
           $checksums = Get-Content -Raw release-asset/checksums.json | ConvertFrom-Json
@@ -85,7 +87,7 @@ jobs:
             "--smoke", (Join-Path "release-asset" "release-smoke-$tag.json"),
             "--required", "tests/fixtures/release_required_rows_v2.json"
           )
-          if ("${{ github.event.release.prerelease }}" -ne "true") {
+          if (-not $releaseIsPrerelease) {
             $smokeArgs += @("--require-all-pass", "--require-log-hashes", "--require-environment-summary")
           }
           python @smokeArgs
