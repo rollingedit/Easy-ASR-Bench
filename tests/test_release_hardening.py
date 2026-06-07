@@ -99,5 +99,17 @@ def test_release_verifier_peels_annotated_tags():
         assert verify_github_release.resolve_tag_commit("owner/repo", "v1") == "commit-sha"
 
 
+def test_release_verifier_finds_draft_release_when_tag_endpoint_404():
+    def fake_request_json(url):
+        if url.endswith("/releases/tags/v1"):
+            raise verify_github_release.urllib.error.HTTPError(url, 404, "Not Found", None, None)
+        if url.endswith("/releases?per_page=100"):
+            return [{"tag_name": "v1", "assets": []}]
+        raise AssertionError(url)
+
+    with patch.object(verify_github_release, "request_json", side_effect=fake_request_json):
+        assert verify_github_release.fetch_release("owner/repo", "v1")["tag_name"] == "v1"
+
+
 def test_physical_files_validate_repo_bytes():
     validate_root(ROOT)

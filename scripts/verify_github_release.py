@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -24,7 +25,7 @@ def sha256(path: Path) -> str:
     return "sha256:" + digest.hexdigest()
 
 
-def request_json(url: str) -> dict:
+def request_json(url: str):
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "Easy-ASR-Bench-release-verifier"}
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if token:
@@ -71,6 +72,21 @@ def release_assets_by_name(release: dict) -> dict[str, dict]:
     if missing:
         raise AssertionError("Missing release assets: " + ", ".join(missing))
     return assets
+
+
+def fetch_release(repo: str, tag: str) -> dict:
+    api = f"https://api.github.com/repos/{repo}/releases/tags/{tag}"
+    try:
+        return request_json(api)
+    except urllib.error.HTTPError as exc:
+        if exc.code != 404:
+            raise
+    releases = request_json(f"https://api.github.com/repos/{repo}/releases?per_page=100")
+    if isinstance(releases, list):
+        for release in releases:
+            if release.get("tag_name") == tag:
+                return release
+    raise AssertionError(f"GitHub release not found for tag {tag}")
 
 
 def download_asset(asset: dict, destination: Path) -> None:
@@ -160,8 +176,7 @@ def validate_release_zip(zip_path: Path, temp: Path) -> None:
 
 
 def verify_release(repo: str, tag: str, expected_commit: str | None) -> None:
-    api = f"https://api.github.com/repos/{repo}/releases/tags/{tag}"
-    release = request_json(api)
+    release = fetch_release(repo, tag)
     assert_commit_matches(repo, tag, expected_commit)
 
     temp = Path(tempfile.mkdtemp(prefix="easy-asr-release-"))
