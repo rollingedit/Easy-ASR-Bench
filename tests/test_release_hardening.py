@@ -150,7 +150,9 @@ def test_publish_workflow_refuses_public_asset_mutation_before_clobber():
     release_gate = (ROOT / ".github" / "workflows" / "release-gate.yml").read_text(encoding="utf-8")
     assert "validate_raw_github_files.py" in release_gate
     assert "--zip dist/Easy-ASR-Bench-$version-win.zip" in release_gate
-    assert "github.event.release.prerelease" in release_gate
+    assert "types: [published, prereleased]" in release_gate
+    assert "gh release view $tag --json isPrerelease" in release_gate
+    assert "releaseIsPrerelease" in release_gate
 
 
 def test_release_verifier_peels_annotated_tags():

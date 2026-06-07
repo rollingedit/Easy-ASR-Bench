@@ -16,7 +16,7 @@ def test_release_gate_verifies_committed_metadata():
     build_step = workflow.split("Build and validate release ZIP", 1)[1].split("Upload built release ZIP", 1)[0]
     assert "--update-metadata" not in build_step
     assert "release:" in workflow
-    assert "types: [published]" in workflow
+    assert "types: [published, prereleased]" in workflow
     assert "release_tag" in workflow
     assert "github.event_name == 'release'" in workflow
     assert "actions/upload-artifact" in workflow
