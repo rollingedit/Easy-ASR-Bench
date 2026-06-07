@@ -316,6 +316,77 @@ def classify_file_failure(exc: Exception) -> tuple[str, list[str], list[str]]:
     )
 
 
+def classify_model_failure(exc: BaseException, candidate: ModelCandidate) -> tuple[list[str], list[str]]:
+    message = str(exc).lower()
+    family = candidate.family_name or candidate.display_name
+    causes: list[str] = []
+    actions: list[str] = []
+    if isinstance(exc, ImportError) or "no module named" in message or "modulenotfounderror" in message:
+        causes.append(f"The optional runtime package for {family} is not installed or is installed in the wrong environment.")
+        actions.append("Run the dependency install prompt for this model, or run setup.bat --doctor for the exact repair command.")
+    if "cuda" in message or "cudnn" in message or "cublas" in message or "gpu" in message:
+        causes.append("The selected GPU provider failed, is missing CUDA/cuDNN runtime files, or is incompatible with this model/backend.")
+        actions.append("Retry with CPU when available, or install the GPU runtime shown by setup.bat --doctor.")
+    if "onnx" in message or "executionprovider" in message or "provider" in message:
+        causes.append("The ONNX provider, model sidecar files, or provider-specific runtime is missing or incompatible.")
+        actions.append("Confirm the model folder includes every required ONNX sidecar file and use the provider repair command from doctor.")
+    if "out of memory" in message or "oom" in message or "memory" in message:
+        causes.append("The model may be too large for available RAM/VRAM or the selected precision/provider.")
+        actions.append("Try a smaller model, lower-precision model, CPU mode, or fewer simultaneous models.")
+    if "file" in message or "path" in message or "not found" in message or "missing" in message:
+        causes.append("The model folder may be incomplete, moved, locked, or missing required files.")
+        actions.append("Use the model scanner or Hugging Face downloader repair prompt to restore missing same-package files.")
+    if not causes:
+        causes = [
+            "The model runtime failed while loading or transcribing this file.",
+            "The model package, provider, dependency group, or selected runtime option may be incompatible.",
+        ]
+    if not actions:
+        actions = [
+            "Check the model folder and dependency group shown in this report.",
+            "Run setup.bat --doctor for runtime status and repair commands.",
+            "Try another runnable ASR model so the batch can continue.",
+        ]
+    return causes, actions
+
+
+def build_model_failure_error(
+    *,
+    stage: str,
+    candidate: ModelCandidate,
+    exc: BaseException,
+    config: dict,
+    log_path: Path | None,
+) -> dict:
+    from .dependency_manager import recovery_command_for_config
+
+    dependency_groups = list(candidate.dependency_groups or [])
+    repair_command = ""
+    if dependency_groups:
+        try:
+            repair_command = recovery_command_for_config(dependency_groups[0], config)
+        except Exception:
+            repair_command = "Run setup.bat --doctor for a repair command."
+    likely_causes, next_actions = classify_model_failure(exc, candidate)
+    return {
+        "status": "model_failed",
+        "stage": stage,
+        "model_id": candidate.candidate_id,
+        "model_name": candidate.display_name,
+        "model_path": str(candidate.path),
+        "error_type": type(exc).__name__,
+        "message": str(exc) or type(exc).__name__,
+        "likely_causes": likely_causes,
+        "next_actions": next_actions,
+        "dependency_group": ", ".join(dependency_groups),
+        "provider_requested": str(config.get("runtime", {}).get("provider", "auto")),
+        "provider_actual": "",
+        "repair_command": repair_command,
+        "log_path": str(log_path) if log_path else "",
+        "traceback": traceback.format_exc(),
+    }
+
+
 def process_file_with_candidates(
     source: Path,
     candidates: list[ModelCandidate],
@@ -349,8 +420,9 @@ def process_file_with_candidates(
         run_results: list[ModelRunResult] = []
         for candidate in candidates:
             logging.info("Running %s", candidate.candidate_id)
-            adapter = adapter_for(candidate)
+            adapter = None
             try:
+                adapter = adapter_for(candidate)
                 load_started = time.perf_counter()
                 reset_peak_vram()
                 adapter.load(candidate, runtime_config_for_candidate(config))
@@ -361,7 +433,7 @@ def process_file_with_candidates(
                 audio_seconds_metric = float(result.metrics.get("audio_seconds", audio_seconds))
                 result.metrics["audio_seconds_per_wall_second"] = audio_seconds_metric / max(0.001, float(result.metrics["total_wall_seconds"]))
                 result.metrics["peak_vram_mb"] = peak_vram_mb()
-            except Exception:
+            except Exception as exc:
                 logging.error("%s failed", candidate.candidate_id)
                 logging.exception("Model failed")
                 result = ModelRunResult(
@@ -374,10 +446,31 @@ def process_file_with_candidates(
                         "media_normalization_seconds": media_seconds,
                         "peak_process_memory_mb": process_memory_mb(),
                     },
-                    errors=[traceback.format_exc()],
+                    errors=[
+                        build_model_failure_error(
+                            stage="model_load_or_inference",
+                            candidate=candidate,
+                            exc=exc,
+                            config=config,
+                            log_path=latest_log_path(config),
+                        )
+                    ],
                 )
             finally:
-                adapter.unload()
+                if adapter is not None:
+                    try:
+                        adapter.unload()
+                    except Exception as exc:
+                        logging.exception("Adapter unload failed")
+                        result.errors.append(
+                            build_model_failure_error(
+                                stage="adapter_unload",
+                                candidate=candidate,
+                                exc=exc,
+                                config=config,
+                                log_path=latest_log_path(config),
+                            )
+                        )
             run_results.append(result)
         unsupported_for_report = list(unsupported_models or [])
         if reference_llm:
@@ -506,8 +599,11 @@ def main() -> None:
     parser.add_argument("--interactive", action="store_true")
     parser.add_argument("--scan-only", action="store_true")
     parser.add_argument("--doctor", action="store_true")
+    parser.add_argument("--json", action="store_true")
     parser.add_argument("--first-run", action="store_true")
+    parser.add_argument("--first-run-smoke", action="store_true")
     parser.add_argument("--download-model", action="store_true")
+    parser.add_argument("--download-model-first", action="store_true")
     parser.add_argument("--open-models", action="store_true")
     parser.add_argument("--open-input", action="store_true")
     parser.add_argument("--watch", action="store_true")
@@ -526,8 +622,13 @@ def _main(args: argparse.Namespace) -> None:
     if args.doctor:
         from .doctor import run_doctor
 
-        raise SystemExit(run_doctor(Path(args.config), strict=False))
+        raise SystemExit(run_doctor(Path(args.config), strict=False, json_output=bool(args.json)))
     models_root = folder_config(config, "models")
+    if args.first_run_smoke:
+        from .first_run import build_first_run_smoke_report
+
+        print(json.dumps(build_first_run_smoke_report(config), indent=2))
+        return
     if args.open_models:
         open_folder(models_root)
         return
@@ -542,7 +643,8 @@ def _main(args: argparse.Namespace) -> None:
     if args.first_run:
         from .first_run import run_first_run_wizard
 
-        if not run_first_run_wizard(config):
+        initial_action = "paste_hf" if args.download_model_first else None
+        if not run_first_run_wizard(config, initial_action=initial_action):
             return
         args.interactive = True
     runnable, unsupported = scan_models(models_root)
@@ -555,6 +657,7 @@ def _main(args: argparse.Namespace) -> None:
     warn_runtime_dependency_fallbacks(config)
     reference_llm = None
     if args.interactive and not args.scan_only:
+        print("Core runtime ready. Optional model runtimes install only when selected.")
         selected, reference_llm = choose_candidates(runnable, unsupported, config, Path(args.config), models_root)
     else:
         selected = [candidate for candidate in runnable if candidate.category == "asr"]

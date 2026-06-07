@@ -3,14 +3,16 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 set APP_NAME=Easy ASR Bench
-set APP_VERSION=v0.3.7
+set APP_VERSION=v0.3.8
 set INSTALL_DIR=%LOCALAPPDATA%\Easy-ASR-Bench
 set INSTALLER_PS1=%~dp0installer\install.ps1
 set INSTALLER_URL=https://github.com/rollingedit/Easy-ASR-Bench/releases/download/%APP_VERSION%/install.ps1
-set INSTALLER_SHA256=sha256:0481daaca56d0fdb7a43178bb2a45cd0e8947259e3c118d01026cf8b9ea1be8c
+set INSTALLER_SHA256=sha256:5b60faa21fce97ea806c1af28dd627578164393d83301a542cbc529eb86bbe4d
 set VERIFY_RELEASE=0
 set ASSET_DIR=
 set NEXT_IS_ASSET_DIR=0
+set DOCTOR_ARGS=
+set NO_POST_SETUP_MENU=0
 
 for %%A in (%*) do (
   if "!NEXT_IS_ASSET_DIR!"=="1" (
@@ -19,12 +21,17 @@ for %%A in (%*) do (
   ) else (
     if /I "%%~A"=="--verify-release" set VERIFY_RELEASE=1
     if /I "%%~A"=="--asset-dir" set NEXT_IS_ASSET_DIR=1
+    if /I "%%~A"=="--json" set DOCTOR_ARGS=!DOCTOR_ARGS! --json
+    if /I "%%~A"=="--strict" set DOCTOR_ARGS=!DOCTOR_ARGS! --strict
+    if /I "%%~A"=="--no-post-setup-menu" set NO_POST_SETUP_MENU=1
   )
 )
 
 if /I "%~1"=="--dry-run" goto dry_run
 if /I "%~2"=="--dry-run" goto dry_run
-if /I "%~1"=="--doctor" goto doctor
+if /I "%~1"=="--doctor" (
+  goto doctor
+)
 if /I "%~1"=="--uninstall" goto uninstall
 if /I "%~1"=="--repair" goto bootstrap
 if /I "%~1"=="--update" goto bootstrap
@@ -90,7 +97,7 @@ if errorlevel 3 (
   exit /b 0
 )
 if errorlevel 2 (
-  start "Easy ASR Bench Model Download" cmd /k ""%INSTALL_DIR%\Run.bat" --download-model"
+  start "Easy ASR Bench" cmd /k ""%INSTALL_DIR%\Run.bat" --first-run --download-model-first"
   exit /b 0
 )
 if exist "%INSTALL_DIR%\Run.bat" (
@@ -150,11 +157,15 @@ exit /b %errorlevel%
 
 :doctor
 if exist ".venv\Scripts\python.exe" (
-  ".venv\Scripts\python.exe" -m app.doctor --config config.json
+  ".venv\Scripts\python.exe" -m app.doctor --config config.json %DOCTOR_ARGS%
   exit /b %errorlevel%
 )
 if exist "%INSTALL_DIR%\.venv\Scripts\python.exe" (
-  "%INSTALL_DIR%\.venv\Scripts\python.exe" -m app.doctor --config "%INSTALL_DIR%\config.json"
+  "%INSTALL_DIR%\.venv\Scripts\python.exe" -m app.doctor --config "%INSTALL_DIR%\config.json" %DOCTOR_ARGS%
+  exit /b %errorlevel%
+)
+if exist "%~dp0app\doctor.py" (
+  python -m app.doctor --config config.json %DOCTOR_ARGS%
   exit /b %errorlevel%
 )
 echo Easy ASR Bench is not installed here and no installed runtime was found.
@@ -238,6 +249,8 @@ if errorlevel 1 (
   exit /b 1
 )
 
+if "%NO_POST_SETUP_MENU%"=="1" exit /b 0
+
 echo.
 echo Setup complete.
 echo.
@@ -260,7 +273,7 @@ if errorlevel 3 (
   exit /b 0
 )
 if errorlevel 2 (
-  call "%~dp0Run.bat" --download-model
+  call "%~dp0Run.bat" --first-run --download-model-first
   exit /b 0
 )
 call "%~dp0Run.bat" --first-run

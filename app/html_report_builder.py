@@ -220,6 +220,19 @@ function renderPairwise() {{
 function runOptions(selected) {{
   return '<option value="all">All models</option>' + (results.runs || []).map(run => `<option value="${{safe(run.model.candidate_id)}}" ${{selected===run.model.candidate_id?'selected':''}}>${{safe(run.model.display_name)}}</option>`).join('');
 }}
+function renderRunErrors(run) {{
+  const errors = run.errors || [];
+  if (!errors.length) return '';
+  const body = errors.map(error => {{
+    if (typeof error === 'string') return `<div class="warn">${{safe(error)}}</div>`;
+    const causes = (error.likely_causes || []).map(item => `<li>${{safe(item)}}</li>`).join('');
+    const actions = (error.next_actions || []).map(item => `<li>${{safe(item)}}</li>`).join('');
+    const repair = error.repair_command ? `<p><b>Repair:</b> <code>${{safe(error.repair_command)}}</code></p>` : '';
+    const log = error.log_path ? `<p><b>Log:</b> ${{safe(error.log_path)}}</p>` : '';
+    return `<div class="warn"><b>Model failure</b><br>Stage: ${{safe(error.stage || 'unknown')}}<br>Problem: ${{safe(error.message || '')}}<h3>Likely causes</h3><ul>${{causes}}</ul><h3>Next actions</h3><ul>${{actions}}</ul>${{repair}}${{log}}</div>`;
+  }}).join('');
+  return `<h3>Model Errors</h3>${{body}}`;
+}}
 function renderTranscripts() {{
   const visibleRuns = (results.runs || []).filter(run => transcriptModelFilter === 'all' || run.model.candidate_id === transcriptModelFilter);
   const controls = `<div class="toolbar"><label for="transcriptModel">Model</label><select id="transcriptModel" onchange="transcriptModelFilter=this.value;renderTranscripts()">${{runOptions(transcriptModelFilter)}}</select></div>`;
@@ -227,7 +240,7 @@ function renderTranscripts() {{
     const id = run.model.candidate_id;
     const s = latestScores?.[id];
     const body = s?.alignment ? renderAlignmentPage(id, s.alignment) : renderTranscriptTextPage(id, fullText(run));
-    return `<h3>${{safe(run.model.display_name)}} <span class="badge">${{safe(run.model.precision)}}</span></h3>${{body}}`;
+    return `<h3>${{safe(run.model.display_name)}} <span class="badge">${{safe(run.model.precision)}}</span></h3>${{renderRunErrors(run)}}${{body}}`;
   }}).join('') || controls + '<p class="empty">No transcript is available for this filter.</p>';
 }}
 function renderTranscriptTextPage(runId, text) {{

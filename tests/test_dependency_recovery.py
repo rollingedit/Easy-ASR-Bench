@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from app.config import DEFAULT_CONFIG
-from app.dependency_manager import ACCELERATOR_OVERRIDES, CUDA_INSTALL_OVERRIDES, acceleration_install_decision, cuda_install_decision, dependency_status, install_group_for_config, recovery_command
+from app.dependency_manager import ACCELERATOR_OVERRIDES, CUDA_INSTALL_OVERRIDES, acceleration_install_decision, cuda_install_decision, dependency_status, install_group_for_config, llama_cpp_cuda_tag_for_driver, recovery_command, recovery_command_for_config, resolve_llama_cpp_wheel
 from app.doctor import run_doctor
 from app.main import _dependency_install_confirmation, ensure_dependencies, warn_runtime_dependency_fallbacks
 from app.results_writer import runtime_environment
@@ -122,10 +122,11 @@ def test_llama_uses_vulkan_when_available_without_nvidia(monkeypatch):
 
     assert decision["use_accelerator"] is True
     assert decision["accelerator"] == "vulkan"
-    assert decision["requirement_files"] == ["requirements/llama_cpp_vulkan.txt"]
+    assert decision["extra_index_url"].endswith("/vulkan")
+    assert "llama-cpp-python" in decision["pip_args"]
 
 
-def test_llama_does_not_offer_vulkan_without_sdk(monkeypatch):
+def test_llama_vulkan_prefers_prebuilt_wheel_without_sdk(monkeypatch):
     monkeypatch.setattr("app.dependency_manager.nvidia_gpu_detected", lambda: False)
     monkeypatch.setattr("app.dependency_manager.vulkan_detected", lambda: True)
     monkeypatch.setattr("app.dependency_manager.vulkan_sdk_detected", lambda: False)
@@ -135,12 +136,13 @@ def test_llama_does_not_offer_vulkan_without_sdk(monkeypatch):
         "llama_cpp",
     )
 
-    assert decision["use_accelerator"] is False
-    assert decision["accelerator"] is None
+    assert decision["use_accelerator"] is True
+    assert decision["accelerator"] == "vulkan"
+    assert "prebuilt wheel" in decision["reason"]
 
 
 def test_explicit_vulkan_provider_requires_sdk(monkeypatch):
-    monkeypatch.setattr("app.dependency_manager.vulkan_detected", lambda: True)
+    monkeypatch.setattr("app.dependency_manager.vulkan_detected", lambda: False)
     monkeypatch.setattr("app.dependency_manager.vulkan_sdk_detected", lambda: False)
 
     decision = acceleration_install_decision(
@@ -150,7 +152,57 @@ def test_explicit_vulkan_provider_requires_sdk(monkeypatch):
 
     assert decision["use_accelerator"] is False
     assert decision["accelerator"] == "vulkan"
-    assert "Vulkan SDK" in decision["reason"]
+    assert "Vulkan runtime" in decision["reason"]
+
+
+def test_llama_cpp_cuda_resolver_maps_driver_to_wheel_tags(monkeypatch):
+    monkeypatch.setattr("app.dependency_manager.sys.version_info", (3, 12, 10))
+
+    assert llama_cpp_cuda_tag_for_driver("530.30") == "cu121"
+    assert llama_cpp_cuda_tag_for_driver("550.90") == "cu124"
+    assert llama_cpp_cuda_tag_for_driver("555.99") == "cu125"
+    assert llama_cpp_cuda_tag_for_driver("575.10") == "cu130"
+    assert llama_cpp_cuda_tag_for_driver("580.00") == "cu132"
+
+
+def test_llama_cpp_cuda_resolver_uses_selected_prebuilt_index(monkeypatch):
+    monkeypatch.setattr("app.dependency_manager.sys.version_info", (3, 12, 10))
+    monkeypatch.setattr("app.dependency_manager.nvidia_driver_version", lambda: "575.10")
+
+    decision = resolve_llama_cpp_wheel({"dependency_install": {}}, "cuda")
+
+    assert decision.supported is True
+    assert decision.extra_index_url.endswith("/cu130")
+    assert decision.pip_args == ("--extra-index-url", decision.extra_index_url, "llama-cpp-python")
+
+
+def test_llama_cpp_cuda_python_313_falls_back_cpu(monkeypatch):
+    monkeypatch.setattr("app.dependency_manager.sys.version_info", (3, 13, 0))
+
+    decision = resolve_llama_cpp_wheel({"dependency_install": {}}, "cuda")
+
+    assert decision.supported is False
+    assert "Python 3.13" in decision.reason
+
+
+def test_repair_command_uses_windows_env_syntax_for_vulkan_source_build(monkeypatch):
+    monkeypatch.setattr("app.dependency_manager.sys.version_info", (3, 12, 10))
+    monkeypatch.setattr("app.dependency_manager.vulkan_detected", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.vulkan_build_tooling_detected", lambda: True)
+
+    command = recovery_command_for_config(
+        "llama_cpp",
+        {
+            "runtime": {"provider": "vulkan"},
+            "dependency_install": {"allow_accelerator_install": True, "allow_vulkan_source_build": True},
+        },
+    )
+
+    assert "PowerShell:" in command
+    assert "$env:CMAKE_ARGS" in command
+    assert "cmd.exe:" in command
+    assert 'set "CMAKE_ARGS=' in command
+    assert "CMAKE_ARGS=-DGGML_VULKAN=on " not in command
 
 
 def test_doctor_prints_dependency_repair_and_cuda_status(monkeypatch, tmp_path: Path, capsys):
@@ -640,7 +692,7 @@ def test_llama_cuda_install_falls_back_to_cpu_when_wheel_index_unavailable(tmp_p
     calls = []
 
     monkeypatch.setattr("app.dependency_manager.nvidia_gpu_detected", lambda: True)
-    monkeypatch.setattr("app.dependency_manager.llama_cpp_cuda_wheel_index_available", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.llama_cpp_wheel_index_available", lambda url: False)
     monkeypatch.setattr("app.dependency_manager.subprocess.check_call", lambda command, env=None: calls.append(command))
 
     decision = install_group_for_config(
