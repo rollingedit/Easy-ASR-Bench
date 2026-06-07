@@ -76,7 +76,7 @@ def release_assets_by_name(release: dict) -> dict[str, dict]:
 
 
 def asset_hashes(local_assets: dict[str, Path]) -> dict[str, str]:
-    return {name: sha256(path) for name, path in sorted(local_assets.items())}
+    return {name: sha256(path) for name, path in sorted(local_assets.items()) if not name.startswith("release-verification-")}
 
 
 def fetch_release(repo: str, tag: str) -> dict:
@@ -182,7 +182,7 @@ def verify_smoke_asset(tag: str, expected_commit: str | None, manifest: dict, lo
         return
     smoke_name = f"release-smoke-{tag}.json"
     smoke = json.loads(local_assets[smoke_name].read_text(encoding="utf-8"))
-    if smoke.get("schema") != "easy_asr_bench.release_smoke.v1":
+    if smoke.get("schema") not in {"easy_asr_bench.release_smoke.v1", "easy_asr_bench.release_smoke.v2"}:
         raise AssertionError(f"{smoke_name} has an unexpected schema")
     if smoke.get("tag") != tag:
         raise AssertionError(f"{smoke_name} tag mismatch")

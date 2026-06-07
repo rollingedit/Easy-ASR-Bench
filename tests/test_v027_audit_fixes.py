@@ -51,11 +51,20 @@ def test_release_notes_script_writes_notes_file(tmp_path: Path):
     from scripts.write_release_notes import write_notes
 
     output = tmp_path / "notes.md"
-    write_notes("v0.2.6", output)
+    smoke = tmp_path / "smoke.json"
+    smoke.write_text(
+        '{"manual_rows":[{"id":"compare_html_offline","status":"pass"},{"id":"nvidia_cuda","status":"not_run"}]}',
+        encoding="utf-8",
+    )
+    write_notes("v0.2.6", output, smoke)
     text = output.read_text(encoding="utf-8")
 
     assert "## What changed" in text
     assert "## Verified" in text
+    assert "## Verified From Release Smoke" in text
+    assert "`compare_html_offline`: pass" in text
+    assert "## Not Verified In Release Smoke" in text
+    assert "`nvidia_cuda`: not_run" in text
     assert "## Known limits" in text
 
 

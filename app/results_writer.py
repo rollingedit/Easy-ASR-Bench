@@ -14,6 +14,7 @@ from .html_report_builder import build_html_report
 from . import __version__
 from .dependency_manager import cuda_diagnostics
 from .llm_reference_prompt import build_llm_reference_prompt
+from .results_schema import validate_results_schema
 from .scoring import pairwise_metrics
 from .utils import format_timestamp, now_stamp, safe_stem, sha256_file
 
@@ -134,6 +135,7 @@ def build_results(
     for result in run_results:
         candidate = result.candidate
         metrics = dict(result.metrics)
+        metrics.setdefault("provider", candidate.backend)
         metrics.setdefault("media_normalization_seconds", media_seconds)
         metrics.setdefault("audio_seconds_per_wall_second", metrics.get("audio_seconds", 0) / max(0.001, metrics.get("total_wall_seconds", 0.001)))
         metrics.setdefault("peak_vram_mb", None)
@@ -159,7 +161,7 @@ def build_results(
         left_text = "\n".join(chunk["text"] for chunk in left["transcript_chunks"])
         right_text = "\n".join(chunk["text"] for chunk in right["transcript_chunks"])
         pairwise[f"{left['model']['candidate_id']}__vs__{right['model']['candidate_id']}"] = pairwise_metrics(left_text, right_text)
-    return {
+    results = {
         "schema": "easy_asr_bench.results.v1",
         "app_version": __version__,
         "created_local": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -179,6 +181,10 @@ def build_results(
         "pairwise_differences": pairwise,
         "errors": errors or [],
     }
+    schema_errors = validate_results_schema(results)
+    if schema_errors:
+        raise ValueError("Invalid results schema: " + "; ".join(schema_errors))
+    return results
 
 
 def write_all_reports(results: dict, output_root: Path) -> Path:

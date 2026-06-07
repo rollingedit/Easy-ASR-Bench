@@ -37,10 +37,36 @@ def current_commit() -> str:
         return "unknown"
 
 
-def write_notes(tag: str, output: Path) -> None:
+def smoke_sections(smoke_path: Path | None) -> tuple[list[str], list[str]]:
+    if smoke_path is None or not smoke_path.exists():
+        return [], ["- No release smoke artifact was provided to release-note generation."]
+    smoke = json.loads(smoke_path.read_text(encoding="utf-8"))
+    rows = smoke.get("manual_rows") or []
+    if not rows:
+        matrix = smoke.get("manual_matrix", {})
+        for key, value in matrix.items():
+            if isinstance(value, dict):
+                rows.extend({"id": nested_key, "status": nested_value} for nested_key, nested_value in value.items())
+            else:
+                rows.append({"id": key, "status": value})
+    passed = []
+    not_verified = []
+    for row in rows:
+        row_id = str(row.get("id", "unknown"))
+        status = str(row.get("status", "unknown"))
+        line = f"- `{row_id}`: {status}"
+        if status == "pass":
+            passed.append(line)
+        else:
+            not_verified.append(line)
+    return passed or ["- No manual Windows/model/provider/media rows are marked pass in the smoke artifact."], not_verified
+
+
+def write_notes(tag: str, output: Path, smoke_path: Path | None = None) -> None:
     changes = changelog_section(tag)
     if not changes:
         changes = ["- Maintenance release with validated packaging and installer updates."]
+    smoke_passed, smoke_not_verified = smoke_sections(smoke_path)
     body = [
         f"# Easy ASR Bench {tag}",
         "",
@@ -61,6 +87,14 @@ def write_notes(tag: str, output: Path) -> None:
         "- Strict doctor passed for core dependencies.",
         "- GitHub Actions Release Gate must pass before this release is considered final.",
         "",
+        "## Verified From Release Smoke",
+        "",
+        *smoke_passed,
+        "",
+        "## Not Verified In Release Smoke",
+        "",
+        *smoke_not_verified,
+        "",
         "## Release assets",
         "",
         *asset_hash_lines(),
@@ -80,10 +114,12 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("version", help="Version tag such as v0.2.7")
     parser.add_argument("--output", default="")
+    parser.add_argument("--smoke", default="")
     args = parser.parse_args()
     tag = args.version if args.version.startswith("v") else f"v{args.version}"
     output = Path(args.output) if args.output else ROOT / "release_notes" / f"{tag}.md"
-    write_notes(tag, output)
+    smoke = Path(args.smoke) if args.smoke else ROOT / f"release-smoke-{tag}.json"
+    write_notes(tag, output, smoke)
     return 0
 
 

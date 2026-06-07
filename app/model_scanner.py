@@ -334,7 +334,7 @@ def recognize_asr_gguf_projector_package(root: Path) -> ModelCandidate | None:
     pair = find_gguf_asr_pair(root)
     if pair is None:
         return None
-    main_model, projector, missing = pair
+    main_model, projector, missing, warnings = pair
     if main_model is not None and projector is not None and not missing:
         return None
     raw, bucket = detect_from_path(main_model if main_model else root)
@@ -347,7 +347,7 @@ def recognize_asr_gguf_projector_package(root: Path) -> ModelCandidate | None:
         precision=raw,
         quantization_label=bucket,
         missing_files=missing,
-        warning="Audio/multimodal ASR GGUF package detected, but current GGUF support is text reference/correction only.",
+        warning=warnings[0] if warnings else "Audio/multimodal ASR GGUF package detected, but it is incomplete or ambiguous.",
         help_text="Keep the main .gguf and matching mmproj .gguf together. Add an ASR-specific llama.cpp/mmproj adapter before this can transcribe audio.",
     )
 

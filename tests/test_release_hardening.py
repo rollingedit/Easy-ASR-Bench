@@ -119,9 +119,11 @@ def test_release_smoke_writer_and_verifier_require_smoke_asset():
     verifier = (ROOT / "scripts" / "verify_github_release.py").read_text(encoding="utf-8")
     publish = (ROOT / ".github" / "workflows" / "publish-release.yml").read_text(encoding="utf-8")
 
-    assert "easy_asr_bench.release_smoke.v1" in smoke_writer
+    assert "easy_asr_bench.release_smoke.v2" in smoke_writer
     assert "\"not_run\"" in smoke_writer
+    assert "manual_rows" in smoke_writer
     assert "release-smoke-$tag.json" in publish
+    assert "--require-all-pass --require-log-hashes --require-environment-summary" in publish
     assert "Release smoke asset is missing" in verifier
     assert "asset_hashes_verified" in verifier
     assert "--write-transcript" in verifier

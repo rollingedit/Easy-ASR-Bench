@@ -6,6 +6,8 @@ import numpy as np
 import onnxruntime as ort
 from tokenizers import Tokenizer
 
+from .runtime_plan import HardwareInfo, hardware_from_dependency_manager
+
 
 def precision_for_variant(variant: str) -> str:
     return "fp16w" if variant.endswith("fp16w") else "int8"
@@ -15,7 +17,8 @@ def model_family_for_variant(variant: str) -> str:
     return "nar" if variant.startswith("nar_") else "ar"
 
 
-def choose_providers(provider: str) -> list[str]:
+def choose_providers(provider: str, hardware: HardwareInfo | None = None) -> list[str]:
+    hardware = hardware or hardware_from_dependency_manager()
     available = set(ort.get_available_providers())
     if provider == "cuda":
         if "CUDAExecutionProvider" in available:
@@ -33,9 +36,16 @@ def choose_providers(provider: str) -> list[str]:
         print("OpenVINO was requested but ONNX Runtime OpenVINOExecutionProvider is not available. Falling back to CPU.")
         return ["CPUExecutionProvider"]
     if provider == "auto":
-        for accelerated in ["CUDAExecutionProvider", "DmlExecutionProvider", "OpenVINOExecutionProvider"]:
-            if accelerated in available:
-                return [accelerated, "CPUExecutionProvider"]
+        ordered: list[str] = []
+        if hardware.nvidia and "CUDAExecutionProvider" in available:
+            ordered.append("CUDAExecutionProvider")
+        if hardware.intel_gpu and "OpenVINOExecutionProvider" in available:
+            ordered.append("OpenVINOExecutionProvider")
+        if hardware.windows_gpu and not hardware.intel_gpu and "DmlExecutionProvider" in available:
+            ordered.append("DmlExecutionProvider")
+        if "CPUExecutionProvider" in available:
+            ordered.append("CPUExecutionProvider")
+        return ordered or ["CPUExecutionProvider"]
     return ["CPUExecutionProvider"]
 
 

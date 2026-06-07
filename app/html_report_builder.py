@@ -13,36 +13,57 @@ def build_html_report(results: dict) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Easy ASR Bench Report</title>
 <style>
-:root {{ color-scheme: light; --bg:#f6f7f9; --panel:#fff; --ink:#17202a; --muted:#5f6b7a; --line:#d9dee7; --blue:#174ea6; --red:#ffd7d7; --yellow:#fff0b3; --green:#dff4e4; }}
-body {{ margin:0; font-family:Segoe UI, Arial, sans-serif; background:var(--bg); color:var(--ink); }}
-header {{ padding:24px 32px; background:#0f1720; color:white; }}
-header h1 {{ margin:0 0 6px; font-size:26px; }}
-header p {{ margin:0; color:#c8d1dc; }}
-main {{ padding:24px 32px 48px; max-width:1400px; margin:0 auto; }}
-nav {{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 18px; }}
-nav button {{ background:#e8eef8; color:#123b73; }}
-section {{ display:none; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:18px; margin:0 0 18px; }}
+:root {{ color-scheme: light; --bg:#f5f6f8; --panel:#fff; --ink:#18212f; --muted:#647184; --line:#d8dee8; --blue:#1f5fae; --blue2:#e7f0ff; --red:#ffd9dc; --red2:#9f1d2b; --yellow:#fff1b8; --green:#dff3e5; --green2:#1d6b3a; --violet:#efe9ff; }}
+* {{ box-sizing:border-box; }}
+body {{ margin:0; font-family:Segoe UI, Arial, sans-serif; background:var(--bg); color:var(--ink); font-size:14px; }}
+header {{ padding:22px 32px; background:#18212f; color:white; border-bottom:4px solid #3ba776; }}
+header h1 {{ margin:0 0 6px; font-size:26px; line-height:1.15; letter-spacing:0; }}
+header p {{ margin:0; color:#d5dce6; max-width:900px; }}
+main {{ padding:20px 32px 48px; max-width:1500px; margin:0 auto; }}
+nav {{ position:sticky; top:0; z-index:10; display:flex; gap:8px; flex-wrap:wrap; margin:0 0 18px; padding:10px 0; background:var(--bg); border-bottom:1px solid var(--line); }}
+nav button {{ background:#eef2f7; color:#27384f; border:1px solid #cbd4df; }}
+nav button.active {{ background:var(--blue); color:white; border-color:var(--blue); }}
+section {{ display:none; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:18px; margin:0 0 18px; box-shadow:0 1px 2px rgba(24,33,47,.04); }}
 section.active {{ display:block; }}
-h2 {{ margin:0 0 12px; font-size:18px; }}
+h2 {{ margin:0 0 12px; font-size:18px; line-height:1.25; }}
+h3 {{ margin:18px 0 8px; font-size:15px; line-height:1.25; }}
 .grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; }}
-.card {{ border:1px solid var(--line); border-radius:8px; padding:12px; background:#fbfcfe; }}
+.card {{ border:1px solid var(--line); border-radius:8px; padding:12px; background:#fbfcfe; min-width:0; }}
 .label {{ color:var(--muted); font-size:12px; text-transform:uppercase; }}
-.value {{ font-size:20px; margin-top:4px; }}
+.value {{ font-size:20px; margin-top:4px; overflow-wrap:anywhere; }}
+.toolbar {{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 12px; }}
+.toolbar label {{ color:var(--muted); font-size:13px; }}
+select, input[type="search"] {{ border:1px solid var(--line); border-radius:6px; background:white; color:var(--ink); padding:8px 10px; min-height:34px; }}
+.table-wrap {{ width:100%; overflow:auto; border:1px solid var(--line); border-radius:8px; }}
 table {{ width:100%; border-collapse:collapse; font-size:14px; }}
 th, td {{ text-align:left; border-bottom:1px solid var(--line); padding:8px; vertical-align:top; }}
-th {{ background:#f0f3f7; position:sticky; top:0; }}
+th {{ background:#eef2f7; position:sticky; top:0; z-index:1; }}
+tbody tr:hover {{ background:#f8fbff; }}
 textarea {{ width:100%; min-height:180px; box-sizing:border-box; font-family:Consolas, monospace; }}
-button {{ background:var(--blue); color:white; border:0; border-radius:6px; padding:9px 12px; cursor:pointer; margin:8px 8px 0 0; }}
+button {{ background:var(--blue); color:white; border:0; border-radius:6px; padding:9px 12px; cursor:pointer; margin:8px 8px 0 0; min-height:36px; }}
+button:hover {{ filter:brightness(.96); }}
 pre {{ white-space:pre-wrap; word-break:break-word; background:#f7f8fa; border:1px solid var(--line); border-radius:6px; padding:10px; }}
 .badge {{ display:inline-block; padding:2px 7px; border-radius:999px; background:#e8eef8; color:#123b73; font-size:12px; }}
-.replace {{ background:var(--red); }}
-.insert {{ background:var(--yellow); }}
-.delete {{ text-decoration:line-through; background:var(--red); }}
+.badge.error {{ background:var(--red); color:var(--red2); }}
+.badge.ok {{ background:var(--green); color:var(--green2); padding:2px 7px; }}
+.model-name {{ font-weight:600; }}
+.replace {{ background:var(--red); border-radius:3px; padding:1px 3px; }}
+.insert {{ background:var(--yellow); border-radius:3px; padding:1px 3px; }}
+.delete {{ text-decoration:line-through; background:var(--red); border-radius:3px; padding:1px 3px; }}
 .equal {{ background:transparent; }}
 .diffline {{ line-height:1.8; }}
 .pager {{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 12px; }}
 .ok {{ background:var(--green); padding:8px; border-radius:6px; }}
 .warn {{ background:#fff4d6; padding:8px; border-radius:6px; }}
+.chunk-row {{ border-top:1px solid var(--line); padding-top:10px; }}
+.empty {{ color:var(--muted); font-style:italic; }}
+@media (max-width: 760px) {{
+  header {{ padding:18px 16px; }}
+  main {{ padding:14px 12px 32px; }}
+  section {{ padding:14px; }}
+  nav {{ gap:6px; }}
+  nav button {{ padding:8px 10px; }}
+}}
 </style>
 </head>
 <body>
@@ -52,13 +73,13 @@ pre {{ white-space:pre-wrap; word-break:break-word; background:#f7f8fa; border:1
 </header>
 <main>
   <nav>
-    <button onclick="tab('overview')">Overview</button>
-    <button onclick="tab('score')">Scoreboard</button>
-    <button onclick="tab('transcripts')">Transcripts</button>
-    <button onclick="tab('chunks')">Chunks</button>
-    <button onclick="tab('pairwise')">Pairwise</button>
-    <button onclick="tab('raw')">Raw</button>
-    <button onclick="tab('export')">Export</button>
+    <button data-tab="overview" class="active" onclick="tab('overview')">Overview</button>
+    <button data-tab="score" onclick="tab('score')">Scoreboard</button>
+    <button data-tab="transcripts" onclick="tab('transcripts')">Transcripts</button>
+    <button data-tab="chunks" onclick="tab('chunks')">Chunks</button>
+    <button data-tab="pairwise" onclick="tab('pairwise')">Pairwise</button>
+    <button data-tab="raw" onclick="tab('raw')">Raw</button>
+    <button data-tab="export" onclick="tab('export')">Export</button>
   </nav>
   <section id="overview" class="active"></section>
   <section id="score">
@@ -82,12 +103,17 @@ const results = JSON.parse(document.getElementById('results-json').textContent);
 let scored = null;
 let latestScores = null;
 let chunkPage = 0;
+let transcriptModelFilter = 'all';
+let chunkModelFilter = 'all';
 const pageSize = 25;
 const transcriptPageSize = 5000;
 const alignmentPageSize = 500;
 const transcriptPages = {{}};
 const alignmentPages = {{}};
-function tab(id) {{ for (const s of document.querySelectorAll('section')) s.classList.toggle('active', s.id===id); }}
+function tab(id) {{
+  for (const s of document.querySelectorAll('section')) s.classList.toggle('active', s.id===id);
+  for (const b of document.querySelectorAll('nav button')) b.classList.toggle('active', b.dataset.tab===id);
+}}
 function words(s, normalized=true) {{
   s = String(s || '');
   if (normalized) s = s.normalize('NFKC').toLocaleLowerCase().replace(/[^\\p{{L}}\\p{{N}}\\p{{M}}'\\s]+/gu, ' ');
@@ -174,21 +200,27 @@ function renderScoreboard(scores=null) {{
   const rows = (results.runs || []).map(run => {{
     const m = run.metrics || {{}};
     const s = scores?.[run.model.candidate_id] || {{}};
-    return `<tr><td>${{safe(run.model.display_name)}}<br><span class="badge">${{safe(run.model.precision)}}</span></td><td>${{safe(run.model.backend)}}</td><td>${{fmt(s.normalized_wer)}}</td><td>${{fmt(s.strict_wer)}}</td><td>${{fmt(s.cer)}}</td><td>${{s.substitutions ?? 'n/a'}}</td><td>${{s.insertions ?? 'n/a'}}</td><td>${{s.deletions ?? 'n/a'}}</td><td>${{fmt(balancedScore(s,m))}}</td><td>${{fmt(m.audio_seconds_per_wall_second)}}</td><td>${{fmt(m.total_wall_seconds)}}</td><td>${{fmt(m.peak_process_memory_mb)}}</td><td>${{fmt(m.peak_vram_mb)}}</td><td>${{run.errors?.length || 0}}</td></tr>`;
+    const errorBadge = run.errors?.length ? `<span class="badge error">${{run.errors.length}} error(s)</span>` : '<span class="badge ok">ok</span>';
+    return `<tr><td><span class="model-name">${{safe(run.model.display_name)}}</span><br><span class="badge">${{safe(run.model.precision)}}</span> ${{errorBadge}}</td><td>${{safe(run.model.backend)}}</td><td>${{fmt(s.normalized_wer)}}</td><td>${{fmt(s.strict_wer)}}</td><td>${{fmt(s.cer)}}</td><td>${{s.substitutions ?? 'n/a'}}</td><td>${{s.insertions ?? 'n/a'}}</td><td>${{s.deletions ?? 'n/a'}}</td><td>${{fmt(balancedScore(s,m))}}</td><td>${{fmt(m.audio_seconds_per_wall_second)}}</td><td>${{fmt(m.total_wall_seconds)}}</td><td>${{fmt(m.peak_process_memory_mb)}}</td><td>${{fmt(m.peak_vram_mb)}}</td></tr>`;
   }}).join('');
-  document.getElementById('scoreboard').innerHTML = `<table><thead><tr><th>Model</th><th>Backend</th><th>Norm WER</th><th>Strict WER</th><th>CER</th><th>Sub</th><th>Ins</th><th>Del</th><th>Balanced</th><th>x Real-time</th><th>Wall s</th><th>RAM MB</th><th>VRAM MB</th><th>Errors</th></tr></thead><tbody>${{rows}}</tbody></table>`;
+  document.getElementById('scoreboard').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Model</th><th>Backend</th><th>Norm WER</th><th>Strict WER</th><th>CER</th><th>Sub</th><th>Ins</th><th>Del</th><th>Balanced</th><th>x Real-time</th><th>Wall s</th><th>RAM MB</th><th>VRAM MB</th></tr></thead><tbody>${{rows}}</tbody></table></div>`;
 }}
 function renderPairwise() {{
   const rows = Object.entries(results.pairwise_differences || {{}}).map(([k,v]) => `<tr><td>${{safe(k)}}</td><td>${{fmt(v.normalized_wer_like_difference)}}</td><td>${{fmt(v.cer_difference)}}</td></tr>`).join('');
-  document.getElementById('pairwiseBody').innerHTML = rows ? `<table><thead><tr><th>Pair</th><th>Norm WER-like Difference</th><th>CER Difference</th></tr></thead><tbody>${{rows}}</tbody></table>` : '<p>No pairwise differences available.</p>';
+  document.getElementById('pairwiseBody').innerHTML = rows ? `<div class="table-wrap"><table><thead><tr><th>Pair</th><th>Norm WER-like Difference</th><th>CER Difference</th></tr></thead><tbody>${{rows}}</tbody></table></div>` : '<p class="empty">No pairwise differences available.</p>';
+}}
+function runOptions(selected) {{
+  return '<option value="all">All models</option>' + (results.runs || []).map(run => `<option value="${{safe(run.model.candidate_id)}}" ${{selected===run.model.candidate_id?'selected':''}}>${{safe(run.model.display_name)}}</option>`).join('');
 }}
 function renderTranscripts() {{
-  document.getElementById('transcriptsBody').innerHTML = (results.runs || []).map(run => {{
+  const visibleRuns = (results.runs || []).filter(run => transcriptModelFilter === 'all' || run.model.candidate_id === transcriptModelFilter);
+  const controls = `<div class="toolbar"><label for="transcriptModel">Model</label><select id="transcriptModel" onchange="transcriptModelFilter=this.value;renderTranscripts()">${{runOptions(transcriptModelFilter)}}</select></div>`;
+  document.getElementById('transcriptsBody').innerHTML = controls + visibleRuns.map(run => {{
     const id = run.model.candidate_id;
     const s = latestScores?.[id];
     const body = s?.alignment ? renderAlignmentPage(id, s.alignment) : renderTranscriptTextPage(id, fullText(run));
     return `<h3>${{safe(run.model.display_name)}} <span class="badge">${{safe(run.model.precision)}}</span></h3>${{body}}`;
-  }}).join('');
+  }}).join('') || controls + '<p class="empty">No transcript is available for this filter.</p>';
 }}
 function renderTranscriptTextPage(runId, text) {{
   const pages = Math.max(1, Math.ceil(String(text).length / transcriptPageSize));
@@ -212,11 +244,13 @@ function renderChunks() {{
   const totalPages = Math.max(1, Math.ceil(chunks.length / pageSize));
   chunkPage = Math.min(chunkPage, totalPages - 1);
   const pageChunks = chunks.slice(chunkPage * pageSize, (chunkPage + 1) * pageSize);
-  const pager = `<div class="pager"><button onclick="chunkPage=Math.max(0,chunkPage-1);renderChunks()">Prev</button><span>Page ${{chunkPage+1}} / ${{totalPages}}</span><button onclick="chunkPage=Math.min(${{totalPages-1}},chunkPage+1);renderChunks()">Next</button></div>`;
-  document.getElementById('chunksBody').innerHTML = pager + pageChunks.map(c => `<h3>${{safe(c.chunk_id)}} [${{safe(c.start_timestamp)}} - ${{safe(c.end_timestamp)}}]</h3>` + (results.runs||[]).map(run => {{
+  const visibleRuns = (results.runs || []).filter(run => chunkModelFilter === 'all' || run.model.candidate_id === chunkModelFilter);
+  const controls = `<div class="toolbar"><label for="chunkModel">Model</label><select id="chunkModel" onchange="chunkModelFilter=this.value;renderChunks()">${{runOptions(chunkModelFilter)}}</select></div>`;
+  const pager = `<div class="pager"><button onclick="chunkPage=Math.max(0,chunkPage-1);renderChunks()">Prev</button><span>Chunk page ${{chunkPage+1}} / ${{totalPages}}</span><button onclick="chunkPage=Math.min(${{totalPages-1}},chunkPage+1);renderChunks()">Next</button></div>`;
+  document.getElementById('chunksBody').innerHTML = controls + pager + pageChunks.map(c => `<div class="chunk-row"><h3>${{safe(c.chunk_id)}} [${{safe(c.start_timestamp)}} - ${{safe(c.end_timestamp)}}]</h3>` + visibleRuns.map(run => {{
     const t = (run.transcript_chunks||[]).find(x=>x.chunk_id===c.chunk_id);
     return `<div class="card"><b>${{safe(run.model.display_name)}}</b><pre>${{escapeHtml(t?.text || '')}}</pre></div>`;
-  }}).join('')).join('');
+  }}).join('') + '</div>').join('') + pager;
 }}
 function escapeHtml(s) {{ return String(s).replace(/[&<>]/g, c=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[c])); }}
 function renderAlignment(items) {{

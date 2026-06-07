@@ -10,6 +10,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from .dependency_specs import CORE_IMPORTS
+
 
 @dataclass(frozen=True)
 class DependencyGroup:
@@ -20,7 +22,7 @@ class DependencyGroup:
 
 DEPENDENCY_GROUPS = {
     "core": DependencyGroup(
-        ("numpy", "soundfile", "librosa", "imageio_ffmpeg", "psutil", "jiwer"),
+        tuple(CORE_IMPORTS.values()),
         "requirements/core.txt",
         "base app, media conversion, scoring, and reports",
     ),
@@ -123,7 +125,7 @@ def missing_modules(group: str) -> list[str]:
 def module_available(module: str) -> bool:
     try:
         return importlib.util.find_spec(module) is not None
-    except ModuleNotFoundError:
+    except (ModuleNotFoundError, ValueError):
         return False
 
 
@@ -181,7 +183,10 @@ def llama_cpp_cuda_capable() -> bool:
 
 
 def llama_cpp_gpu_capable() -> bool:
-    if importlib.util.find_spec("llama_cpp") is None:
+    try:
+        if importlib.util.find_spec("llama_cpp") is None:
+            return False
+    except (ModuleNotFoundError, ValueError):
         return False
     try:
         from llama_cpp import llama_supports_gpu_offload
@@ -445,12 +450,14 @@ def dependency_status(config: dict | None = None) -> dict[str, dict]:
 
 
 def cuda_diagnostics() -> dict:
+    torch_installed = module_available("torch")
+    onnxruntime_installed = module_available("onnxruntime")
     diagnostics = {
-        "torch_installed": importlib.util.find_spec("torch") is not None,
+        "torch_installed": torch_installed,
         "torch_cuda_available": False,
         "torch_cuda_version": None,
         "torch_gpu_names": [],
-        "onnxruntime_installed": importlib.util.find_spec("onnxruntime") is not None,
+        "onnxruntime_installed": onnxruntime_installed,
         "onnxruntime_providers": [],
         "onnx_cuda_available": False,
         "onnx_directml_available": False,

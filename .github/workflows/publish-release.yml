@@ -54,11 +54,23 @@ jobs:
           Copy-Item installer/manifest.json dist/release-assets/
           Copy-Item installer/checksums.json dist/release-assets/
 
-      - name: Write release smoke artifact
-        run: python scripts/write_release_smoke.py --tag ${{ inputs.tag }} --commit ${{ github.sha }} --output release-smoke-${{ inputs.tag }}.json
+      - name: Prepare release smoke artifact
+        shell: pwsh
+        run: |
+          $tag = "${{ inputs.tag }}"
+          $collected = "qa/release-smoke-$tag.json"
+          $output = "release-smoke-$tag.json"
+          if (Test-Path $collected) {
+            Copy-Item $collected $output
+          } else {
+            python scripts/write_release_smoke.py --tag $tag --commit ${{ github.sha }} --output $output
+          }
+
+      - name: Validate release smoke artifact
+        run: python scripts/validate_release_smoke.py --smoke release-smoke-${{ inputs.tag }}.json --required tests/fixtures/release_required_rows_v2.json --require-all-pass --require-log-hashes --require-environment-summary
 
       - name: Write release notes
-        run: python scripts/write_release_notes.py ${{ inputs.tag }} --output release_notes/${{ inputs.tag }}.md
+        run: python scripts/write_release_notes.py ${{ inputs.tag }} --output release_notes/${{ inputs.tag }}.md --smoke release-smoke-${{ inputs.tag }}.json
 
       - name: Create or update GitHub release
         shell: pwsh
@@ -107,6 +119,13 @@ jobs:
           if (-not $transcript.Contains("Easy ASR Bench release verification transcript") -or -not $transcript.Contains("downloaded_assets:")) {
             throw "Uploaded release verification transcript is missing required proof fields."
           }
+          python scripts/write_release_verification_manifest.py `
+            --tag ${{ inputs.tag }} `
+            --transcript (Join-Path uploaded-transcript release-verification-${{ inputs.tag }}.txt) `
+            --assets-dir dist/release-assets `
+            --asset release-smoke-${{ inputs.tag }}.json `
+            --output release-verification-manifest-${{ inputs.tag }}.json
+          gh release upload ${{ inputs.tag }} release-verification-manifest-${{ inputs.tag }}.json --clobber
 
       - name: Publish verified release
         shell: pwsh
