@@ -23,6 +23,8 @@ It runs every selected ASR model on the same normalized audio and the same chunk
 
 ### Runnable ASR Models
 
+These are code-supported model families when the model package is complete, the matching optional dependency group is installed, and the backend can run on the selected provider. Release smoke evidence is tracked separately; a model family should only be described as verified for a specific release when the release smoke artifact marks that row as `pass`.
+
 - Known multi-file ONNX ASR layouts, including AR folders with `int8`, `fp16w`, `fp32`, `f32`, or `float32` precision folders
 - Known multi-file ONNX ASR layouts, including NAR folders with `int8`, `fp16w`, `fp32`, `f32`, or `float32` precision folders
 - Hugging Face Transformers ASR folders using `.safetensors` weights, including native FP32/float32 weights
@@ -64,6 +66,8 @@ For local LLMs, a `.gguf` file is the required runnable artifact. The tokenizer 
 
 ## Quick Start
 
+Normal users only need one file: `setup.bat`.
+
 1. Download `setup.bat` from the latest release.
 2. Double-click `setup.bat`.
 3. Open the installed folder.
@@ -73,6 +77,8 @@ For local LLMs, a `.gguf` file is the required runnable artifact. The tokenizer 
 7. Choose ASR models and precision buckets.
 8. Choose an optional LLM reference workflow.
 9. Open the report folder created under `Output`.
+
+`setup.bat` downloads and verifies the matching installer script, manifest, checksums, and app ZIP for that exact release. Do not download the ZIP or metadata files manually unless you are auditing the release.
 
 ### Hugging Face Model Download
 
@@ -225,6 +231,12 @@ Easy ASR Bench is GPU-first. The default config prefers GPU and allows accelerat
 When GPU setup is possible, ONNX models use CUDA on NVIDIA, OpenVINO on Intel, or DirectML on Windows GPUs including AMD, Intel, and NVIDIA. Hugging Face/OpenAI Whisper models use the PyTorch CUDA helper on NVIDIA. AMD's native Windows PyTorch ROCm path is currently limited to AMD's supported Python/GPU matrix, so the packaged flow does not silently install it for every AMD system. faster-whisper installs CUDA cuBLAS/cuDNN Python runtime wheels on NVIDIA; AMD ROCm CTranslate2 requires a ROCm build path and is not treated as a simple Windows pip install. GGUF reference LLMs use llama-cpp-python CUDA 12.4 wheels on NVIDIA when the wheel index is reachable; if the prebuilt CUDA wheel index is unavailable, setup falls back to the CPU package instead of attempting a local source build. GGUF reference LLMs also expose a Vulkan build path for AMD/Intel/NVIDIA systems when the Vulkan runtime and Vulkan SDK build tools are detected.
 
 `whisper.cpp` via `pywhispercpp` remains CPU-only in the packaged dependency flow because current GPU support requires source/build flags rather than a stable simple wheel install. Use faster-whisper or HF/OpenAI Whisper for GPU ASR.
+
+## Release Verification Scope
+
+Release assets are verified separately from source tests. A public release should include `setup.bat`, `install.ps1`, `manifest.json`, `checksums.json`, the Windows ZIP, `release-smoke-vX.Y.Z.json`, and release verification transcripts.
+
+The smoke artifact is the authority for what was proven in that release. Automated packaging checks can pass while hardware/model/media rows still show `not_run`; those unrun rows are not claimed as manually verified.
 
 ## Safety
 

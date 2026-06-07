@@ -103,10 +103,11 @@ def format_diagnostics(diagnostics: ByteDiagnostics) -> str:
             f"  count_\\n: {diagnostics.lf_count}",
             f"  count_bare_\\r: {diagnostics.bare_cr_count}",
             f"  count_bare_\\n: {diagnostics.bare_lf_count}",
-            f"  physical_line_count_crlf: {diagnostics.physical_line_count_crlf}",
+            f"  crlf_terminated_line_count_diagnostic: {diagnostics.physical_line_count_crlf}",
             f"  physical_line_count_universal: {diagnostics.physical_line_count_universal}",
             f"  first_32_bytes_hex: {diagnostics.first_32_bytes_hex}",
             f"  last_32_bytes_hex: {diagnostics.last_32_bytes_hex}",
+            "  note: raw GitHub serves canonical Git blob bytes; universal physical line count is the release gate.",
         ]
     )
 

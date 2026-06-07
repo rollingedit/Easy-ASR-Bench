@@ -48,6 +48,7 @@ python scripts\validate_raw_github_files.py --repo rollingedit/Easy-ASR-Bench --
 ```
 
 Raw validation prints byte counts, CRLF/LF/bare-CR counts, physical line counts, and first/last byte hex for each critical public file. Those diagnostics are required because raw GitHub bytes, release assets, and ZIP contents are the trust boundary.
+GitHub raw URLs serve canonical Git blob bytes, which are normally LF-normalized even for files that check out as CRLF on Windows because of `.gitattributes`. For raw GitHub validation, `physical_line_count_universal` is the line-count gate. The CRLF diagnostic count is informational and must not be used to claim a file is collapsed when the universal physical line count is correct.
 When a release ZIP is available, run raw validation with `--zip` so critical raw GitHub files are byte-compared against the matching ZIP copies:
 
 ```powershell

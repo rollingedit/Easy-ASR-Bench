@@ -192,6 +192,8 @@ def test_verify_github_release_accepts_complete_mocked_release_with_smoke(tmp_pa
             "tag": "v0.3.1",
             "commit": "abc123",
             "asset_hashes_verified": True,
+            "manual_rows": [{"id": "win11_clean_no_python_setup", "status": "not_run"}],
+            "manual_matrix": {"win11_clean_no_python_setup": "not_run"},
         }
     ).encode()
     release = {
@@ -300,6 +302,8 @@ def test_verify_github_release_rejects_tampered_asset_hash(tmp_path, monkeypatch
                         "tag": "v0.3.1",
                         "commit": "abc123",
                         "asset_hashes_verified": True,
+                        "manual_rows": [{"id": "win11_clean_no_python_setup", "status": "not_run"}],
+                        "manual_matrix": {"win11_clean_no_python_setup": "not_run"},
                     }
                 ),
                 encoding="utf-8",
@@ -312,4 +316,59 @@ def test_verify_github_release_rejects_tampered_asset_hash(tmp_path, monkeypatch
     monkeypatch.setattr("scripts.verify_github_release.download", fake_download)
 
     with pytest.raises(AssertionError, match="Checksum mismatch for setup.bat"):
+        verify_release("owner/repo", "v0.3.1", "abc123")
+
+
+def test_verify_github_release_requires_explicit_manual_rows_in_v2_smoke(tmp_path, monkeypatch):
+    release = {
+        "assets": [
+            {"name": "setup.bat", "browser_download_url": "https://example/setup.bat"},
+            {"name": "install.ps1", "browser_download_url": "https://example/install.ps1"},
+            {"name": "manifest.json", "browser_download_url": "https://example/manifest.json"},
+            {"name": "checksums.json", "browser_download_url": "https://example/checksums.json"},
+            {"name": "Easy-ASR-Bench-v0.3.1-win.zip", "browser_download_url": "https://example/app.zip"},
+            {"name": "release-smoke-v0.3.1.json", "browser_download_url": "https://example/smoke.json"},
+        ]
+    }
+
+    def fake_request_json(url):
+        if url.endswith("/releases/tags/v0.3.1"):
+            return release
+        return {"object": {"type": "commit", "sha": "abc123"}}
+
+    def fake_download(url, destination: Path):
+        if destination.name == "manifest.json":
+            destination.write_text(
+                json.dumps(
+                    {
+                        "schema": "easy_asr_bench.installer_manifest.v2",
+                        "tag": "v0.3.1",
+                        "app_zip": "Easy-ASR-Bench-v0.3.1-win.zip",
+                        "installer_asset": "install.ps1",
+                    }
+                ),
+                encoding="utf-8",
+            )
+        elif destination.name == "release-smoke-v0.3.1.json":
+            destination.write_text(
+                json.dumps(
+                    {
+                        "schema": "easy_asr_bench.release_smoke.v2",
+                        "tag": "v0.3.1",
+                        "commit": "abc123",
+                        "asset_hashes_verified": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+        elif destination.name == "checksums.json":
+            destination.write_text(json.dumps({"files": {}}), encoding="utf-8")
+        else:
+            destination.write_bytes(b"asset")
+
+    monkeypatch.setattr("scripts.verify_github_release.tempfile.mkdtemp", lambda prefix: str(tmp_path))
+    monkeypatch.setattr("scripts.verify_github_release.request_json", fake_request_json)
+    monkeypatch.setattr("scripts.verify_github_release.download", fake_download)
+
+    with pytest.raises(AssertionError, match="must include explicit manual_rows"):
         verify_release("owner/repo", "v0.3.1", "abc123")

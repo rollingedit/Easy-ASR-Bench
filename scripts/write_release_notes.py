@@ -18,7 +18,16 @@ def changelog_section(tag: str) -> list[str]:
     section = text.split(marker, 1)[1]
     if "\n## " in section:
         section = section.split("\n## ", 1)[0]
-    return [line.strip() for line in section.splitlines() if line.strip().startswith("- ")]
+    changes = []
+    for raw_line in section.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if changes and line.endswith(":") and not line.startswith("- "):
+            break
+        if line.startswith("- "):
+            changes.append(line)
+    return changes
 
 
 def asset_hash_lines() -> list[str]:
@@ -62,6 +71,54 @@ def smoke_sections(smoke_path: Path | None) -> tuple[list[str], list[str]]:
     return passed or ["- No manual Windows/model/provider/media rows are marked pass in the smoke artifact."], not_verified
 
 
+def smoke_rows(smoke_path: Path | None) -> list[dict]:
+    if smoke_path is None or not smoke_path.exists():
+        return []
+    smoke = json.loads(smoke_path.read_text(encoding="utf-8"))
+    rows = smoke.get("manual_rows") or []
+    if rows:
+        return [row for row in rows if isinstance(row, dict)]
+    flattened: list[dict] = []
+    for key, value in (smoke.get("manual_matrix") or {}).items():
+        if isinstance(value, dict):
+            flattened.extend({"id": nested_key, "status": nested_value} for nested_key, nested_value in value.items())
+        else:
+            flattened.append({"id": key, "status": value})
+    return flattened
+
+
+def automated_check_lines(smoke_path: Path | None) -> list[str]:
+    if smoke_path is None or not smoke_path.exists():
+        return ["- No release smoke artifact was provided."]
+    smoke = json.loads(smoke_path.read_text(encoding="utf-8"))
+    checks = smoke.get("checks") or []
+    if not checks:
+        return ["- No automated check rows were recorded in the release smoke artifact."]
+    lines = []
+    for check in checks:
+        if not isinstance(check, dict):
+            continue
+        name = str(check.get("name", "unknown_check"))
+        status = str(check.get("status", "unknown"))
+        command = str(check.get("command", "")).strip()
+        suffix = f" - `{command}`" if command else ""
+        lines.append(f"- `{name}`: {status}{suffix}")
+    return lines or ["- No automated check rows were recorded in the release smoke artifact."]
+
+
+def release_status_line(smoke_path: Path | None) -> str:
+    rows = smoke_rows(smoke_path)
+    if not rows:
+        return "Release status: smoke evidence missing; treat this build as unverified."
+    unverified = [row for row in rows if str(row.get("status", "unknown")) != "pass"]
+    if unverified:
+        return (
+            "Release status: automated packaging checks may be present, but this is not an all-pass "
+            "manual smoke release because required rows remain unverified."
+        )
+    return "Release status: required manual smoke rows are marked pass in the smoke artifact."
+
+
 def write_notes(tag: str, output: Path, smoke_path: Path | None = None) -> None:
     changes = changelog_section(tag)
     if not changes:
@@ -70,24 +127,20 @@ def write_notes(tag: str, output: Path, smoke_path: Path | None = None) -> None:
     body = [
         f"# Easy ASR Bench {tag}",
         "",
+        release_status_line(smoke_path),
+        "",
         "## What changed",
         "",
         *changes,
         "",
-        "## Verified",
+        "## Automated Packaging Checks",
         "",
         f"- Built from commit: `{current_commit()}`.",
-        "- Release file validator passed.",
-        "- Physical file validator passed for repo and release ZIP bytes.",
-        "- Release ZIP built in no-update verification mode.",
-        "- Python compile check passed.",
-        "- Unit tests passed.",
-        "- `setup.bat --dry-run --local` passed.",
-        "- `setup.bat --dry-run --verify-release` is the public release-asset validation path.",
-        "- Strict doctor passed for core dependencies.",
-        "- GitHub Actions Release Gate must pass before this release is considered final.",
+        "- Public setup verification path: `setup.bat --dry-run --verify-release`.",
+        "- GitHub Actions Release Gate must pass before a release should be promoted.",
+        *automated_check_lines(smoke_path),
         "",
-        "## Verified From Release Smoke",
+        "## Manual Smoke Rows Marked Pass",
         "",
         *smoke_passed,
         "",
