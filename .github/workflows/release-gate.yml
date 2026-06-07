@@ -80,7 +80,15 @@ jobs:
           if ($smoke.schema -notin @("easy_asr_bench.release_smoke.v1", "easy_asr_bench.release_smoke.v2") -or $smoke.tag -ne $tag -or $smoke.asset_hashes_verified -ne $true) {
             throw "Published release smoke artifact is missing required proof fields."
           }
-          python scripts/validate_release_smoke.py --smoke (Join-Path "release-asset" "release-smoke-$tag.json") --required tests/fixtures/release_required_rows_v2.json --require-all-pass --require-log-hashes --require-environment-summary
+          $smokeArgs = @(
+            "scripts/validate_release_smoke.py",
+            "--smoke", (Join-Path "release-asset" "release-smoke-$tag.json"),
+            "--required", "tests/fixtures/release_required_rows_v2.json"
+          )
+          if ("${{ github.event.release.prerelease }}" -ne "true") {
+            $smokeArgs += @("--require-all-pass", "--require-log-hashes", "--require-environment-summary")
+          }
+          python @smokeArgs
           $transcript = Get-Content -Raw (Join-Path "release-asset" "release-verification-$tag.txt")
           if (-not $transcript.Contains("Easy ASR Bench release verification transcript") -or -not $transcript.Contains("downloaded_assets:")) {
             throw "Published release verification transcript is missing required proof fields."

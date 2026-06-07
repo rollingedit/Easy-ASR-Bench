@@ -60,6 +60,8 @@ def test_raw_github_validator_reports_byte_diagnostics():
     assert diagnostics.crlf_count == 2
     assert diagnostics.bare_cr_count == 0
     assert diagnostics.physical_line_count_universal == 2
+    assert "crlf_terminated_line_count_diagnostic" in formatted
+    assert "universal physical line count is the release gate" in formatted
     assert "first_32_bytes_hex" in formatted
     assert "last_32_bytes_hex" in formatted
 
@@ -123,7 +125,12 @@ def test_release_smoke_writer_and_verifier_require_smoke_asset():
     assert "\"not_run\"" in smoke_writer
     assert "manual_rows" in smoke_writer
     assert "release-smoke-$tag.json" in publish
-    assert "--require-all-pass --require-log-hashes --require-environment-summary" in publish
+    assert "--require-all-pass" in publish
+    assert "--require-log-hashes" in publish
+    assert "--require-environment-summary" in publish
+    assert "allow_incomplete_smoke" in publish
+    assert "prerelease" in publish
+    assert '"${{ inputs.prerelease }}" -ne "true" -or "${{ inputs.allow_incomplete_smoke }}" -ne "true"' in publish
     assert "Release smoke asset is missing" in verifier
     assert "asset_hashes_verified" in verifier
     assert "--write-transcript" in verifier
@@ -143,6 +150,7 @@ def test_publish_workflow_refuses_public_asset_mutation_before_clobber():
     release_gate = (ROOT / ".github" / "workflows" / "release-gate.yml").read_text(encoding="utf-8")
     assert "validate_raw_github_files.py" in release_gate
     assert "--zip dist/Easy-ASR-Bench-$version-win.zip" in release_gate
+    assert "github.event.release.prerelease" in release_gate
 
 
 def test_release_verifier_peels_annotated_tags():

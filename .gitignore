@@ -25,3 +25,10 @@ dist/
 release_notes/
 .pytest_cache/
 .pytest_tmp/
+
+# Local release QA/evidence notes. Do not commit these.
+LOCAL_RELEASE_QA_TODO*.md
+TODO.md
+release-smoke-v*.json
+release-verification-v*.txt
+release-verification-manifest-v*.json

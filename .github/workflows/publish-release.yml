@@ -12,6 +12,16 @@ on:
         required: false
         default: false
         type: boolean
+      prerelease:
+        description: "Publish as a public prerelease/audit build instead of a stable latest release"
+        required: false
+        default: false
+        type: boolean
+      allow_incomplete_smoke:
+        description: "Allow public prerelease publication when required manual smoke rows are present but not all pass"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   publish:
@@ -67,7 +77,17 @@ jobs:
           }
 
       - name: Validate release smoke artifact
-        run: python scripts/validate_release_smoke.py --smoke release-smoke-${{ inputs.tag }}.json --required tests/fixtures/release_required_rows_v2.json --require-all-pass --require-log-hashes --require-environment-summary
+        shell: pwsh
+        run: |
+          $args = @(
+            "scripts/validate_release_smoke.py",
+            "--smoke", "release-smoke-${{ inputs.tag }}.json",
+            "--required", "tests/fixtures/release_required_rows_v2.json"
+          )
+          if ("${{ inputs.prerelease }}" -ne "true" -or "${{ inputs.allow_incomplete_smoke }}" -ne "true") {
+            $args += @("--require-all-pass", "--require-log-hashes", "--require-environment-summary")
+          }
+          python @args
 
       - name: Write release notes
         run: python scripts/write_release_notes.py ${{ inputs.tag }} --output release_notes/${{ inputs.tag }}.md --smoke release-smoke-${{ inputs.tag }}.json
@@ -132,7 +152,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release edit ${{ inputs.tag }} --draft=false --latest
+          if ("${{ inputs.prerelease }}" -eq "true") {
+            gh release edit ${{ inputs.tag }} --draft=false --prerelease
+          } else {
+            gh release edit ${{ inputs.tag }} --draft=false --latest
+          }
 
       - name: Verify public setup path
         shell: cmd

@@ -24,6 +24,8 @@ def test_publish_release_workflow_builds_assets_on_github_from_draft():
     assert "Verify uploaded draft release assets" in text
     assert "scripts/verify_github_release.py" in text
     assert "Publish verified release" in text
+    assert "prerelease" in text
+    assert "allow_incomplete_smoke" in text
     assert "setup.bat --dry-run --verify-release" in text
     assert text.index("Verify uploaded draft release assets") < text.index("Publish verified release")
     assert text.index("gh release upload") < text.index("Verify uploaded draft release assets")
@@ -60,12 +62,33 @@ def test_release_notes_script_writes_notes_file(tmp_path: Path):
     text = output.read_text(encoding="utf-8")
 
     assert "## What changed" in text
-    assert "## Verified" in text
-    assert "## Verified From Release Smoke" in text
+    assert "Release status: automated packaging checks may be present" in text
+    assert "## Automated Packaging Checks" in text
+    assert "## Manual Smoke Rows Marked Pass" in text
     assert "`compare_html_offline`: pass" in text
     assert "## Not Verified In Release Smoke" in text
     assert "`nvidia_cuda`: not_run" in text
     assert "## Known limits" in text
+    assert "Strict all-pass" not in text
+    assert "Unit tests passed." not in text
+
+
+def test_release_notes_do_not_promote_not_claimable_changelog_bullets(tmp_path: Path):
+    from scripts.write_release_notes import write_notes
+
+    output = tmp_path / "notes.md"
+    smoke = tmp_path / "smoke.json"
+    smoke.write_text(
+        '{"manual_rows":[{"id":"compare_html_offline","status":"not_run"}]}',
+        encoding="utf-8",
+    )
+
+    write_notes("v0.3.5", output, smoke)
+    text = output.read_text(encoding="utf-8")
+    what_changed = text.split("## What changed", 1)[1].split("## Automated Packaging Checks", 1)[0]
+
+    assert "Still not claimable" not in what_changed
+    assert "Strict all-pass release smoke matrix" not in what_changed
 
 
 def test_release_validator_parses_workflow_yaml():

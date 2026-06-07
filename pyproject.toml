@@ -1,5 +1,5 @@
 [project]
 name = "easy-asr-bench"
-version = "0.3.5"
+version = "0.3.6"
 description = "Windows drag-and-drop benchmark tool for comparing local speech-to-text models."
 requires-python = ">=3.11"

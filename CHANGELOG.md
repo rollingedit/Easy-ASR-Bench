@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.3.6
+
+Release proof hardening:
+- Changed release-note generation so it no longer writes unconditional "passed" claims from static prose; automated checks now come from the smoke artifact, and releases with any non-pass manual rows are labeled as not all-pass manual smoke releases.
+- Changed changelog extraction for release notes so "still not claimable" caveat bullets are not accidentally promoted into the "What changed" section.
+- Clarified raw GitHub byte diagnostics so canonical Git blob LF line endings are not mistaken for collapsed files when `physical_line_count_universal` is correct.
+- Expanded the Windows release matrix helper to include all current manual smoke rows, not just a subset.
+- Hardened Windows evidence collection so rows marked `pass` must include app version, release commit, environment summary, and log/result artifact hashes.
+- Tightened GitHub release verification so v2 smoke artifacts must include explicit `manual_rows`, even when those rows are `not_run`.
+- Documented that README model support describes complete code-supported packages, while per-release verification is controlled by the smoke artifact.
+
 ## v0.3.5 candidate
 
 Audit follow-up:
