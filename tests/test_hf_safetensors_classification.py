@@ -42,6 +42,17 @@ def test_text_llm_safetensors_is_unsupported_llm_format(tmp_path: Path):
     assert candidate.category == "unsupported_llm"
 
 
+def test_structural_unknown_transformer_is_probe_required_not_text_llm(tmp_path: Path):
+    write_hf_folder(tmp_path / "unknown-transformer", {"model_type": "unknown_model", "vocab_size": 32000, "hidden_size": 2048, "num_hidden_layers": 24, "num_attention_heads": 16})
+
+    runnable, unsupported = scan_models(tmp_path)
+
+    assert runnable == []
+    candidate = next(item for item in unsupported if item.display_name == "unknown-transformer")
+    assert candidate.category == "asr_probe_required"
+    assert candidate.task == "unknown"
+
+
 def test_standalone_safetensors_is_incomplete(tmp_path: Path):
     (tmp_path / "model.safetensors").write_bytes(b"")
 

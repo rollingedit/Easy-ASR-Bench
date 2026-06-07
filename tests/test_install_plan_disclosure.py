@@ -16,6 +16,7 @@ def test_install_plan_discloses_packages_indexes_and_fallback(tmp_path: Path):
     assert "ctranslate2" in plan.packages
     assert plan.confirmation_prompt == "Press Enter to install, or type s to skip this group."
     assert "Only models requiring this dependency group are skipped" in plan.fallback_if_declined
+    assert "dependency_install_faster_whisper" in plan.log_path
     assert "Network destinations" in text
 
 

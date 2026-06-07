@@ -48,7 +48,13 @@ def _requirement_indexes(path: Path) -> list[str]:
     return indexes
 
 
-def build_install_plan(group: str, project_root: Path, config: dict, candidate_names: list[str] | None = None) -> InstallPlan:
+def build_install_plan(
+    group: str,
+    project_root: Path,
+    config: dict,
+    candidate_names: list[str] | None = None,
+    log_path: str | None = None,
+) -> InstallPlan:
     from .dependency_manager import DEPENDENCY_GROUPS, acceleration_install_decision
 
     decision = acceleration_install_decision(config, group)
@@ -75,7 +81,7 @@ def build_install_plan(group: str, project_root: Path, config: dict, candidate_n
         estimated_size_class=size,
         confirmation_prompt="Press Enter to install, or type s to skip this group.",
         fallback_if_declined="Only models requiring this dependency group are skipped; other selected models continue.",
-        log_path="Logs/setup.log",
+        log_path=log_path or f"Logs/dependency_install_{group}.log",
     )
 
 

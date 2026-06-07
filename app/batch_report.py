@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from .html_json import json_for_script_tag
 from .utils import write_json_atomic
 
 
@@ -114,8 +115,8 @@ def render_batch_html(payload: dict, report_dir: Path) -> str:
             "</tr>"
         )
         records.append({"card": card, "row": table_row})
-    embedded_records = html.escape(json.dumps(records, ensure_ascii=False))
-    embedded = html.escape(json.dumps(payload, ensure_ascii=False))
+    embedded_records = json_for_script_tag(records)
+    embedded = json_for_script_tag(payload)
     return f"""<!doctype html>
 <html lang="en">
 <head>

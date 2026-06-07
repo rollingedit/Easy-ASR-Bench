@@ -58,6 +58,16 @@ def test_write_batch_report_writes_index_and_json(tmp_path: Path):
     assert json.loads((report_dir / "batch.json").read_text(encoding="utf-8"))["files"][0]["status"] == "failed"
 
 
+def test_batch_report_json_scripts_are_parseable_json_not_html_entities(tmp_path: Path):
+    payload = {"schema": "easy_asr_bench.batch_report.v1", "files": [{"source_path": "a&b.wav", "status": "done"}]}
+
+    html = render_batch_html(payload, tmp_path)
+
+    assert "&quot;" not in html
+    assert '<script type="application/json" id="batch-json">{"schema"' in html
+    assert "\\u0026" in html
+
+
 def test_batch_report_pages_many_files_and_scrolls_many_models(tmp_path: Path):
     files = []
     for index in range(20):

@@ -109,7 +109,7 @@ def ensure_dependencies(candidates: list[ModelCandidate], config: dict, referenc
             print(f"    repair: {recovery_command_for_config(group, config)}")
             if "accelerator" in acceleration_decision["reason"].lower() or "gpu" in acceleration_decision["reason"].lower() or "nvidia" in acceleration_decision["reason"].lower():
                 print(f"    accelerator note: {acceleration_decision['reason']}")
-        print(format_install_plan(build_install_plan(group, project_root, config, group_candidates.get(group, []))))
+        print(format_install_plan(build_install_plan(group, project_root, config, group_candidates.get(group, []), _dependency_install_log_path(config, group))))
     if not config.get("dependency_install", {}).get("auto_install_missing_runtime_dependencies", True):
         print("Automatic dependency repair is disabled in config.json.")
         failed_groups = set(missing)
@@ -117,9 +117,10 @@ def ensure_dependencies(candidates: list[ModelCandidate], config: dict, referenc
     failed_groups: set[str] = set()
     for group in missing:
         acceleration_decision = acceleration_install_decision(config, group)
-        plan = build_install_plan(group, project_root, config, group_candidates.get(group, []))
-        answer = input(f"{key('Enter')} installs {group}; type {key('s')} to skip: ").strip().lower()
-        if answer in {"s", "skip", "n", "no"}:
+        log_path = _dependency_install_log_path(config, group)
+        plan = build_install_plan(group, project_root, config, group_candidates.get(group, []), log_path)
+        decision = _dependency_install_confirmation(group)
+        if decision != "install":
             print(f"Skipped dependency install for {group}. {plan.fallback_if_declined}")
             failed_groups.add(group)
             continue
@@ -127,9 +128,10 @@ def ensure_dependencies(candidates: list[ModelCandidate], config: dict, referenc
         install_label = f"{group} with {str(accelerator).upper()} packages" if accelerator else group
         print(f"Installing {install_label}...")
         try:
-            install_decision = install_group_for_config(group, project_root, config)
+            install_decision = install_group_for_config(group, project_root, config, log_path=Path(log_path))
         except Exception as exc:
             print(f"Install failed for {group}: {exc}")
+            print(f"Install log: {log_path}")
             print(f"Manual repair command: {recovery_command_for_config(group, config)}")
             failed_groups.add(group)
             continue
@@ -142,6 +144,33 @@ def ensure_dependencies(candidates: list[ModelCandidate], config: dict, referenc
             print(f"Manual repair command: {recovery_command_for_config(group, config)}")
             failed_groups.add(group)
     return _drop_candidates_for_failed_dependency_groups(candidates, reference_llm, candidate_groups, failed_groups)
+
+
+def _dependency_install_log_path(config: dict, group: str) -> str:
+    if "folders" in config and "logs" in config["folders"]:
+        logs_dir = Path(config["folders"]["logs"])
+    elif "advanced" in config and "logs_folder" in config["advanced"]:
+        logs_dir = Path(config["advanced"]["logs_folder"])
+    else:
+        logs_dir = Path("Logs")
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    return str(logs_dir / f"dependency_install_{group}_{stamp}.log")
+
+
+def _dependency_install_confirmation(group: str) -> str:
+    if not sys.stdin.isatty():
+        print(f"Skipping dependency install for {group}: noninteractive input cannot confirm optional installs.")
+        return "skip"
+    try:
+        answer = input(f"{key('Enter')} installs {group}; type {key('s')} to skip: ").strip().lower()
+    except EOFError:
+        print(f"Skipping dependency install for {group}: input closed before confirmation.")
+        return "skip"
+    if answer in {"s", "skip", "n", "no"}:
+        return "skip"
+    if answer in {"q", "quit", "exit"}:
+        return "skip"
+    return "install"
 
 
 def warn_runtime_dependency_fallbacks(config: dict) -> None:

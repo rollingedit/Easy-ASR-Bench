@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import html
-import json
+from .html_json import json_for_script_tag
 
 
 def build_html_report(results: dict) -> str:
-    embedded = html.escape(json.dumps(results, ensure_ascii=False))
+    embedded = json_for_script_tag(results)
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -102,12 +101,14 @@ pre {{ white-space:pre-wrap; word-break:break-word; background:#f7f8fa; border:1
 const results = JSON.parse(document.getElementById('results-json').textContent);
 let scored = null;
 let latestScores = null;
+const precomputedReferenceScores = results.reference_scores || null;
 let chunkPage = 0;
 let transcriptModelFilter = 'all';
 let chunkModelFilter = 'all';
 const pageSize = 25;
 const transcriptPageSize = 5000;
 const alignmentPageSize = 500;
+const maxBrowserScoreCells = 12000000;
 const transcriptPages = {{}};
 const alignmentPages = {{}};
 function tab(id) {{
@@ -298,10 +299,16 @@ function scoreReference() {{
     return;
   }}
   const referenceText = (results.chunk_plan?.chunks || []).map(c=>refMap.get(c.chunk_id)?.text || '').join('\\n');
+  const refWordsForGuard = words(referenceText, true);
+  const scoringTooLarge = (results.runs || []).some(run => refWordsForGuard.length * Math.max(1, words(fullText(run), true).length) > maxBrowserScoreCells);
+  if (scoringTooLarge) {{
+    document.getElementById('referenceStatus').innerHTML = `<p class="warn">Reference is valid, but this report is too large for browser WER/CER scoring without freezing. Use the raw results and LLM reference JSON with an offline/Python scorer, or rerun smaller batches.</p>`;
+    return;
+  }}
   const scores = {{}};
   for (const run of results.runs || []) {{
     const hyp = fullText(run);
-    const refWords = words(referenceText, true);
+    const refWords = refWordsForGuard;
     const hypWords = words(hyp, true);
     const counts = editCounts(refWords, hypWords);
     scores[run.model.candidate_id] = {{ normalized_wer: counts.edits/Math.max(1,refWords.length), strict_wer: wer(referenceText,hyp,false), cer: edit(referenceText,hyp)/Math.max(1,referenceText.length), substitutions: counts.substitutions, insertions: counts.insertions, deletions: counts.deletions, alignment: alignment(refWords, hypWords) }};
@@ -316,7 +323,12 @@ function downloadScored() {{
   const blob = new Blob([JSON.stringify(scored || {{results}}, null, 2)], {{type:'application/json'}});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'scored_report.json'; a.click();
 }}
-renderOverview(); renderScoreboard(); renderPairwise(); renderTranscripts();
+if (precomputedReferenceScores) {{
+  latestScores = precomputedReferenceScores;
+  scored = {{ results, scores: precomputedReferenceScores, score_type: 'llm_corrected_reference' }};
+  document.getElementById('referenceStatus').innerHTML = '<p class="ok">Loaded precomputed LLM-corrected reference scores. These are not human ground truth.</p>';
+}}
+renderOverview(); renderScoreboard(latestScores); renderPairwise(); renderTranscripts();
 renderChunks();
 function copyBestTranscript() {{
   const runs = results.runs || [];

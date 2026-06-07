@@ -37,9 +37,45 @@ def test_html_report_contains_reference_validation_guards():
     assert "LLM-corrected reference scores, not human ground truth" in html
 
 
+def test_embedded_results_json_is_not_html_entity_escaped():
+    html = build_html_report(minimal_results())
+
+    assert "&quot;" not in html
+    assert '<script type="application/json" id="results-json">{"source"' in html
+
+
+def test_embedded_results_json_escapes_script_breakout():
+    data = minimal_results()
+    data["source"]["name"] = "</script><script>alert(1)</script>"
+
+    html = build_html_report(data)
+
+    embedded = html.split('<script type="application/json" id="results-json">', 1)[1].split("</script>", 1)[0]
+    assert "</script>" not in embedded.lower()
+    assert "\\u003c/script\\u003e" in embedded
+
+
 def test_html_report_contains_chunk_pagination_for_long_reports():
     html = build_html_report(minimal_results(chunk_count=60))
 
     assert "const pageSize = 25" in html
     assert "chunkPage" in html
     assert "Chunk page ${chunkPage+1} / ${totalPages}" in html
+
+
+def test_html_report_guards_browser_scoring_for_huge_references():
+    html = build_html_report(minimal_results())
+
+    assert "const maxBrowserScoreCells" in html
+    assert "too large for browser WER/CER scoring" in html
+
+
+def test_html_report_can_display_precomputed_reference_scores():
+    data = minimal_results()
+    data["reference_scores"] = {"m1": {"normalized_wer": 0.0, "strict_wer": 0.0, "cer": 0.0, "substitutions": 0, "insertions": 0, "deletions": 0}}
+
+    html = build_html_report(data)
+
+    assert "precomputedReferenceScores" in html
+    assert "Loaded precomputed LLM-corrected reference scores" in html
+    assert "renderScoreboard(latestScores)" in html

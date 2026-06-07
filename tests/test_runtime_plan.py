@@ -2,11 +2,26 @@ from app.runtime_plan import HardwareInfo, resolve_runtime_plan
 
 
 def test_faster_whisper_prefer_gpu_without_verified_cuda_uses_cpu():
-    plan = resolve_runtime_plan("faster_whisper", {"provider": "auto", "prefer_gpu": True}, HardwareInfo(nvidia=True, torch_cuda_available=False))
+    plan = resolve_runtime_plan("faster_whisper", {"provider": "auto", "prefer_gpu": True}, HardwareInfo(nvidia=True, torch_cuda_available=True, ctranslate2_cuda_available=False))
 
     assert plan.actual_provider == "cpu"
     assert plan.backend_verified is False
-    assert "CUDA" in (plan.fallback_reason or "")
+    assert "CTranslate2" in (plan.fallback_reason or "")
+
+
+def test_faster_whisper_uses_cuda_only_when_ctranslate2_backend_verified():
+    plan = resolve_runtime_plan("faster_whisper", {"provider": "auto", "prefer_gpu": True}, HardwareInfo(nvidia=True, torch_cuda_available=False, ctranslate2_cuda_available=True))
+
+    assert plan.actual_provider == "cuda"
+    assert plan.backend_verified is True
+
+
+def test_transformers_asr_prefer_gpu_without_torch_cuda_uses_cpu():
+    plan = resolve_runtime_plan("transformers_asr", {"provider": "auto", "prefer_gpu": True}, HardwareInfo(nvidia=True, torch_cuda_available=False))
+
+    assert plan.actual_provider == "cpu"
+    assert plan.backend_verified is False
+    assert "CUDA-enabled Torch" in (plan.fallback_reason or "")
 
 
 def test_llama_cpp_prefer_gpu_without_backend_uses_cpu():
