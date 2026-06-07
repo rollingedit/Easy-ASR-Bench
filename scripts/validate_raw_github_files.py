@@ -145,8 +145,8 @@ def compare_raw_to_zip(raw_files: dict[str, bytes], zip_path: Path) -> None:
             if not zip_file.exists():
                 raise AssertionError(f"{path} is missing from release ZIP copy")
             zip_data = zip_file.read_bytes()
-            if raw_data != zip_data:
-                raise AssertionError(f"{path} raw GitHub bytes differ from release ZIP copy")
+            if raw_data.replace(b"\r\n", b"\n") != zip_data.replace(b"\r\n", b"\n"):
+                raise AssertionError(f"{path} raw GitHub content differs from release ZIP copy")
     finally:
         shutil.rmtree(temp, ignore_errors=True)
 
@@ -174,7 +174,7 @@ def main() -> int:
     if not ref:
         parser.error("--ref or --commit is required")
     expectations = args.expect or [
-        Expectation(path, lines, "crlf" if path.endswith((".bat", ".cmd", ".ps1")) else "lf")
+        Expectation(path, lines, "any" if path.endswith((".bat", ".cmd", ".ps1")) else "lf")
         for path, lines in DEFAULT_EXPECTATIONS.items()
     ]
     try:

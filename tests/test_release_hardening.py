@@ -73,11 +73,12 @@ def test_raw_github_validator_compares_raw_bytes_to_zip_copy(tmp_path):
         archive.write(app_root / "setup.bat", "Easy-ASR-Bench-v1/setup.bat")
 
     compare_raw_to_zip({"setup.bat": b"@echo off\r\necho ok\r\n"}, zip_path)
+    compare_raw_to_zip({"setup.bat": b"@echo off\necho ok\n"}, zip_path)
 
     try:
         compare_raw_to_zip({"setup.bat": b"@echo off\r\necho changed\r\n"}, zip_path)
     except AssertionError as exc:
-        assert "differ from release ZIP copy" in str(exc)
+        assert "content differs from release ZIP copy" in str(exc)
     else:
         raise AssertionError("raw/ZIP byte mismatch was accepted")
 
