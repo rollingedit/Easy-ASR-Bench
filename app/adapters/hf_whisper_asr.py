@@ -8,6 +8,7 @@ from typing import Sequence
 from .base import ChunkTranscript, ModelCandidate, ModelRunResult
 from ..benchmark import process_memory_mb
 from ..precision_detector import detect_safetensors_folder_precision, indexed_safetensor_missing_files
+from ..runtime_plan import resolve_runtime_plan
 
 
 class HFWhisperASRAdapter:
@@ -17,6 +18,9 @@ class HFWhisperASRAdapter:
         self.candidate: ModelCandidate | None = None
         self.pipe = None
         self.runtime_config: dict = {}
+        self.device = "cpu"
+        self.runtime_plan = None
+        self.load_warnings: list[str] = []
 
     def discover(self, models_root: Path) -> list[ModelCandidate]:
         candidates: list[ModelCandidate] = []
@@ -70,8 +74,11 @@ class HFWhisperASRAdapter:
             from transformers import pipeline
         except ModuleNotFoundError as exc:
             raise RuntimeError("HF Whisper requires the transformers_cpu dependency group.") from exc
-        wants_cuda = runtime_config.get("provider") == "cuda" or bool(runtime_config.get("prefer_gpu", False))
-        device = 0 if wants_cuda and torch.cuda.is_available() else -1
+        plan = resolve_runtime_plan("transformers_asr", runtime_config)
+        device = 0 if plan.actual_provider == "cuda" and plan.backend_verified else -1
+        self.device = "cuda" if device >= 0 else "cpu"
+        self.runtime_plan = plan
+        self.load_warnings = [plan.fallback_reason] if plan.fallback_reason else []
         whisper_config = runtime_config.get("whisper", {})
         generate_kwargs = {}
         language = runtime_config.get("language", "auto")
@@ -83,14 +90,38 @@ class HFWhisperASRAdapter:
         model_kwargs = {}
         if device >= 0:
             model_kwargs["torch_dtype"] = torch.float16
-        self.pipe = pipeline(
-            "automatic-speech-recognition",
-            model=str(candidate.path),
-            device=device,
-            trust_remote_code=False,
-            model_kwargs=model_kwargs or None,
-            generate_kwargs=generate_kwargs or None,
-        )
+        try:
+            self.pipe = pipeline(
+                "automatic-speech-recognition",
+                model=str(candidate.path),
+                device=device,
+                trust_remote_code=False,
+                model_kwargs=model_kwargs or None,
+                generate_kwargs=generate_kwargs or None,
+            )
+        except Exception as exc:
+            if device >= 0 and plan.fallback_allowed:
+                self.load_warnings.append(f"CUDA load failed; retried CPU: {exc}")
+                self.device = "cpu"
+                self.runtime_plan = plan.__class__(
+                    **{
+                        **plan.__dict__,
+                        "actual_provider": "cpu",
+                        "device": "cpu",
+                        "backend_verified": False,
+                        "fallback_reason": f"CUDA load failed; retried CPU: {exc}",
+                    }
+                )
+                self.pipe = pipeline(
+                    "automatic-speech-recognition",
+                    model=str(candidate.path),
+                    device=-1,
+                    trust_remote_code=False,
+                    model_kwargs=None,
+                    generate_kwargs=generate_kwargs or None,
+                )
+            else:
+                raise
         return self
 
     def transcribe_chunks(self, chunks: Sequence, chunk_metadata: list[dict]) -> ModelRunResult:
@@ -119,12 +150,15 @@ class HFWhisperASRAdapter:
             peak_ram = max(peak_ram, process_memory_mb())
             transcript_chunks.append(ChunkTranscript(str(metadata["chunk_id"]), float(metadata["start_seconds"]), float(metadata["end_seconds"]), text.strip()))
         audio_seconds = sum(float(item["end_seconds"]) - float(item["start_seconds"]) for item in chunk_metadata)
-        return ModelRunResult(
+        result = ModelRunResult(
             self.candidate,
             transcript_chunks,
             {
                 "provider": "transformers",
-                "device": "cuda" if self.pipe is not None and getattr(self.pipe, "device", None) is not None and device_is_cuda(self.pipe.device) else "cpu",
+                "device": getattr(self, "device", "cpu"),
+                "requested_provider": getattr(self, "runtime_plan", None).requested_provider if getattr(self, "runtime_plan", None) else "unknown",
+                "actual_provider": getattr(self, "runtime_plan", None).actual_provider if getattr(self, "runtime_plan", None) else getattr(self, "device", "cpu"),
+                "backend_verified": getattr(self, "runtime_plan", None).backend_verified if getattr(self, "runtime_plan", None) else False,
                 "audio_seconds": audio_seconds,
                 "chunk_count": len(chunks),
                 "inference_seconds": inference_seconds,
@@ -134,11 +168,10 @@ class HFWhisperASRAdapter:
             },
             errors,
         )
+        if self.load_warnings:
+            result.metrics["warnings"] = list(self.load_warnings)
+        return result
 
     def unload(self) -> None:
         self.pipe = None
         self.candidate = None
-
-
-def device_is_cuda(device) -> bool:
-    return "cuda" in str(device).lower()

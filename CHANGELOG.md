@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.3.5 candidate
+
+Audit follow-up:
+- Fixed `compare.html` and batch dashboard JSON embedding so JSON script tags contain parseable JSON with script-breakout-safe escaping instead of HTML entity escaping.
+- Added Python-side LLM reference import/scoring helpers that validate `easy_asr_bench.llm_reference.v1` JSON and score per chunk, allowing large references to be scored without relying on browser-wide dynamic programming.
+- Added `compare.html` support for precomputed LLM-corrected reference scores and a browser scoring guard for oversized pasted references.
+- Added CTranslate2-specific CUDA probing so faster-whisper CUDA is used only when the CTranslate2 backend is verified, not merely when Torch CUDA or NVIDIA marker packages are present.
+- Centralized Hugging Face Transformers ASR and HF Whisper runtime planning so CUDA requests record requested provider, actual provider, backend verification, and CPU retry warnings.
+- Narrowed Hugging Face text-LLM safetensors detection so explicit CausalLM/text/quant formats such as GPTQ, AWQ, and EXL2 are rejected as local ASR/reference-runtime folders, while generic unknown Transformer folders remain ASR probe-required instead of disappearing.
+- Changed optional runtime dependency installs to skip safely in noninteractive terminals and write dependency-specific logs such as `Logs/dependency_install_<group>_<timestamp>.log`.
+- Added regression coverage for safe JSON embedding, large reference scoring/import, HF Whisper/Transformers CUDA fallback, CTranslate2 probing, noninteractive dependency prompts, and safetensors text-vs-ASR classification.
+
+Still not claimable without external release QA:
+- A public v0.3.5 app release with downloadable installer assets.
+- Clean Windows setup proof from public release URLs.
+- Strict all-pass release smoke matrix and QA evidence bundle from real Windows/GPU/media/model runs.
+- Real browser execution screenshots/console proof for `compare.html` beyond source-level fixture tests.
+
 ## v0.3.4
 
 Release proof:

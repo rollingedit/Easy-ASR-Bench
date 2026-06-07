@@ -11,6 +11,7 @@ import urllib.request
 from pathlib import Path
 
 from .dependency_specs import CORE_IMPORTS
+from .ctranslate2_probe import ctranslate2_cuda_available
 
 
 @dataclass(frozen=True)
@@ -147,6 +148,8 @@ def missing_modules_for_config(group: str, config: dict) -> list[str]:
         for module in CUDA_REPAIR_MARKERS[group]:
             if not module_available(module):
                 missing.append(module)
+        if not ctranslate2_cuda_available():
+            missing.append("CTranslate2 CUDA backend")
     elif accelerator in {"cuda", "vulkan"} and group == "llama_cpp" and not llama_cpp_gpu_capable():
         missing.append("llama-cpp-python GPU offload build")
     return sorted(set(missing))
@@ -214,7 +217,7 @@ def install_group(group: str, project_root: Path, use_cuda: bool = False) -> Non
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", str(req)])
 
 
-def install_group_for_config(group: str, project_root: Path, config: dict) -> dict:
+def install_group_for_config(group: str, project_root: Path, config: dict, log_path: Path | None = None) -> dict:
     decision = acceleration_install_decision(config, group)
     requirement_files = [DEPENDENCY_GROUPS[group].requirement_file]
     env = None
@@ -234,11 +237,29 @@ def install_group_for_config(group: str, project_root: Path, config: dict) -> di
                 ),
                 "requirement_files": requirement_files,
             }
-    for requirement_file in requirement_files:
-        req = project_root / requirement_file
-        if not req.exists():
-            raise FileNotFoundError(f"Missing dependency requirement file: {req}")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", str(req)], env=env)
+    log_handle = None
+    if log_path is not None:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_handle = log_path.open("a", encoding="utf-8", newline="\n")
+        log_handle.write(f"Installing dependency group {group}\n")
+        log_handle.write(f"Requirement files: {', '.join(requirement_files)}\n")
+    try:
+        for requirement_file in requirement_files:
+            req = project_root / requirement_file
+            if not req.exists():
+                raise FileNotFoundError(f"Missing dependency requirement file: {req}")
+            command = [sys.executable, "-m", "pip", "install", "-r", str(req)]
+            if log_handle is None:
+                subprocess.check_call(command, env=env)
+            else:
+                log_handle.write(f"\n> {' '.join(command)}\n")
+                completed = subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                log_handle.write(completed.stdout or "")
+                if completed.returncode != 0:
+                    raise subprocess.CalledProcessError(completed.returncode, command, output=completed.stdout)
+    finally:
+        if log_handle is not None:
+            log_handle.close()
     return decision
 
 
@@ -470,6 +491,7 @@ def cuda_diagnostics() -> dict:
         "vulkan_detected": vulkan_detected(),
         "vulkan_sdk_detected": vulkan_sdk_detected(),
         "vulkan_build_tooling_detected": vulkan_build_tooling_detected(),
+        "ctranslate2_cuda_available": ctranslate2_cuda_available(),
     }
     if diagnostics["torch_installed"]:
         try:
@@ -498,4 +520,6 @@ def cuda_diagnostics() -> dict:
         diagnostics["messages"].append("ONNX Runtime is installed, but CUDAExecutionProvider is not available. ONNX models will run on CPUExecutionProvider.")
     if diagnostics["vulkan_detected"] and not diagnostics["vulkan_sdk_detected"]:
         diagnostics["messages"].append("Vulkan runtime is visible, but Vulkan SDK build tools are not detected. GGUF Vulkan builds will use CPU unless the SDK is installed.")
+    if module_available("ctranslate2") and not diagnostics["ctranslate2_cuda_available"]:
+        diagnostics["messages"].append("CTranslate2 is installed, but its CUDA backend is not available. faster-whisper will run on CPU.")
     return diagnostics

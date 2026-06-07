@@ -238,7 +238,25 @@ def test_custom_causallm_safetensors_explains_gguf_requirement(tmp_path: Path):
     assert "GGUF export (.gguf) for local reference LLM loading" in candidate.missing_files
 
 
-def test_structural_non_asr_transformer_safetensors_explains_gguf_requirement(tmp_path: Path):
+def test_gptq_awq_exl2_text_llm_safetensors_explain_gguf_requirement(tmp_path: Path):
+    for name, quant_method in [("gptq-model", "gptq"), ("awq-model", "awq"), ("exl2-model", "exl2")]:
+        model = tmp_path / name
+        model.mkdir()
+        (model / "config.json").write_text(
+            json.dumps({"model_type": "custom_model", "quantization_config": {"quant_method": quant_method}, "torch_dtype": "float16"}),
+            encoding="utf-8",
+        )
+        (model / "model.safetensors").write_text("", encoding="utf-8")
+        (model / "tokenizer.json").write_text("{}", encoding="utf-8")
+
+    runnable, unsupported = scan_models(tmp_path)
+
+    assert runnable == []
+    unsupported_llms = [candidate.display_name for candidate in unsupported if candidate.category == "unsupported_llm"]
+    assert {"gptq-model", "awq-model", "exl2-model"} <= set(unsupported_llms)
+
+
+def test_structural_non_asr_transformer_safetensors_is_probe_required(tmp_path: Path):
     model = tmp_path / "unknown-transformer"
     model.mkdir()
     (model / "config.json").write_text(
@@ -250,9 +268,10 @@ def test_structural_non_asr_transformer_safetensors_explains_gguf_requirement(tm
 
     runnable, unsupported = scan_models(tmp_path)
 
-    candidate = next(candidate for candidate in unsupported if candidate.category == "unsupported_llm")
+    candidate = next(candidate for candidate in unsupported if candidate.adapter_name == "hf_transformers_asr")
     assert candidate.display_name == "unknown-transformer"
-    assert candidate.task == "text-generation"
+    assert candidate.task == "unknown"
+    assert candidate.category == "asr_probe_required"
 
 
 def test_asr_gguf_with_mmproj_is_not_text_reference_llm(tmp_path: Path):

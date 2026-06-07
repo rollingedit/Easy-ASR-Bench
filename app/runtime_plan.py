@@ -14,6 +14,7 @@ class HardwareInfo:
     torch_cuda_available: bool = False
     onnx_providers: tuple[str, ...] = ()
     llama_cpp_gpu_offload: bool = False
+    ctranslate2_cuda_available: bool = False
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,7 @@ def hardware_from_dependency_manager() -> HardwareInfo:
         torch_cuda_available=bool(diagnostics.get("torch_cuda_available", False)),
         onnx_providers=tuple(diagnostics.get("onnxruntime_providers", []) or ()),
         llama_cpp_gpu_offload=deps.llama_cpp_gpu_capable(),
+        ctranslate2_cuda_available=deps.ctranslate2_cuda_available(),
     )
 
 
@@ -55,6 +57,24 @@ def resolve_runtime_plan(model_family: str, runtime_config: dict, hardware: Hard
 
     if model_family == "faster_whisper":
         wants_cuda = requested == "cuda" or requested == "auto" and prefer_gpu and hardware.nvidia
+        if wants_cuda and hardware.ctranslate2_cuda_available:
+            return ResolvedRuntimePlan(model_family, requested, "cuda", "cuda", None, True, fallback_allowed, "CTranslate2 CUDA backend is available.")
+        if wants_cuda:
+            return ResolvedRuntimePlan(
+                model_family,
+                requested,
+                "cpu",
+                "cpu",
+                None,
+                False,
+                fallback_allowed,
+                "CUDA was requested/preferred, but CTranslate2 CUDA backend was not verified.",
+                "Using CPU for faster-whisper until CUDA/CTranslate2 runtime is verified.",
+            )
+        return ResolvedRuntimePlan(model_family, requested, "cpu", "cpu", None, True, fallback_allowed, "CPU runtime selected.")
+
+    if model_family == "transformers_asr":
+        wants_cuda = requested == "cuda" or requested == "auto" and prefer_gpu and hardware.nvidia
         if wants_cuda and hardware.torch_cuda_available:
             return ResolvedRuntimePlan(model_family, requested, "cuda", "cuda", None, True, fallback_allowed, "Torch CUDA is available.")
         if wants_cuda:
@@ -66,8 +86,8 @@ def resolve_runtime_plan(model_family: str, runtime_config: dict, hardware: Hard
                 None,
                 False,
                 fallback_allowed,
-                "CUDA was requested/preferred, but a usable CUDA runtime was not verified.",
-                "Using CPU for faster-whisper until CUDA/CTranslate2 runtime is verified.",
+                "CUDA was requested/preferred, but Torch CUDA was not verified.",
+                "Using CPU for Transformers ASR until a CUDA-enabled Torch install is verified.",
             )
         return ResolvedRuntimePlan(model_family, requested, "cpu", "cpu", None, True, fallback_allowed, "CPU runtime selected.")
 

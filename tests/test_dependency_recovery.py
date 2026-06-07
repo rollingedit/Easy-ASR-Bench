@@ -280,9 +280,10 @@ def test_optional_install_failure_prints_repair_and_skips_only_affected(monkeypa
     )
 
     monkeypatch.setattr("app.main.adapter_for", lambda candidate: FakeAdapter())
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt: "s")
     monkeypatch.setattr("app.dependency_manager.missing_modules", lambda group: ["onnxruntime"] if group == "onnx" else [])
-    monkeypatch.setattr("app.dependency_manager.install_group_for_config", lambda group, root, config: (_ for _ in ()).throw(RuntimeError("pip failed")))
+    monkeypatch.setattr("app.dependency_manager.install_group_for_config", lambda group, root, config, log_path=None: (_ for _ in ()).throw(RuntimeError("pip failed")))
 
     kept, _ = ensure_dependencies([good, bad], {"dependency_install": {"auto_install_missing_runtime_dependencies": True}})
 
@@ -385,9 +386,10 @@ def test_reference_llm_dependency_failure_does_not_drop_asr_models(monkeypatch, 
     )
 
     monkeypatch.setattr("app.main.adapter_for", lambda candidate: FakeAdapter())
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt: "s")
     monkeypatch.setattr("app.dependency_manager.missing_modules", lambda group: ["llama_cpp"] if group == "llama_cpp" else [])
-    monkeypatch.setattr("app.dependency_manager.install_group_for_config", lambda group, root, config: (_ for _ in ()).throw(RuntimeError("pip failed")))
+    monkeypatch.setattr("app.dependency_manager.install_group_for_config", lambda group, root, config, log_path=None: (_ for _ in ()).throw(RuntimeError("pip failed")))
 
     kept, kept_llm = ensure_dependencies(
         [asr],
@@ -428,6 +430,7 @@ def test_optional_install_uses_cuda_requirements_when_allowed(monkeypatch, tmp_p
     missing = {"before": True}
 
     monkeypatch.setattr("app.main.adapter_for", lambda candidate: FakeAdapter())
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt: "")
     monkeypatch.setattr("app.dependency_manager.nvidia_gpu_detected", lambda: True)
     monkeypatch.setattr("app.dependency_manager.onnx_provider_available", lambda provider: not missing["before"])
@@ -437,7 +440,7 @@ def test_optional_install_uses_cuda_requirements_when_allowed(monkeypatch, tmp_p
             return ["onnxruntime"]
         return []
 
-    def fake_install(group, root, config):
+    def fake_install(group, root, config, log_path=None):
         decision = acceleration_install_decision(config, group)
         calls.append((group, decision["use_accelerator"], decision["accelerator"]))
         missing["before"] = False
@@ -498,9 +501,10 @@ def test_optional_install_empty_input_installs_and_failures_skip_only_affected(m
     )
 
     monkeypatch.setattr("app.main.adapter_for", lambda candidate: FakeAdapter())
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda prompt: "")
     monkeypatch.setattr("app.dependency_manager.missing_modules", lambda group: ["onnxruntime"] if group == "onnx" else [])
-    monkeypatch.setattr("app.dependency_manager.install_group_for_config", lambda group, root, config: (_ for _ in ()).throw(RuntimeError("pip failed")))
+    monkeypatch.setattr("app.dependency_manager.install_group_for_config", lambda group, root, config, log_path=None: (_ for _ in ()).throw(RuntimeError("pip failed")))
 
     kept, _ = ensure_dependencies([good, bad], {"dependency_install": {"auto_install_missing_runtime_dependencies": True}})
 
@@ -509,6 +513,44 @@ def test_optional_install_empty_input_installs_and_failures_skip_only_affected(m
     assert "Install failed for onnx" in output
     assert "Manual repair command:" in output
     assert "Skipping Bad model" in output
+
+
+def test_optional_install_noninteractive_skips_without_prompting(monkeypatch, tmp_path: Path, capsys):
+    from app.adapters.base import ModelCandidate
+
+    class FakeAdapter:
+        name = "fake"
+
+        def required_dependency_groups(self, candidate):
+            return list(candidate.metadata.get("groups", []))
+
+    bad = ModelCandidate(
+        candidate_id="bad",
+        display_name="Bad model",
+        family_name="Bad",
+        backend="test",
+        container_format="test",
+        task="automatic-speech-recognition",
+        precision="fp32",
+        quantization_label="fp32",
+        path=tmp_path / "bad",
+        adapter_name="fake",
+        runnable=True,
+        metadata={"groups": ["onnx"]},
+    )
+    prompted = {"value": False}
+
+    monkeypatch.setattr("app.main.adapter_for", lambda candidate: FakeAdapter())
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    monkeypatch.setattr("builtins.input", lambda prompt: prompted.update(value=True) or "")
+    monkeypatch.setattr("app.dependency_manager.missing_modules", lambda group: ["onnxruntime"] if group == "onnx" else [])
+
+    kept, _ = ensure_dependencies([bad], {"dependency_install": {"auto_install_missing_runtime_dependencies": True}})
+
+    output = capsys.readouterr().out
+    assert kept == []
+    assert prompted["value"] is False
+    assert "noninteractive input cannot confirm" in output
 
 
 def test_cuda_repair_triggers_for_cpu_only_torch(monkeypatch):
@@ -527,6 +569,25 @@ def test_cuda_repair_triggers_for_cpu_only_torch(monkeypatch):
     )
 
     assert missing == ["torch CUDA wheel"]
+
+
+def test_faster_whisper_cuda_repair_requires_ctranslate2_backend(monkeypatch):
+    from app.dependency_manager import missing_modules_for_config
+
+    monkeypatch.setattr("app.dependency_manager.nvidia_gpu_detected", lambda: True)
+    monkeypatch.setattr("app.dependency_manager.missing_modules", lambda group: [])
+    monkeypatch.setattr("app.dependency_manager.module_available", lambda module: module not in {"nvidia.cublas.lib", "nvidia.cudnn.lib"})
+    monkeypatch.setattr("app.dependency_manager.ctranslate2_cuda_available", lambda: False)
+
+    missing = missing_modules_for_config(
+        "faster_whisper",
+        {
+            "runtime": {"provider": "auto", "prefer_gpu": True},
+            "dependency_install": {"allow_cuda_install": True},
+        },
+    )
+
+    assert "CTranslate2 CUDA backend" in missing
 
 
 def test_cuda_repair_triggers_for_llama_cpp_without_gpu_offload(monkeypatch):

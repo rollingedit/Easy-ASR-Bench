@@ -32,6 +32,7 @@ TEXT_LLM_SIGNALS = {
     "falcon",
     "gemma",
     "gpt",
+    "gptq",
     "llama",
     "mistral",
     "mixtral",
@@ -39,6 +40,9 @@ TEXT_LLM_SIGNALS = {
     "qwen",
     "stablelm",
     "text-generation",
+    "awq",
+    "exl2",
+    "exllama",
 }
 
 ASR_CONFIG_SIGNALS = {"whisper", "wav2vec2", "hubert", "speech", "ctc", "seamless", "moonshine", "asr"}
@@ -119,8 +123,7 @@ def looks_like_text_llm(config_path: Path) -> bool:
         return True
     if "causallm" in architectures.replace("_", "") or "lmheadmodel" in architectures.replace("_", ""):
         return True
-    structural_keys = {"vocab_size", "hidden_size", "num_hidden_layers", "num_attention_heads"}
-    return len(structural_keys & set(data)) >= 3
+    return False
 
 
 def config_looks_like_asr(data: dict) -> bool:
