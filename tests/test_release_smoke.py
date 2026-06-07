@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 import scripts.write_release_smoke as write_release_smoke
-from scripts.verify_github_release import sha256, verify_release
+from scripts.verify_github_release import download_assets, sha256, verify_release
 
 
 def test_write_release_smoke_records_automated_passes_and_manual_not_run(tmp_path, monkeypatch):
@@ -210,6 +210,29 @@ def test_verify_github_release_accepts_complete_mocked_release_with_smoke(tmp_pa
     monkeypatch.setattr("scripts.verify_github_release.download", fake_download)
 
     verify_release("owner/repo", "v0.3.1", "abc123")
+
+
+def test_download_assets_prefers_authenticated_asset_api_url(tmp_path, monkeypatch):
+    requested: list[str] = []
+
+    def fake_download(url, destination: Path):
+        requested.append(url)
+        destination.write_bytes(b"asset")
+
+    monkeypatch.setattr("scripts.verify_github_release.download", fake_download)
+
+    local = download_assets(
+        {
+            "setup.bat": {
+                "url": "https://api.github.com/repos/owner/repo/releases/assets/1",
+                "browser_download_url": "https://github.com/owner/repo/releases/download/v1/setup.bat",
+            }
+        },
+        tmp_path,
+    )
+
+    assert requested == ["https://api.github.com/repos/owner/repo/releases/assets/1"]
+    assert local["setup.bat"].read_bytes() == b"asset"
 
 
 def test_verify_github_release_rejects_tampered_asset_hash(tmp_path, monkeypatch):
