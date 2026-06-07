@@ -9,19 +9,39 @@ from .dependency_manager import acceleration_install_decision, cuda_diagnostics,
 from .version import RELEASE_CHANNEL, RELEASE_COMMIT, TAG
 
 
-def run_doctor(config_path: Path, strict: bool = False) -> int:
+def build_doctor_report(config_path: Path) -> dict:
     config = load_config(config_path)
     folders = config["folders"]
     for folder in folders.values():
         Path(folder).mkdir(parents=True, exist_ok=True)
     status = dependency_status(config)
+    cuda = cuda_diagnostics()
+    return {
+        "schema": "easy_asr_bench.doctor.v1",
+        "version": TAG,
+        "release_channel": RELEASE_CHANNEL,
+        "release_commit": RELEASE_COMMIT,
+        "config_version": config.get("app", {}).get("version"),
+        "config_channel": config.get("app", {}).get("version_channel"),
+        "dependency_status": status,
+        "cuda_provider_checks": cuda,
+        "folders": {key: str(value) for key, value in folders.items()},
+    }
+
+
+def run_doctor(config_path: Path, strict: bool = False, json_output: bool = False) -> int:
+    config = load_config(config_path)
+    report = build_doctor_report(config_path)
+    status = report["dependency_status"]
+    if json_output:
+        print(json.dumps(report, indent=2))
+        return 0 if (status["core"]["available"] or not strict) else 1
     print("Easy ASR Bench Doctor")
-    print(f"Version: {TAG}")
-    print(f"Release channel: {RELEASE_CHANNEL}")
-    config_channel = config.get("app", {}).get("version_channel")
-    if config_channel and config_channel != RELEASE_CHANNEL:
-        print(f"Config channel note: config.json says {config_channel}, but this build reports {RELEASE_CHANNEL}.")
-    print(f"Release commit: {RELEASE_COMMIT}")
+    print(f"Version: {report['version']}")
+    print(f"Release channel: {report['release_channel']}")
+    if report.get("config_channel") and report["config_channel"] != report["release_channel"]:
+        print(f"Config channel note: config.json says {report['config_channel']}, but this build reports {report['release_channel']}.")
+    print(f"Release commit: {report['release_commit']}")
     print()
     for group, data in status.items():
         mark = "OK" if data["available"] else "MISSING"
@@ -36,7 +56,7 @@ def run_doctor(config_path: Path, strict: bool = False) -> int:
                 print("         accelerator note: " + acceleration_decision["reason"])
     print()
     print("CUDA/provider checks:")
-    cuda = cuda_diagnostics()
+    cuda = report["cuda_provider_checks"]
     print(f"  NVIDIA GPU detected: {cuda['nvidia_gpu_detected']}")
     print(f"  AMD GPU detected: {cuda.get('amd_gpu_detected', False)}")
     print(f"  Intel GPU/NPU detected: {cuda.get('intel_gpu_or_npu_detected', False)}")
@@ -55,7 +75,7 @@ def run_doctor(config_path: Path, strict: bool = False) -> int:
         print(f"  note: {message}")
     print()
     print("Folders checked:")
-    for key, folder in folders.items():
+    for key, folder in report["folders"].items():
         print(f"  {key}: {folder}")
     return 0 if (status["core"]["available"] or not strict) else 1
 
@@ -64,8 +84,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config.json")
     parser.add_argument("--strict", action="store_true")
+    parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
-    raise SystemExit(run_doctor(Path(args.config), strict=args.strict))
+    raise SystemExit(run_doctor(Path(args.config), strict=args.strict, json_output=args.json))
 
 
 if __name__ == "__main__":

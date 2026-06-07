@@ -9,7 +9,6 @@
 - faster-whisper / CTranslate2 folders
 - whisper.cpp GGML `.bin` files
 - Generic ONNX CTC ASR with `modelbench.json`
-- Audio/ASR GGUF packages with a matching `mmproj` projector through llama-cpp-python Qwen3 ASR support or `llama-mtmd-cli`
 
 ## Hugging Face Downloads
 
@@ -32,6 +31,7 @@ These package types are recognized so the app can explain what was found, list m
 - sherpa-onnx Whisper folders
 - Split Whisper/Transformers.js ONNX, Granite-style split ONNX, Qwen split ONNX, and ORT edge graph packages
 - Core ML / WhisperKit `.mlmodelc`
+- Complete Audio/ASR GGUF packages with matching `mmproj` projectors, currently recognized as experimental until a real release smoke proves transcription through this app
 - Incomplete or mismatched Audio/ASR GGUF packages, including missing or nonmatching `mmproj` projectors
 - Incomplete sharded Hugging Face Safetensors folders with Safetensors index JSON files
 

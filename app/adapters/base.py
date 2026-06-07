@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, Sequence
+from typing import Any, Protocol, Sequence
 
 
 @dataclass
@@ -41,7 +41,7 @@ class ModelRunResult:
     candidate: ModelCandidate
     transcript_chunks: list[ChunkTranscript]
     metrics: dict
-    errors: list[str] = field(default_factory=list)
+    errors: list[str | dict[str, Any]] = field(default_factory=list)
 
 
 class ASRAdapter(Protocol):

@@ -40,6 +40,19 @@ class PassingAdapter:
         self.loaded = False
 
 
+class ChunkFailingAdapter(PassingAdapter):
+    name = "fake_chunk_fail"
+
+    def transcribe_chunks(self, chunks, chunk_metadata):
+        candidate = self.candidate
+        return ModelRunResult(
+            candidate=candidate,
+            transcript_chunks=[],
+            metrics={"inference_seconds": 0.01, "audio_seconds": 1.0, "peak_process_memory_mb": 123},
+            errors=["0001: CUDA backend failed for chunk"],
+        )
+
+
 class FailingAdapter(PassingAdapter):
     name = "fake_fail"
 
@@ -78,7 +91,12 @@ def test_mock_e2e_pipeline_writes_reports_when_one_model_fails(tmp_path, monkeyp
     monkeypatch.setattr("app.media.audio_duration_seconds", lambda samples: 1.0)
 
     def fake_adapter_for(model):
-        adapter = PassingAdapter() if model.adapter_name == "fake_pass" else FailingAdapter()
+        if model.adapter_name == "fake_pass":
+            adapter = PassingAdapter()
+        elif model.adapter_name == "fake_chunk_fail":
+            adapter = ChunkFailingAdapter()
+        else:
+            adapter = FailingAdapter()
         adapter.candidate = model
         return adapter
 
@@ -104,8 +122,59 @@ def test_mock_e2e_pipeline_writes_reports_when_one_model_fails(tmp_path, monkeyp
     good, bad = results["runs"]
     assert good["transcript_chunks"][0]["text"] == "transcript 0001"
     assert bad["transcript_chunks"] == []
-    assert any("model load failed" in error for error in bad["errors"])
+    assert bad["errors"][0]["status"] == "model_failed"
+    assert bad["errors"][0]["stage"] == "model_load_or_inference"
+    assert bad["errors"][0]["message"] == "model load failed"
+    assert bad["errors"][0]["model_id"] == "bad-model"
+    assert bad["errors"][0]["likely_causes"]
+    assert bad["errors"][0]["next_actions"]
+    assert bad["errors"][0]["traceback"]
+    assert "Likely causes" in (report_dir / "results.txt").read_text(encoding="utf-8")
+    assert "Model Errors" in (report_dir / "compare.html").read_text(encoding="utf-8")
     assert not wav_path.exists()
+
+
+def test_mock_e2e_pipeline_structures_chunk_errors(tmp_path, monkeypatch):
+    source = tmp_path / "input.wav"
+    source.write_bytes(b"fixture")
+    temp = tmp_path / "Temp"
+    output = tmp_path / "Output"
+    chunk = AudioChunk(0, 0.0, 1.0, np.zeros(16000, dtype=np.float32))
+    wav_path = temp / "normalized.wav"
+    wav_path.parent.mkdir()
+    wav_path.write_bytes(b"wav")
+
+    monkeypatch.setattr("app.main.wait_for_stable_file", lambda path, seconds: None)
+    monkeypatch.setattr("app.media.prepare_audio", lambda source, temp_dir, config: (wav_path, np.zeros(16000, dtype=np.float32), [chunk]))
+    monkeypatch.setattr("app.media.audio_duration_seconds", lambda samples: 1.0)
+
+    def fake_adapter_for(model):
+        adapter = ChunkFailingAdapter()
+        adapter.candidate = model
+        return adapter
+
+    monkeypatch.setattr("app.main.adapter_for", fake_adapter_for)
+
+    report_dir = process_file_with_candidates(
+        source,
+        [candidate("chunk-fail-model", "fake_chunk_fail")],
+        {
+            "folders": {"temp": str(temp), "output": str(output)},
+            "input": {"file_stability_wait_seconds": 0},
+            "runtime": {"provider": "auto"},
+            "advanced": {"keep_temp_wavs": False},
+        },
+    )
+
+    results = json.loads((report_dir / "results.json").read_text(encoding="utf-8"))
+    error = results["runs"][0]["errors"][0]
+
+    assert error["status"] == "chunk_failed"
+    assert error["stage"] == "chunk_inference"
+    assert error["chunk_id"] == "0001"
+    assert error["likely_causes"]
+    assert error["next_actions"]
+    assert "CUDA backend failed" in error["message"]
 
 
 def test_mock_e2e_pipeline_writes_failed_file_report_when_media_preparation_fails(tmp_path, monkeypatch, capsys):

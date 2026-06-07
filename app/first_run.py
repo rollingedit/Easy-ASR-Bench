@@ -8,9 +8,10 @@ from .hf_model_downloader import download_hf_model_interactive, download_recomme
 from .interactive_menu import MenuAction, choose_one
 from .model_scanner import scan_models
 from .model_status import model_status_label
+from .version import RELEASE_CHANNEL, RELEASE_COMMIT, TAG
 
 
-def run_first_run_wizard(config: dict, *, input_func=input, print_func=print) -> bool:
+def run_first_run_wizard(config: dict, *, input_func=input, print_func=print, initial_action: str | None = None) -> bool:
     models_root = Path(config["folders"]["models"])
     input_root = Path(config["folders"]["input"])
     runnable, unsupported = scan_models(models_root)
@@ -23,6 +24,10 @@ def run_first_run_wizard(config: dict, *, input_func=input, print_func=print) ->
     print_func("Nothing will be uploaded. Models and media stay local.")
     print_func("Network use: GitHub/PyPI during setup, Hugging Face only if you choose a model download.")
     print_func()
+    if initial_action == "paste_hf":
+        return download_hf_model_interactive(models_root, input_func=input_func, print_func=print_func) is not None
+    if initial_action == "recommended_baseline":
+        return download_recommended_baseline(models_root, input_func=input_func, print_func=print_func) is not None
     if runnable_asr:
         print_func(f"Runnable ASR models found: {len(runnable_asr)}")
         action = _choose_action(
@@ -55,6 +60,11 @@ def run_first_run_wizard(config: dict, *, input_func=input, print_func=print) ->
     print_func(f"  - {len(reference_llms)} reference/correction LLM(s)")
     print_func("  - 0 runnable ASR models")
     print_func()
+    print_func("Recommended CPU baseline:")
+    print_func("  Downloads: Systran/faster-whisper-tiny.en")
+    print_func("  Installs when selected: faster-whisper / CTranslate2 runtime")
+    print_func("  Runs on CPU by default; CUDA is optional and only used if available.")
+    print_func()
     action = _choose_action(
         "Choose one",
         [
@@ -77,6 +87,32 @@ def run_first_run_wizard(config: dict, *, input_func=input, print_func=print) ->
     elif action == 3:
         _open_folder(input_root)
     return False
+
+
+def build_first_run_smoke_report(config: dict) -> dict:
+    models_root = Path(config["folders"]["models"])
+    input_root = Path(config["folders"]["input"])
+    models_root.mkdir(parents=True, exist_ok=True)
+    input_root.mkdir(parents=True, exist_ok=True)
+    runnable, unsupported = scan_models(models_root)
+    runnable_asr = [candidate for candidate in runnable if candidate.category == "asr"]
+    incomplete = [candidate for candidate in unsupported if model_status_label(candidate) == "Recognized incomplete"]
+    reference_llms = [candidate for candidate in unsupported if candidate.category == "reference_llm"]
+    return {
+        "schema": "easy_asr_bench.first_run_smoke.v1",
+        "version": TAG,
+        "release_channel": RELEASE_CHANNEL,
+        "release_commit": RELEASE_COMMIT,
+        "models_root": str(models_root),
+        "input_root": str(input_root),
+        "runnable_asr_count": len(runnable_asr),
+        "incomplete_model_count": len(incomplete),
+        "reference_llm_count": len(reference_llms),
+        "network_used": False,
+        "available_actions": ["run_now", "download_recommended_baseline", "paste_hugging_face_link", "open_models_folder", "open_input_folder", "quit"],
+        "recommended_next_action": "run_now" if runnable_asr else "download_recommended_baseline",
+        "dead_end": False,
+    }
 
 
 def _choose_action(title: str, options: list[str], typed: dict[str, int], input_func, print_func) -> int | None:

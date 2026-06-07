@@ -1,6 +1,6 @@
 param(
   [string]$InstallDir = "$env:LOCALAPPDATA\Easy-ASR-Bench",
-  [string]$Version = "v0.3.7",
+  [string]$Version = "v0.3.8",
   [switch]$DryRun,
   [switch]$VerifyRelease,
   [switch]$Repair,
@@ -452,7 +452,7 @@ Invoke-Step "Installing app atomically with user-data preservation" {
 Push-Location $InstallDir
 try {
   Invoke-Step "Running local setup" {
-    $p = Start-Process -FilePath "cmd.exe" -ArgumentList "/c setup.bat --local" -Wait -PassThru
+    $p = Start-Process -FilePath "cmd.exe" -ArgumentList "/c setup.bat --local --no-post-setup-menu" -Wait -PassThru
     if ($p.ExitCode -ne 0) { throw "local setup failed with exit code $($p.ExitCode)" }
   }
   Invoke-Step "Validating installed app after local setup" {

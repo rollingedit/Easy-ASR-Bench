@@ -29,6 +29,26 @@ python -m app.doctor --config config.json --strict
 ```
 
 The staged `--asset-dir` check must run before a draft release is published. It validates the same `setup.bat`, `install.ps1`, `manifest.json`, `checksums.json`, and ZIP bytes that will become release assets, without depending on public release URLs.
+
+Public-asset Windows smoke should also capture machine-readable app state from the installed app:
+
+```powershell
+qa\windows_matrix\run_public_asset_smoke.ps1 -Tag vX.Y.Z
+qa\windows_matrix\run_public_asset_smoke.ps1 -Tag vX.Y.Z -Install
+%LOCALAPPDATA%\Easy-ASR-Bench\Run.bat --doctor --json > doctor.json
+%LOCALAPPDATA%\Easy-ASR-Bench\Run.bat --first-run-smoke > first-run-smoke.json
+%LOCALAPPDATA%\Easy-ASR-Bench\setup.bat --doctor --json > doctor-from-setup.json
+```
+
+The public-asset smoke runner downloads release assets with `gh release download`, verifies the staged setup path, records asset hashes, and writes evidence rows. With `-Install`, it also runs the installed app and captures `doctor.json` plus `first-run-smoke.json`. `doctor.json` records release identity, dependency groups, provider diagnostics, and checked folders. `first-run-smoke.json` verifies the first-run state has actionable next steps without using network or requiring interactive input.
+
+After collecting evidence rows, merge them into the release smoke artifact that release notes and strict gates consume:
+
+```powershell
+python scripts\merge_release_evidence.py --smoke release-smoke-vX.Y.Z.json --evidence-dir qa\windows_matrix\evidence --output release-smoke-vX.Y.Z.json
+python scripts\validate_release_smoke.py --smoke release-smoke-vX.Y.Z.json --required tests\fixtures\release_required_rows_v2.json --require-log-hashes --require-environment-summary
+```
+
 `validate_release_smoke.py` verifies that every required release QA row exists. Public release publication and release-gate verification use `--require-all-pass --require-log-hashes --require-environment-summary`; that means every required row must be `pass` and must include app version, release commit, log/result hash evidence, and environment summary. If real Windows/model/provider/media evidence has not been collected, the correct status is `not_run`, and the release must remain unpublished or draft.
 
 ## GitHub Release Asset Gate

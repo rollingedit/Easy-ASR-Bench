@@ -10,6 +10,7 @@ STATUS_LABELS = {
     "reference_llm": "Reference/correction LLM",
     "recognized_incomplete": "Recognized incomplete",
     "recognized_ambiguous_not_runnable": "Recognized ambiguous",
+    "recognized_experimental": "Recognized experimental",
     "unsafe_blocked": "Unsafe blocked",
     "unsupported_llm_format": "Unsupported LLM format",
     "unknown_inspection_only": "Unknown inspection-only",

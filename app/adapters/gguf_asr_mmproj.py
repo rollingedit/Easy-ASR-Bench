@@ -19,6 +19,7 @@ from ..runtime_plan import resolve_runtime_plan
 
 class GGUFASRMMProjAdapter:
     name = "gguf_asr_mmproj"
+    stable_runtime_enabled = False
 
     def __init__(self) -> None:
         self.candidate: ModelCandidate | None = None
@@ -34,7 +35,11 @@ class GGUFASRMMProjAdapter:
                 continue
             main_model, projector, missing, warnings = pair
             raw, bucket = detect_from_path(main_model if main_model else folder)
-            runnable = main_model is not None and projector is not None and not missing
+            complete_pair = main_model is not None and projector is not None and not missing
+            runnable = complete_pair and self.stable_runtime_enabled
+            warnings = list(warnings)
+            if complete_pair and not self.stable_runtime_enabled:
+                warnings.append("Audio/ASR GGUF+mmproj package detected, but this runtime is experimental until a real ASR GGUF smoke fixture passes.")
             candidates.append(
                 ModelCandidate(
                     candidate_id=f"gguf_asr_mmproj__{folder.name}".lower().replace(" ", "_"),
@@ -51,11 +56,15 @@ class GGUFASRMMProjAdapter:
                     runnable_after_dependency_install=runnable,
                     dependency_groups=["llama_cpp"],
                     missing_files=missing,
-                    warnings=warnings if warnings else ([] if runnable else ["Audio/ASR GGUF package is incomplete or has no matching mmproj."]),
-                    help_text="Use a matching ASR/audio .gguf model and mmproj .gguf projector. Runtime uses llama-cpp-python Qwen3ASRChatHandler when available, or llama-mtmd-cli from llama.cpp.",
+                    warnings=warnings if warnings else ["Audio/ASR GGUF package is incomplete or has no matching mmproj."],
+                    help_text=(
+                        "Recognized ASR GGUF/projector package. Stable runnable support requires a verified "
+                        "ASR-specific llama.cpp/MTMD smoke test; text GGUF models remain reference/correction only."
+                    ),
                     metadata={
                         "model_path": str(main_model) if main_model else "",
                         "mmproj_path": str(projector) if projector else "",
+                        "model_status": "recognized_experimental" if complete_pair and not self.stable_runtime_enabled else "",
                     },
                 )
             )

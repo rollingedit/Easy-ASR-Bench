@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+## v0.3.8
+
+Release QA automation:
+- Added `Run.bat --doctor --json` / `python -m app.main --doctor --json` so Windows public-asset QA can capture release identity, dependency status, provider diagnostics, and folder paths as machine-readable evidence.
+- Changed `setup.bat --doctor` to forward extra doctor flags such as `--json` and `--strict`, keeping setup as a single QA/user entrypoint.
+- Added `Run.bat --first-run-smoke` / `python -m app.main --first-run-smoke` so QA can prove the first-run state has actionable next steps without network use or interactive input.
+- Added `qa/windows_matrix/run_public_asset_smoke.ps1` to download public release assets, verify staged setup, record asset hashes, and optionally install/capture installed-app `doctor.json` plus `first-run-smoke.json`.
+- Added `scripts/merge_release_evidence.py` so collected `row.json` evidence can update the `release-smoke-vX.Y.Z.json` artifact consumed by release notes and strict validation.
+- Documented the new public-asset runner and installed-app JSON capture commands in release verification guidance.
+
+Setup/runtime hardening:
+- Changed public install flow so `installer/install.ps1` runs local setup with `--no-post-setup-menu`; only the outer setup shows the final Run/Paste/Open/Quit menu after installed-app validation completes.
+- Changed setup's Hugging Face paste option to route through `Run.bat --first-run --download-model-first`, so a successful model download rescans and continues into the app instead of telling the user to relaunch.
+- Removed the normal-launch doctor wall from `Run.bat` and `Drop_Audio_Or_Folders_Here.bat`; full diagnostics now run only through explicit `--doctor` or setup/repair paths.
+- Added structured model-level failure reports for model-load/inference/unload failures with stage, model id/path, provider request, dependency group, likely causes, next actions, repair command, log path, and traceback detail.
+- Changed first-run recommended baseline copy to disclose `Systran/faster-whisper-tiny.en`, the `faster-whisper / CTranslate2` runtime, and CPU-default behavior before download.
+
+Dependency/model support truth:
+- Replaced the hard-coded llama.cpp CUDA 12.4 install decision with a prebuilt wheel resolver that can select `cu118`, `cu121`, `cu122`, `cu123`, `cu124`, `cu125`, `cu130`, or `cu132` indexes and falls back to CPU when the selected index is unreachable.
+- Changed llama.cpp Vulkan setup to try the Vulkan prebuilt wheel first when a Vulkan runtime is detected; source builds now require explicit opt-in plus SDK/build tooling.
+- Changed Windows repair command text for llama.cpp accelerator installs to emit PowerShell and `cmd.exe` environment syntax instead of POSIX-style `KEY=value` prefixes.
+- Demoted Audio/ASR GGUF+`mmproj` packages from stable runnable ASR to recognized experimental until a real ASR GGUF smoke fixture proves transcription through this app; text GGUF models remain reference/correction LLMs only.
+- Updated README and support/setup docs to match the first-run setup menu, CPU-safe baseline disclosure, llama.cpp wheel resolver, Vulkan behavior, and ASR GGUF experimental scope.
+
 ## v0.3.7
 
 User-path hardening:

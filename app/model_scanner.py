@@ -455,7 +455,7 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
     asr_gguf_roots = {
         path.resolve()
         for path in [models_root, *[item for item in models_root.rglob("*") if item.is_dir()]]
-        if recognize_asr_gguf_projector_package(path) is not None
+        if find_gguf_asr_pair(path) is not None
     }
     discovered = [
         candidate

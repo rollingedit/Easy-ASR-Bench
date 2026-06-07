@@ -6,6 +6,7 @@ import json
 import os
 import platform
 import sys
+import re
 from datetime import datetime
 from itertools import combinations
 from pathlib import Path
@@ -35,6 +36,52 @@ DEPENDENCY_PACKAGES = [
     "openai-whisper",
     "llama-cpp-python",
 ]
+
+
+def format_error_summary(error) -> str:
+    if not isinstance(error, dict):
+        return str(error)
+    stage = error.get("stage", "unknown")
+    message = error.get("message", "")
+    model_name = error.get("model_name") or error.get("model_id") or ""
+    prefix = f"{model_name} | " if model_name else ""
+    return f"{prefix}{stage}: {message}".strip()
+
+
+def normalize_run_error(error, candidate) -> dict | str:
+    if isinstance(error, dict):
+        return error
+    text = str(error)
+    match = re.match(r"^(?P<chunk_id>(?:chunk-)?\d{1,5}):\s*(?P<message>.+)$", text, re.IGNORECASE)
+    if not match:
+        return text
+    chunk_id = match.group("chunk_id")
+    message = match.group("message")
+    return {
+        "status": "chunk_failed",
+        "stage": "chunk_inference",
+        "chunk_id": chunk_id,
+        "model_id": candidate.candidate_id,
+        "model_name": candidate.display_name,
+        "model_path": str(candidate.path),
+        "error_type": "ChunkInferenceError",
+        "message": message,
+        "likely_causes": [
+            "This chunk failed during model inference while other chunks or models may still be usable.",
+            "The selected model/backend may have hit a provider, memory, decode, or input-shape issue for this chunk.",
+        ],
+        "next_actions": [
+            "Open the detailed log and inspect this chunk id.",
+            "Retry with CPU or a smaller model if the message mentions CUDA, GPU, memory, or provider failure.",
+            "If only this chunk failed, inspect the source audio around the chunk timestamp for noise, silence, or corruption.",
+        ],
+        "dependency_group": ", ".join(candidate.dependency_groups),
+        "provider_requested": "",
+        "provider_actual": "",
+        "repair_command": "Run setup.bat --doctor for runtime status and repair commands.",
+        "log_path": "",
+        "traceback": "",
+    }
 
 
 def candidate_to_dict(candidate) -> dict:
@@ -194,6 +241,7 @@ def build_results(
         metrics.setdefault("media_normalization_seconds", media_seconds)
         metrics.setdefault("audio_seconds_per_wall_second", metrics.get("audio_seconds", 0) / max(0.001, metrics.get("total_wall_seconds", 0.001)))
         metrics.setdefault("peak_vram_mb", None)
+        normalized_errors = [normalize_run_error(error, candidate) for error in result.errors]
         runs.append(
             {
                 "model": candidate_to_dict(candidate),
@@ -208,7 +256,7 @@ def build_results(
                     for chunk in result.transcript_chunks
                 ],
                 "metrics": metrics,
-                "errors": result.errors,
+                "errors": normalized_errors,
             }
         )
     pairwise = {}
@@ -315,7 +363,21 @@ def render_text_report(results: dict) -> str:
             lines.append(f"[{format_timestamp(chunk['start_seconds'])} - {format_timestamp(chunk['end_seconds'])}] {chunk['text']}")
         if run["errors"]:
             lines.append("Errors:")
-            lines.extend(f"- {error}" for error in run["errors"])
+            for error in run["errors"]:
+                lines.append(f"- {format_error_summary(error)}")
+                if isinstance(error, dict):
+                    causes = error.get("likely_causes", [])
+                    actions = error.get("next_actions", [])
+                    if causes:
+                        lines.append("  Likely causes:")
+                        lines.extend(f"  - {item}" for item in causes)
+                    if actions:
+                        lines.append("  Next actions:")
+                        lines.extend(f"  - {item}" for item in actions)
+                    if error.get("repair_command"):
+                        lines.append(f"  Repair command: {error['repair_command']}")
+                    if error.get("log_path"):
+                        lines.append(f"  Detailed log: {error['log_path']}")
     lines.extend(["", "Pairwise Differences", "-" * 80])
     for name, metrics in results["pairwise_differences"].items():
         lines.append(f"{name}: normalized WER-like difference {metrics['normalized_wer_like_difference']:.4f}, CER difference {metrics['cer_difference']:.4f}")
