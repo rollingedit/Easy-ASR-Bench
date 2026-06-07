@@ -3,11 +3,11 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 set APP_NAME=Easy ASR Bench
-set APP_VERSION=v0.3.6
+set APP_VERSION=v0.3.7
 set INSTALL_DIR=%LOCALAPPDATA%\Easy-ASR-Bench
 set INSTALLER_PS1=%~dp0installer\install.ps1
 set INSTALLER_URL=https://github.com/rollingedit/Easy-ASR-Bench/releases/download/%APP_VERSION%/install.ps1
-set INSTALLER_SHA256=sha256:325ca6be73bf14dbfd90d5381df7e7da3ddd0c772713783512e267bde05b6040
+set INSTALLER_SHA256=sha256:0481daaca56d0fdb7a43178bb2a45cd0e8947259e3c118d01026cf8b9ea1be8c
 set VERIFY_RELEASE=0
 set ASSET_DIR=
 set NEXT_IS_ASSET_DIR=0
@@ -69,9 +69,33 @@ if errorlevel 1 (
 )
 
 echo.
-echo Setup complete. Opening installed folder...
-explorer "%INSTALL_DIR%"
-pause
+echo Setup complete.
+echo.
+echo Next step:
+echo   [R] Run Easy ASR Bench now
+echo   [P] Paste a Hugging Face model link to download
+echo   [M] Open Models folder
+echo   [I] Open Input folder
+echo   [Q] Quit
+choice /C RPMIQ /N /M "Choose R, P, M, I, or Q: "
+if errorlevel 5 exit /b 0
+if errorlevel 4 (
+  if not exist "%INSTALL_DIR%\Input" mkdir "%INSTALL_DIR%\Input"
+  explorer "%INSTALL_DIR%\Input"
+  exit /b 0
+)
+if errorlevel 3 (
+  if not exist "%INSTALL_DIR%\Models" mkdir "%INSTALL_DIR%\Models"
+  explorer "%INSTALL_DIR%\Models"
+  exit /b 0
+)
+if errorlevel 2 (
+  start "Easy ASR Bench Model Download" cmd /k ""%INSTALL_DIR%\Run.bat" --download-model"
+  exit /b 0
+)
+if exist "%INSTALL_DIR%\Run.bat" (
+  start "Easy ASR Bench" cmd /k ""%INSTALL_DIR%\Run.bat" --first-run"
+)
 exit /b 0
 
 :dry_run
@@ -166,7 +190,7 @@ for %%V in (3.14 3.13 3.12 3.11 3.10) do (
 
 if "%PYEXE%"=="" (
   echo Python 3.10 through 3.14 was not found. Attempting install with winget...
-  winget install -e --id Python.Python.3.12
+  winget install -e --id Python.Python.3.12 --accept-package-agreements --accept-source-agreements
   py -3.12 -c "import sys" >nul 2>nul
   if errorlevel 1 (
     echo Python install was not detected. Install Python 3.12 and rerun setup.bat.
@@ -215,8 +239,31 @@ if errorlevel 1 (
 )
 
 echo.
-echo Setup complete. Drop models into Models, then use Run.bat.
-pause
+echo Setup complete.
+echo.
+echo Next step:
+echo   [R] Run Easy ASR Bench now
+echo   [P] Paste a Hugging Face model link to download
+echo   [M] Open Models folder
+echo   [I] Open Input folder
+echo   [Q] Quit
+choice /C RPMIQ /N /M "Choose R, P, M, I, or Q: "
+if errorlevel 5 exit /b 0
+if errorlevel 4 (
+  if not exist "%CD%\Input" mkdir "%CD%\Input"
+  explorer "%CD%\Input"
+  exit /b 0
+)
+if errorlevel 3 (
+  if not exist "%CD%\Models" mkdir "%CD%\Models"
+  explorer "%CD%\Models"
+  exit /b 0
+)
+if errorlevel 2 (
+  call "%~dp0Run.bat" --download-model
+  exit /b 0
+)
+call "%~dp0Run.bat" --first-run
 exit /b 0
 
 :verify_sha

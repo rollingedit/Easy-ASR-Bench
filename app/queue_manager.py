@@ -52,7 +52,7 @@ class QueueState:
                 return
 
     def done_hashes(self) -> set[str]:
-        return {item["sha256"] for item in self.data.get("items", []) if item.get("status") == "done"}
+        return {item["sha256"] for item in self.data.get("items", []) if item.get("status") == "done" and item.get("sha256")}
 
     def done_fast_keys(self) -> set[str]:
         return {item["fast_key"] for item in self.data.get("items", []) if item.get("status") == "done" and item.get("fast_key")}
@@ -68,8 +68,10 @@ def discover_queue(paths: list[Path], extensions: set[str], recursive: bool, sta
         fast = file_key(path)
         if fast in done_fast:
             continue
-        digest = sha256_file(path)
-        if digest in done:
+        digest = ""
+        if done:
+            digest = sha256_file(path)
+        if digest and digest in done:
             continue
         state.upsert(QueueItem(str(path.resolve()), digest, fast))
         queued.append(path)

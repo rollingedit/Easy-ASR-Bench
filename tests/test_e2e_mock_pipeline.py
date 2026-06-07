@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 
 from app.adapters.base import ChunkTranscript, ModelCandidate, ModelRunResult
-from app.main import process_file_with_candidates
+from app.main import output_status, process_file_with_candidates
 from app.media import AudioChunk
 
 
@@ -108,7 +108,7 @@ def test_mock_e2e_pipeline_writes_reports_when_one_model_fails(tmp_path, monkeyp
     assert not wav_path.exists()
 
 
-def test_mock_e2e_pipeline_returns_none_when_media_preparation_fails(tmp_path, monkeypatch, capsys):
+def test_mock_e2e_pipeline_writes_failed_file_report_when_media_preparation_fails(tmp_path, monkeypatch, capsys):
     source = tmp_path / "broken.mp4"
     source.write_bytes(b"fixture")
     monkeypatch.setattr("app.main.wait_for_stable_file", lambda path, seconds: None)
@@ -125,5 +125,17 @@ def test_mock_e2e_pipeline_returns_none_when_media_preparation_fails(tmp_path, m
         },
     )
 
-    assert report_dir is None
-    assert "File failed" in capsys.readouterr().out
+    assert report_dir is not None
+    for name in ["results.json", "results.txt", "benchmark.csv", "compare.html"]:
+        assert (report_dir / name).exists()
+    results = json.loads((report_dir / "results.json").read_text(encoding="utf-8"))
+    assert results["runs"] == []
+    assert results["errors"][0]["status"] == "failed_before_model_run"
+    assert results["errors"][0]["stage"] == "media_probe"
+    assert "no audio stream" in results["errors"][0]["message"]
+    assert output_status(report_dir) == "failed"
+    assert "No source files were modified" in (report_dir / "results.txt").read_text(encoding="utf-8")
+    html = (report_dir / "compare.html").read_text(encoding="utf-8")
+    assert "Run Status" in html
+    assert "No source files were modified" in html
+    assert "Wrote failure report" in capsys.readouterr().out

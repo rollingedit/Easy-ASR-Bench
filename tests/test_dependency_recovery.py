@@ -3,7 +3,7 @@ from pathlib import Path
 from app.config import DEFAULT_CONFIG
 from app.dependency_manager import ACCELERATOR_OVERRIDES, CUDA_INSTALL_OVERRIDES, acceleration_install_decision, cuda_install_decision, dependency_status, install_group_for_config, recovery_command
 from app.doctor import run_doctor
-from app.main import ensure_dependencies, warn_runtime_dependency_fallbacks
+from app.main import _dependency_install_confirmation, ensure_dependencies, warn_runtime_dependency_fallbacks
 from app.results_writer import runtime_environment
 
 
@@ -239,6 +239,28 @@ def test_cuda_warning_silent_when_gpu_not_requested(capsys):
     warn_runtime_dependency_fallbacks({"runtime": {"provider": "auto", "prefer_gpu": False}})
 
     assert capsys.readouterr().out == ""
+
+
+def test_dependency_install_prompt_has_explicit_recovery_choices(monkeypatch, capsys):
+    answers = iter(["r", "q"])
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("app.main.choose_one", lambda *args, **kwargs: None)
+    monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
+
+    decision = _dependency_install_confirmation("onnx", "python -m pip install -r requirements/onnx.txt")
+
+    output = capsys.readouterr().out
+    assert decision == "quit"
+    assert "Manual repair command: python -m pip install -r requirements/onnx.txt" in output
+
+
+def test_dependency_install_prompt_skip_means_skip_affected_models(monkeypatch):
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("app.main.choose_one", lambda *args, **kwargs: None)
+    monkeypatch.setattr("builtins.input", lambda prompt: "s")
+
+    assert _dependency_install_confirmation("onnx", "repair") == "skip_group"
 
 
 def test_optional_install_failure_prints_repair_and_skips_only_affected(monkeypatch, tmp_path: Path, capsys):

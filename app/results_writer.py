@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .html_report_builder import build_html_report
 from . import __version__
+from .version import RELEASE_CHANNEL, RELEASE_COMMIT
 from .dependency_manager import cuda_diagnostics
 from .llm_reference_prompt import build_llm_reference_prompt
 from .results_schema import validate_results_schema
@@ -71,6 +72,9 @@ def dependency_versions() -> dict[str, str]:
 
 def runtime_environment() -> dict:
     environment = {
+        "app_version": __version__,
+        "release_channel": RELEASE_CHANNEL,
+        "release_commit": RELEASE_COMMIT,
         "platform": platform.platform(),
         "system": platform.system(),
         "release": platform.release(),
@@ -98,6 +102,57 @@ def runtime_environment() -> dict:
         environment["onnxruntime_providers"] = []
     environment["cuda_diagnostics"] = cuda_diagnostics()
     return environment
+
+
+def build_failed_file_results(
+    *,
+    source_path: Path,
+    stage: str,
+    error_type: str,
+    message: str,
+    likely_causes: list[str],
+    next_actions: list[str],
+    log_path: Path | None,
+    selected_models: list | None = None,
+    unsupported_models: list | None = None,
+) -> dict:
+    error = {
+        "status": "failed_before_model_run",
+        "stage": stage,
+        "error_type": error_type,
+        "message": message,
+        "likely_causes": likely_causes,
+        "next_actions": next_actions,
+        "log_path": str(log_path) if log_path else "",
+        "source_files_modified": False,
+    }
+    results = {
+        "schema": "easy_asr_bench.results.v1",
+        "app_version": __version__,
+        "created_local": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "source": {
+            "path": str(source_path),
+            "name": source_path.name,
+            "sha256": "",
+            "duration_seconds": 0,
+        },
+        "environment": runtime_environment(),
+        "dependency_versions": dependency_versions(),
+        "adapter_versions": {},
+        "chunk_plan": {"sample_rate": 16000, "source_audio_seconds": 0, "chunks": []},
+        "selected_models": [candidate_to_dict(candidate) for candidate in selected_models or []],
+        "runs": [],
+        "unsupported_models": [
+            candidate_to_dict(candidate) | {"missing_files": candidate.missing_files, "help_text": candidate.help_text}
+            for candidate in unsupported_models or []
+        ],
+        "pairwise_differences": {},
+        "errors": [error],
+    }
+    schema_errors = validate_results_schema(results)
+    if schema_errors:
+        raise ValueError("Invalid failed-file results schema: " + "; ".join(schema_errors))
+    return results
 
 
 def build_results(
@@ -205,6 +260,35 @@ def write_all_reports(results: dict, output_root: Path) -> Path:
 
 
 def render_text_report(results: dict) -> str:
+    if results.get("errors") and not results.get("runs"):
+        lines = [
+            "Easy ASR Bench Failed File Report",
+            "=" * 80,
+            f"Created: {results['created_local']}",
+            f"Source: {results['source']['path']}",
+            "",
+            "This file could not be processed before model benchmarking started.",
+            "",
+        ]
+        for error in results["errors"]:
+            if isinstance(error, dict):
+                lines.extend(
+                    [
+                        f"Stage: {error.get('stage', 'unknown')}",
+                        f"Problem: {error.get('message', '')}",
+                        "",
+                        "Likely causes:",
+                    ]
+                )
+                lines.extend(f"- {item}" for item in error.get("likely_causes", []))
+                lines.extend(["", "Next actions:"])
+                lines.extend(f"- {item}" for item in error.get("next_actions", []))
+                if error.get("log_path"):
+                    lines.extend(["", f"Detailed log: {error['log_path']}"])
+                lines.extend(["", "No source files were modified."])
+            else:
+                lines.append(str(error))
+        return "\n".join(lines) + "\n"
     lines = [
         "Easy ASR Bench Results",
         "=" * 80,

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .config import load_config
 from .dependency_manager import acceleration_install_decision, cuda_diagnostics, dependency_status
+from .version import RELEASE_CHANNEL, RELEASE_COMMIT, TAG
 
 
 def run_doctor(config_path: Path, strict: bool = False) -> int:
@@ -15,6 +16,12 @@ def run_doctor(config_path: Path, strict: bool = False) -> int:
         Path(folder).mkdir(parents=True, exist_ok=True)
     status = dependency_status(config)
     print("Easy ASR Bench Doctor")
+    print(f"Version: {TAG}")
+    print(f"Release channel: {RELEASE_CHANNEL}")
+    config_channel = config.get("app", {}).get("version_channel")
+    if config_channel and config_channel != RELEASE_CHANNEL:
+        print(f"Config channel note: config.json says {config_channel}, but this build reports {RELEASE_CHANNEL}.")
+    print(f"Release commit: {RELEASE_COMMIT}")
     print()
     for group, data in status.items():
         mark = "OK" if data["available"] else "MISSING"
