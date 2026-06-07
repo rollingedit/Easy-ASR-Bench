@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
 from .base import ChunkTranscript, ModelCandidate, ModelRunResult
 from ..benchmark import process_memory_mb
 from ..precision_detector import detect_from_path
+
+
+@dataclass(frozen=True)
+class ProbeResult:
+    ok: bool
+    message: str
 
 
 class WhisperCppASRAdapter:
@@ -42,7 +49,21 @@ class WhisperCppASRAdapter:
     def required_dependency_groups(self, candidate: ModelCandidate) -> list[str]:
         return ["whisper_cpp"]
 
+    def runtime_probe(self) -> ProbeResult:
+        try:
+            from pywhispercpp.model import Model
+        except ModuleNotFoundError:
+            return ProbeResult(False, "pywhispercpp is not installed")
+        except Exception as exc:
+            return ProbeResult(False, f"pywhispercpp import failed: {exc}")
+        if not callable(getattr(Model, "transcribe", None)):
+            return ProbeResult(False, "pywhispercpp.Model.transcribe not found")
+        return ProbeResult(True, "pywhispercpp.Model.transcribe is available")
+
     def load(self, candidate: ModelCandidate, runtime_config: dict):
+        probe = self.runtime_probe()
+        if not probe.ok:
+            raise RuntimeError(f"whisper.cpp runtime probe failed: {probe.message}")
         try:
             from pywhispercpp.model import Model
         except ModuleNotFoundError as exc:

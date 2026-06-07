@@ -79,6 +79,11 @@ jobs:
           }
           python scripts/validate_physical_files.py --zip (Join-Path "release-asset" $zipName)
 
+      - name: Verify public setup path
+        if: github.event_name == 'release' || inputs.release_tag != ''
+        shell: cmd
+        run: setup.bat --dry-run --verify-release
+
       - name: Compile Python
         run: python -m compileall app tests
 

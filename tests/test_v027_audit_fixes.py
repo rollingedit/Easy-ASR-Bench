@@ -40,6 +40,8 @@ def test_bump_version_script_exists_and_checks_stale_versions():
 def test_release_version_coherence_script_exists():
     text = Path("scripts/check_release_version_coherence.py").read_text(encoding="utf-8")
 
+    assert "app/version.py VERSION mismatch" in text
+    assert "app.__version__ must come from app.version.VERSION" in text
     assert "setup.bat APP_VERSION mismatch" in text
     assert "installer default Version mismatch" in text
     assert "manifest app_zip mismatch" in text
@@ -70,6 +72,8 @@ def test_release_gate_requires_strict_committed_checksums():
     text = Path(".github/workflows/release-gate.yml").read_text(encoding="utf-8")
 
     assert "python scripts/build_release_zip.py --version $version --strict-checksums" in text
+    assert "Verify public setup path" in text
+    assert "setup.bat --dry-run --verify-release" in text
 
 
 def test_reference_validation_rejects_source_hash_mismatch():

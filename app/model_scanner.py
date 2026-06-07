@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import re
 from dataclasses import replace
 from pathlib import Path
 
@@ -48,11 +50,13 @@ def candidate_root(candidate: ModelCandidate) -> Path:
 def _candidate_path_suffix(candidate: ModelCandidate, models_root: Path) -> str:
     root = candidate_root(candidate)
     try:
-        rel = root.relative_to(models_root.resolve())
+        rel_path = root.relative_to(models_root.resolve())
     except ValueError:
-        rel = root
-    suffix = "__".join(part.lower().replace(" ", "_") for part in rel.parts if part)
-    return suffix or "root"
+        rel_path = root
+    rel = rel_path.as_posix()
+    slug = re.sub(r"[^a-z0-9]+", "_", rel.lower()).strip("_")
+    digest = hashlib.sha1(rel.encode("utf-8")).hexdigest()[:8]
+    return f"{slug or 'root'}__{digest}"
 
 
 def ensure_unique_candidate_ids(candidates: list[ModelCandidate], models_root: Path) -> list[ModelCandidate]:

@@ -305,8 +305,8 @@ if ($Uninstall) {
     exit 0
   }
   if ($RemoveUserData) {
-    if ($ConfirmRemoveUserData -ne "DELETE USER DATA") {
-      Write-SetupLog "Destructive uninstall refused. Re-run with -ConfirmRemoveUserData 'DELETE USER DATA' to delete Models, Input, Output, Logs, Cache, Temp, and config.json."
+    if ($ConfirmRemoveUserData -ne "DELETE EASY ASR BENCH USER DATA") {
+      Write-SetupLog "Destructive uninstall refused. Re-run with -ConfirmRemoveUserData 'DELETE EASY ASR BENCH USER DATA' to delete Models, Input, Output, Logs, Cache, Temp, and config.json."
       exit 1
     }
     Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction Stop

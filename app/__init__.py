@@ -1,3 +1,5 @@
 """Easy ASR Bench."""
 
-__version__ = "0.3.2"
+from .version import VERSION
+
+__version__ = VERSION

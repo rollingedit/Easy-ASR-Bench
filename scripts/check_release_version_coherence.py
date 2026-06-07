@@ -41,9 +41,12 @@ def validate(tag: str, require_checksums: bool = True) -> None:
     config = json.loads(read("config.json"))
     pyproject = read("pyproject.toml")
     init = read("app/__init__.py")
+    version_py = read("app/version.py")
     app_config = read("app/config.py")
 
-    expect(extract(r'__version__\s*=\s*"([^"]+)"', init, "app.__version__") == version, "app.__version__ mismatch")
+    expect(extract(r'VERSION\s*=\s*"([^"]+)"', version_py, "app/version.py VERSION") == version, "app/version.py VERSION mismatch")
+    expect('TAG = f"v{VERSION}"' in version_py, "app/version.py TAG mismatch")
+    expect("__version__ = VERSION" in init, "app.__version__ must come from app.version.VERSION")
     expect(extract(r'"version":\s*"([^"]+)"', app_config, "app/config.py version") == version, "app/config.py version mismatch")
     expect(config.get("app", {}).get("version") == version, "config.json app.version mismatch")
     expect(extract(r'version\s*=\s*"([^"]+)"', pyproject, "pyproject version") == version, "pyproject.toml version mismatch")

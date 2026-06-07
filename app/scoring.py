@@ -4,7 +4,17 @@ import re
 import unicodedata
 
 
-def normalize_words(text: str) -> list[str]:
+def _is_char_token_script(char: str) -> bool:
+    codepoint = ord(char)
+    return (
+        0x0E00 <= codepoint <= 0x0E7F  # Thai
+        or 0x3040 <= codepoint <= 0x30FF  # Japanese kana
+        or 0x3400 <= codepoint <= 0x9FFF  # CJK ideographs
+        or 0xAC00 <= codepoint <= 0xD7AF  # Hangul syllables
+    )
+
+
+def normalize_words(text: str, tokenizer: str = "unicode_words") -> list[str]:
     text = unicodedata.normalize("NFKC", text.casefold())
     text = text.replace("’", "'").replace("‘", "'").replace("ʼ", "'").replace("`", "'").replace("â€™", "'")
     chars: list[str] = []
@@ -18,7 +28,23 @@ def normalize_words(text: str) -> list[str]:
             chars.append(char)
         else:
             chars.append(" ")
-    return re.sub(r"\s+", " ", "".join(chars)).strip().split()
+    normalized = re.sub(r"\s+", " ", "".join(chars)).strip()
+    if tokenizer == "char_for_cjk":
+        tokens: list[str] = []
+        for word in normalized.split():
+            buffer = ""
+            for char in word:
+                if _is_char_token_script(char):
+                    if buffer:
+                        tokens.append(buffer)
+                        buffer = ""
+                    tokens.append(char)
+                else:
+                    buffer += char
+            if buffer:
+                tokens.append(buffer)
+        return tokens
+    return normalized.split()
 
 
 def strict_words(text: str) -> list[str]:
@@ -82,16 +108,16 @@ def align_words(reference: list[str], hypothesis: list[str]) -> list[dict]:
     return list(reversed(aligned))
 
 
-def wer(reference: str, hypothesis: str, normalized: bool = True) -> float:
-    ref = normalize_words(reference) if normalized else strict_words(reference)
-    hyp = normalize_words(hypothesis) if normalized else strict_words(hypothesis)
+def wer(reference: str, hypothesis: str, normalized: bool = True, tokenizer: str = "unicode_words") -> float:
+    ref = normalize_words(reference, tokenizer=tokenizer) if normalized else strict_words(reference)
+    hyp = normalize_words(hypothesis, tokenizer=tokenizer) if normalized else strict_words(hypothesis)
     return edit_distance(ref, hyp) / max(1, len(ref))
 
 
-def cer(reference: str, hypothesis: str, normalized: bool = False) -> float:
+def cer(reference: str, hypothesis: str, normalized: bool = False, tokenizer: str = "unicode_words") -> float:
     if normalized:
-        reference = " ".join(normalize_words(reference))
-        hypothesis = " ".join(normalize_words(hypothesis))
+        reference = " ".join(normalize_words(reference, tokenizer=tokenizer))
+        hypothesis = " ".join(normalize_words(hypothesis, tokenizer=tokenizer))
     return edit_distance(reference, hypothesis) / max(1, len(reference))
 
 

@@ -11,3 +11,14 @@ Current fixture classes:
 - unknown folders that must stay inspection-only
 
 These fixtures prove package selection behavior, not live Hugging Face availability. A public release may add live-download smoke evidence in `release-smoke-vX.Y.Z.json`, but unrun live repos must not be described as passed.
+
+Live-download evidence, when actually run, should record:
+
+- `repo_id`
+- `revision`
+- pasted URL shape
+- selected package label
+- expected local files
+- downloaded file count
+- rescan result
+- date tested
