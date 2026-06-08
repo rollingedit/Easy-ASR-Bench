@@ -40,6 +40,8 @@ def _extension_for_fixture(name: str, fixture: dict) -> str:
         return ".wav"
     if kind.endswith("_ogg"):
         return ".ogg"
+    if "webm" in kind:
+        return ".webm"
     if "mp4" in kind:
         return ".mp4"
     return Path(name).suffix or ".bin"
@@ -125,7 +127,7 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, allow_downloads: b
                     details={**details, "downloaded": downloaded},
                     artifacts=artifacts,
                 )
-        if fixture.get("kind") == "real_video_mp4_with_audio":
+        if fixture.get("kind") in {"real_video_mp4_with_audio", "real_video_webm_with_audio"}:
             wav_path, samples, chunks = prepare_audio(target, evidence_dir / "normalized" / name, _config())
             artifacts.append(wav_path)
             downloaded[name]["normalized_wav"] = str(wav_path)
@@ -168,7 +170,7 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, allow_downloads: b
         row_id,
         "pass",
         evidence_dir,
-        summary="Downloaded and cached real media fixtures with stable URLs, recorded hashes, and validated real audio plus MP4 audio/no-audio behavior.",
+        summary="Downloaded and cached real media fixtures with stable URLs, recorded hashes, and validated real audio plus video audio/no-audio behavior.",
         details={**details, "downloaded": downloaded},
         artifacts=artifacts,
     )

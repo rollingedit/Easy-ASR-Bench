@@ -73,6 +73,7 @@
       "faster_whisper_cpu": "not_run",
       "real_tiny_faster_whisper_smollm_grading": "not_run",
       "real_public_media_faster_whisper_smollm_grading": "not_run",
+      "real_public_video_faster_whisper_smollm_grading": "not_run",
       "faster_whisper_cuda_unavailable_cpu_fallback": "not_run",
       "whisper_cpp_ggml": "not_run",
       "whisper_cpp_ggml_smollm_grading": "not_run",

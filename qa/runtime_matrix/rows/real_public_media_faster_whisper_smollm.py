@@ -20,8 +20,10 @@ from qa.runtime_matrix.rows.smollm_reference_grading_report import SMOLLM_PATH, 
 from qa.run_real_tiny_model_smoke import smoke_config
 
 
-ROW_ID = "real_public_media_faster_whisper_smollm_grading"
-FIXTURE_ID = "wikimedia_cc0_word_wav"
+ROW_FIXTURES = {
+    "real_public_media_faster_whisper_smollm_grading": "wikimedia_cc0_word_wav",
+    "real_public_video_faster_whisper_smollm_grading": "wikimedia_public_domain_spoken_words_webm",
+}
 GROUPS = {"python_packaging", "media_tools", "faster_whisper", "llama_cpp"}
 
 
@@ -43,12 +45,12 @@ def _ensure_faster_whisper(models_root: Path, allow_downloads: bool) -> tuple[Pa
     return destination, None
 
 
-def _download_fixture(evidence_dir: Path, allow_downloads: bool) -> tuple[Path | None, dict, str | None]:
+def _download_fixture(fixture_id: str, evidence_dir: Path, allow_downloads: bool) -> tuple[Path | None, dict, str | None]:
     manifest = _load_manifest()
-    fixture = manifest["fixtures"][FIXTURE_ID]
+    fixture = manifest["fixtures"][fixture_id]
     details = {
         "manifest": str(MANIFEST),
-        "fixture_id": FIXTURE_ID,
+        "fixture_id": fixture_id,
         "fixture": {
             "kind": fixture.get("kind"),
             "source_page": fixture.get("source_page"),
@@ -59,15 +61,15 @@ def _download_fixture(evidence_dir: Path, allow_downloads: bool) -> tuple[Path |
     }
     if not allow_downloads:
         return None, details, "real public media fixture downloads require --allow-downloads"
-    target = evidence_dir / "real_media" / f"{FIXTURE_ID}{_extension_for_fixture(FIXTURE_ID, fixture)}"
+    target = evidence_dir / "real_media" / f"{fixture_id}{_extension_for_fixture(fixture_id, fixture)}"
     try:
         _download(str(fixture["download_url"]), target)
     except Exception as exc:
-        return None, {**details, "error_type": type(exc).__name__, "message": str(exc)}, f"could not download {FIXTURE_ID}"
+        return None, {**details, "error_type": type(exc).__name__, "message": str(exc)}, f"could not download {fixture_id}"
     digest = sha256(target)
     expected_prefix = fixture.get("expected_sha256_prefix")
     if expected_prefix and not digest.removeprefix("sha256:").startswith(str(expected_prefix)):
-        return None, {**details, "actual_sha256": digest}, f"{FIXTURE_ID} hash did not match expected prefix"
+        return None, {**details, "actual_sha256": digest}, f"{fixture_id} hash did not match expected prefix"
     details["fixture"]["sha256"] = digest
     details["fixture"]["bytes"] = target.stat().st_size
     return target, details, None
@@ -124,8 +126,9 @@ def _reference_for(results: dict, expected_text: str) -> dict:
 
 
 def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bool) -> dict:
-    if row_id != ROW_ID:
+    if row_id not in ROW_FIXTURES:
         return write_row(row_id, "fail", evidence_dir, summary=f"Unsupported real public media row id: {row_id}")
+    fixture_id = ROW_FIXTURES[row_id]
     if not SMOLLM_PATH.exists():
         return write_row(
             row_id,
@@ -158,7 +161,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
     if repair_evidence_path.exists():
         dependency_artifacts.append(repair_evidence_path)
 
-    source, fixture_details, fixture_error = _download_fixture(evidence_dir, allow_downloads)
+    source, fixture_details, fixture_error = _download_fixture(fixture_id, evidence_dir, allow_downloads)
     if fixture_error or source is None:
         return write_row(
             row_id,
@@ -270,7 +273,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
         "pass" if not failures else "fail",
         evidence_dir,
         summary=(
-            "Real public Wikimedia audio ran through faster-whisper ASR, then SmolLM scoring/report validation completed."
+            "Real public Wikimedia media ran through faster-whisper ASR, then SmolLM scoring/report validation completed."
             if not failures
             else "Real public media ASR+SmolLM validation failed."
         ),

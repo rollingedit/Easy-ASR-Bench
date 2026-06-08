@@ -932,6 +932,7 @@ def test_runtime_matrix_real_media_manifest_has_required_fixture_kinds():
     kinds = {fixture["kind"] for fixture in data["fixtures"].values()}
 
     assert "real_audio_wav" in kinds
+    assert "real_video_webm_with_audio" in kinds
     assert "real_video_mp4_with_audio" in kinds
     assert "real_video_mp4_no_audio" in kinds
 
@@ -940,6 +941,8 @@ def test_runtime_matrix_maps_real_media_download_cache_row():
     assert ROWS["real_media_download_cache"].module == "qa.runtime_matrix.rows.real_media_download_cache"
     assert ROWS["real_public_media_faster_whisper_smollm_grading"].module == "qa.runtime_matrix.rows.real_public_media_faster_whisper_smollm"
     assert ROWS["real_public_media_faster_whisper_smollm_grading"].hardware == "network"
+    assert ROWS["real_public_video_faster_whisper_smollm_grading"].module == "qa.runtime_matrix.rows.real_public_media_faster_whisper_smollm"
+    assert ROWS["real_public_video_faster_whisper_smollm_grading"].hardware == "network"
 
 
 def test_real_public_media_faster_whisper_smollm_row_blocks_without_network(tmp_path, monkeypatch):
@@ -961,6 +964,17 @@ def test_real_public_media_faster_whisper_smollm_row_blocks_without_network(tmp_
     assert row["status"] == "blocked"
     assert "--allow-downloads" in row["external_requirement"]
     assert row["details"]["fixture"]["expected_text"] == "Kabul"
+
+    video_row = real_public_media_faster_whisper_smollm.run(
+        "real_public_video_faster_whisper_smollm_grading",
+        tmp_path / "video",
+        False,
+        False,
+    )
+
+    assert video_row["status"] == "blocked"
+    assert "--allow-downloads" in video_row["external_requirement"]
+    assert video_row["details"]["fixture"]["expected_text"] == "You are at risk for HIV."
 
 
 def test_runtime_matrix_maps_same_media_multi_model_row():
@@ -1203,6 +1217,7 @@ def test_runtime_fixture_manifest_covers_core_runtime_formats():
     assert "gguf_asr_mmproj_candidate" in kinds
     assert "same_media_multi_model_benchmark_directml" in kinds
     assert "real_public_audio_fixture" in kinds
+    assert "real_public_video_fixture" in kinds
     assert "generic_onnx_ctc_fixture" in fixtures["same_media_multi_model_cpu_set"]["includes"]
     assert "generic_onnx_ctc_fixture" in fixtures["same_media_multi_model_directml_set"]["includes"]
     assert "qwen3_asr_0_6b_gguf" in fixtures["same_media_multi_model_cpu_set"]["includes"]
@@ -1210,6 +1225,7 @@ def test_runtime_fixture_manifest_covers_core_runtime_formats():
     assert "hf_whisper_sharded_safetensors_smollm_grading_cpu" in fixtures["hf_tiny_random_whisper_sharded_safetensors"]["rows"]
     assert "llama_cpp_vulkan_smollm_smoke" in fixtures["smollm_135m_gguf"]["rows"]
     assert "real_public_media_faster_whisper_smollm_grading" in fixtures["wikimedia_cc0_word_wav"]["rows"]
+    assert "real_public_video_faster_whisper_smollm_grading" in fixtures["wikimedia_public_domain_spoken_words_webm"]["rows"]
 
     fixture_ids = set(fixtures)
     for fixture_id, fixture in fixtures.items():
