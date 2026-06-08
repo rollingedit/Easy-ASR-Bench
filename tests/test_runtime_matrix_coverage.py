@@ -98,6 +98,7 @@ def test_runtime_matrix_rows_point_to_importable_modules():
 def test_runtime_matrix_includes_native_runtime_prerequisite_rows():
     assert ROWS["windows_vc_runtime"].module == "qa.runtime_matrix.rows.windows_vc_runtime"
     assert ROWS["windows_directml_provider"].module == "qa.runtime_matrix.rows.windows_directml_provider"
+    assert ROWS["directml_provider_conflict_repair"].module == "qa.runtime_matrix.rows.windows_directml_provider"
     assert ROWS["windows_vulkan_runtime"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
     assert ROWS["amd_directml_onnx_smoke"].module == "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"
     assert ROWS["intel_openvino_onnx_smoke"].module == "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"
@@ -110,6 +111,22 @@ def test_runtime_matrix_includes_native_runtime_prerequisite_rows():
     assert ROWS["llama_cpp_vulkan_smollm_smoke"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
     assert ROWS["faster_whisper_cuda_unavailable_cpu_fallback"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
     assert ROWS["vulkan_runtime_no_sdk"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
+
+
+def test_directml_provider_conflict_repair_row_records_safe_repair_contract(tmp_path):
+    from qa.runtime_matrix.rows import windows_directml_provider
+
+    row = windows_directml_provider.run("directml_provider_conflict_repair", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    assert "onnxruntime conflicts with directml package" in row["details"]["missing_before"]
+    assert "onnxruntime DirectML provider" in row["details"]["missing_before"]
+    assert row["details"]["missing_after"] == []
+    assert row["details"]["repair_result"]["accelerator"] == "directml"
+    assert row["details"]["repair_result"]["provider_compatibility_repair"] == "onnxruntime-directml==1.24.4"
+    commands = row["details"]["commands"]
+    assert any(command[-3:] == ["uninstall", "-y", "onnxruntime"] for command in commands)
+    assert any(command[-4:] == ["--upgrade", "--force-reinstall", "--no-deps", "onnxruntime-directml==1.24.4"] for command in commands)
 
 
 def test_release_manual_matrix_includes_granular_cuda_rows():
