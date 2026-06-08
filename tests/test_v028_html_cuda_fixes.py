@@ -82,6 +82,15 @@ def test_generic_onnx_records_provider_summary(monkeypatch, tmp_path: Path):
     assert result.metrics["provider_summary"]["cuda_active"] is False
     assert result.metrics["provider_summary"]["provider_fallback"] is True
 
+    adapter.requested_runtime_provider = "openvino"
+    adapter.requested_providers = ["CPUExecutionProvider"]
+    result = adapter.transcribe_chunks([SimpleNamespace(samples=np.zeros(10, dtype=np.float32))], [{"chunk_id": "0001", "start_seconds": 0, "end_seconds": 1}])
+
+    assert result.metrics["provider_summary"]["requested_runtime_provider"] == "openvino"
+    assert result.metrics["provider_summary"]["openvino_requested"] is True
+    assert result.metrics["provider_summary"]["openvino_active"] is False
+    assert result.metrics["provider_summary"]["provider_fallback"] is True
+
 
 def test_faster_whisper_cpu_float16_reports_effective_compute(monkeypatch, tmp_path: Path):
     from app.adapters.base import ModelCandidate

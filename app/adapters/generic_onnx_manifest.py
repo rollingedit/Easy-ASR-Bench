@@ -73,7 +73,8 @@ class GenericOnnxManifestAdapter:
 
         manifest = candidate.metadata["manifest"]
         model_path = candidate.path / manifest["files"]["model"]
-        self.requested_providers = choose_providers(runtime_config.get("provider", "auto"))
+        self.requested_runtime_provider = str(runtime_config.get("provider", "auto")).lower()
+        self.requested_providers = choose_providers(self.requested_runtime_provider)
         probe_error = self.preflight_native_load(candidate, runtime_config, self.requested_providers)
         if probe_error:
             raise RuntimeError(
@@ -121,17 +122,29 @@ class GenericOnnxManifestAdapter:
             transcript_chunks.append(ChunkTranscript(str(metadata["chunk_id"]), float(metadata["start_seconds"]), float(metadata["end_seconds"]), text))
         audio_seconds = sum(float(item["end_seconds"]) - float(item["start_seconds"]) for item in chunk_metadata)
         requested_providers = getattr(self, "requested_providers", self.session.get_providers())
+        requested_runtime_provider = getattr(self, "requested_runtime_provider", "")
         active_providers = list(self.session.get_providers())
+        cuda_requested = requested_runtime_provider == "cuda" or "CUDAExecutionProvider" in requested_providers
+        directml_requested = requested_runtime_provider == "directml" or "DmlExecutionProvider" in requested_providers
+        openvino_requested = requested_runtime_provider == "openvino" or "OpenVINOExecutionProvider" in requested_providers
         provider_summary = {
+            "requested_runtime_provider": requested_runtime_provider,
             "requested_providers": list(requested_providers),
             "active_providers": active_providers,
-            "cuda_requested": "CUDAExecutionProvider" in requested_providers,
+            "cuda_requested": cuda_requested,
             "cuda_active": "CUDAExecutionProvider" in active_providers,
-            "directml_requested": "DmlExecutionProvider" in requested_providers,
+            "directml_requested": directml_requested,
             "directml_active": "DmlExecutionProvider" in active_providers,
-            "openvino_requested": "OpenVINOExecutionProvider" in requested_providers,
+            "openvino_requested": openvino_requested,
             "openvino_active": "OpenVINOExecutionProvider" in active_providers,
-            "provider_fallback": any(provider in requested_providers and provider not in active_providers for provider in ["CUDAExecutionProvider", "DmlExecutionProvider", "OpenVINOExecutionProvider"]),
+            "provider_fallback": (
+                cuda_requested
+                and "CUDAExecutionProvider" not in active_providers
+                or directml_requested
+                and "DmlExecutionProvider" not in active_providers
+                or openvino_requested
+                and "OpenVINOExecutionProvider" not in active_providers
+            ),
         }
         return ModelRunResult(
             self.candidate,

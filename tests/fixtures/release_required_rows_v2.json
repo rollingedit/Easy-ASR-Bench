@@ -31,6 +31,7 @@
     "faster_whisper_cuda_unavailable_cpu_fallback",
     "transformers_cuda_unavailable_cpu_fallback",
     "generic_onnx_manifest_cpu",
+    "generic_onnx_openvino_unavailable_cpu_fallback",
     "generic_onnx_without_manifest_rejected",
     "openai_pt_unverified_blocked",
     "gguf_text_llm_reference_only",

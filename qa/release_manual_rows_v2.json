@@ -96,6 +96,7 @@
       "openai_pt_unverified_blocked": "not_run",
       "generic_onnx_ctc_manifest_v1": "not_run",
       "generic_onnx_manifest_cpu": "not_run",
+      "generic_onnx_openvino_unavailable_cpu_fallback": "not_run",
       "generic_onnx_smollm_grading_cpu": "not_run",
       "generic_onnx_smollm_grading_directml": "not_run",
       "generic_onnx_ctc_quality_smollm_grading_cpu": "not_run",
