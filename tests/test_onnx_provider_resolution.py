@@ -16,7 +16,9 @@ def load_onnx_common(monkeypatch, providers):
     monkeypatch.setitem(sys.modules, "onnxruntime", fake_ort)
     monkeypatch.setitem(sys.modules, "tokenizers", fake_tokenizers)
     sys.modules.pop("app.onnx_common", None)
-    return importlib.import_module("app.onnx_common")
+    module = importlib.import_module("app.onnx_common")
+    sys.modules.pop("app.onnx_common", None)
+    return module
 
 
 def test_intel_prefers_openvino_before_directml(monkeypatch):
