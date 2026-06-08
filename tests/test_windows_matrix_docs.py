@@ -130,10 +130,13 @@ def test_release_verification_documents_llama_mtmd_repair_contract_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 
     assert "qa\\runtime_matrix\\run_row.py --row llama_mtmd_dependency_repair_contract" in text
+    assert "qa\\runtime_matrix\\run_row.py --row real_public_media_gguf_asr_mmproj_smollm_grading" in text
     assert "llama-mtmd-cli" in text
     assert "llama_mtmd_runtime_probe" in text
     assert "native_tool" in text
     assert "ASR GGUF+mmproj rows" in text
+    assert "Qwen3-ASR Q4_K_M plus mmproj-Q8_0" in text
+    assert "records single-word WER without using it as a release gate" in text
 
 
 def test_release_verification_documents_directml_conflict_repair_row():

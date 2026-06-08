@@ -1008,6 +1008,8 @@ def test_runtime_matrix_maps_asr_gguf_mmproj_rows():
     assert ROWS["hf_downloader_package_variant_taxonomy"].module == "qa.runtime_matrix.rows.hf_downloader_layouts"
     assert ROWS["audio_asr_gguf_mmproj"].module == "qa.runtime_matrix.rows.gguf_asr_mmproj"
     assert ROWS["gguf_asr_mmproj_pair"].module == "qa.runtime_matrix.rows.gguf_asr_mmproj"
+    assert ROWS["real_public_media_gguf_asr_mmproj_smollm_grading"].module == "qa.runtime_matrix.rows.gguf_asr_mmproj"
+    assert ROWS["real_public_media_gguf_asr_mmproj_smollm_grading"].hardware == "network"
     assert ROWS["incomplete_audio_asr_gguf_mmproj_rejected"].module == "qa.runtime_matrix.rows.gguf_asr_mmproj"
     assert ROWS["mismatched_audio_asr_gguf_mmproj_rejected"].module == "qa.runtime_matrix.rows.gguf_asr_mmproj"
     assert ROWS["smollm_reference_grading_report"].module == "qa.runtime_matrix.rows.smollm_reference_grading_report"
@@ -1586,6 +1588,7 @@ def test_runtime_fixture_manifest_covers_core_runtime_formats():
     assert "real_public_media_whisper_cpp_ggml_smollm_grading" in fixtures["wikimedia_cc0_word_wav"]["rows"]
     assert "real_public_media_hf_whisper_safetensors_smollm_grading_cpu" in fixtures["wikimedia_cc0_word_wav"]["rows"]
     assert "real_public_media_generic_onnx_ctc_smollm_grading_cpu" in fixtures["wikimedia_cc0_word_wav"]["rows"]
+    assert "real_public_media_gguf_asr_mmproj_smollm_grading" in fixtures["wikimedia_cc0_word_wav"]["rows"]
     assert "real_public_media_openai_whisper_pt_smollm_grading" in fixtures["openai_whisper_tiny_pt"]["rows"]
     assert "real_public_media_whisper_cpp_ggml_smollm_grading" in fixtures["whisper_cpp_tiny_en_q5"]["rows"]
     assert "real_public_media_hf_whisper_safetensors_smollm_grading_cpu" in fixtures["hf_whisper_tiny_safetensors"]["rows"]
@@ -1594,6 +1597,8 @@ def test_runtime_fixture_manifest_covers_core_runtime_formats():
     assert "real_public_media_whisper_cpp_ggml_smollm_grading" in fixtures["smollm_135m_gguf"]["rows"]
     assert "real_public_media_hf_whisper_safetensors_smollm_grading_cpu" in fixtures["smollm_135m_gguf"]["rows"]
     assert "real_public_media_generic_onnx_ctc_smollm_grading_cpu" in fixtures["smollm_135m_gguf"]["rows"]
+    assert "real_public_media_gguf_asr_mmproj_smollm_grading" in fixtures["smollm_135m_gguf"]["rows"]
+    assert "real_public_media_gguf_asr_mmproj_smollm_grading" in fixtures["qwen3_asr_0_6b_gguf"]["rows"]
     assert "real_public_video_faster_whisper_smollm_grading" in fixtures["wikimedia_public_domain_spoken_words_webm"]["rows"]
     fixture_ids = set(fixtures)
     for fixture_id, fixture in fixtures.items():

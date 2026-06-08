@@ -14,6 +14,7 @@ from app.reference_import import import_llm_reference
 from app.scoring import wer
 from qa.run_real_tiny_model_smoke import REFERENCE_TEXT, generate_windows_sapi_wav, smoke_config
 from qa.runtime_matrix.common import dependency_resolution_report_failures, package_versions, write_row
+from qa.runtime_matrix.rows.real_public_media_faster_whisper_smollm import _download_fixture
 from qa.runtime_matrix.rows.smollm_reference_grading_report import SMOLLM_PATH, _smollm_candidate
 
 
@@ -182,7 +183,7 @@ def _llama_mtmd_version() -> dict:
     }
 
 
-def _reference_for(results: dict) -> dict:
+def _reference_for(results: dict, reference_text: str, reference_note: str, global_note: str) -> dict:
     return {
         "schema": "easy_asr_bench.llm_reference.v1",
         "source_sha256": results["source"]["sha256"],
@@ -192,12 +193,12 @@ def _reference_for(results: dict) -> dict:
                 "chunk_id": chunk["chunk_id"],
                 "start_seconds": chunk["start_seconds"],
                 "end_seconds": chunk["end_seconds"],
-                "text": REFERENCE_TEXT,
-                "uncertain": ["generated Windows SAPI reference text; not a human transcript"],
+                "text": reference_text,
+                "uncertain": [reference_note],
             }
             for chunk in results.get("chunk_plan", {}).get("chunks", [])
         ],
-        "global_notes": ["Reference text is the generated SAPI prompt used by this ASR GGUF+mmproj runtime row."],
+        "global_notes": [global_note],
     }
 
 
@@ -278,7 +279,61 @@ def _run_public_qwen3_asr(row_id: str, evidence_dir: Path, install_deps: bool, a
     return run_qwen3_asr_model_dir(row_id, evidence_dir, fixture_or_row, install_deps)
 
 
-def run_qwen3_asr_model_dir(row_id: str, evidence_dir: Path, model_dir: Path, install_deps: bool, extra_details: dict | None = None) -> dict:
+def _run_real_public_qwen3_asr(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bool) -> dict:
+    if not SMOLLM_PATH.exists():
+        return write_row(
+            row_id,
+            "blocked",
+            evidence_dir,
+            summary="SmolLM 135M GGUF fixture is not present locally, so real-media ASR GGUF+mmproj output cannot be graded.",
+            block_reason=f"missing {SMOLLM_PATH}",
+            external_requirement="download HuggingFaceTB/SmolLM-135M-GGUF Q4_K_M fixture",
+        )
+    fixture_or_row = _ensure_public_fixture(row_id, evidence_dir, allow_downloads)
+    if isinstance(fixture_or_row, dict):
+        return fixture_or_row
+    media_source, media_details, media_error = _download_fixture("wikimedia_cc0_word_wav", evidence_dir, allow_downloads)
+    if media_error or media_source is None:
+        return write_row(
+            row_id,
+            "blocked" if not allow_downloads else "fail",
+            evidence_dir,
+            summary="Real public media fixture is not available for ASR GGUF+mmproj plus SmolLM validation.",
+            block_reason=media_error if not allow_downloads else None,
+            external_requirement="rerun with --allow-downloads after source/license review" if not allow_downloads else None,
+            details={"repo_id": PUBLIC_QWEN3_ASR_REPO, **media_details},
+            artifacts=[SMOLLM_PATH, fixture_or_row / PUBLIC_QWEN3_ASR_MODEL_FILE, fixture_or_row / PUBLIC_QWEN3_ASR_MMPROJ_FILE, fixture_or_row / "model_package.json"],
+        )
+    expected_text = media_details["fixture"].get("expected_text") or ""
+    return run_qwen3_asr_model_dir(
+        row_id,
+        evidence_dir,
+        fixture_or_row,
+        install_deps,
+        extra_details={
+            **media_details,
+            "quality_note": "Single-word public-media WER is recorded but not release-gated.",
+        },
+        source=media_source,
+        reference_text=expected_text,
+        reference_note="single-word public media smoke; WER is recorded but not release-gated",
+        reference_global_note="Reference text comes from the public real-media fixture manifest.",
+        max_normalized_wer=None,
+    )
+
+
+def run_qwen3_asr_model_dir(
+    row_id: str,
+    evidence_dir: Path,
+    model_dir: Path,
+    install_deps: bool,
+    extra_details: dict | None = None,
+    source: Path | None = None,
+    reference_text: str = REFERENCE_TEXT,
+    reference_note: str = "generated Windows SAPI reference text; not a human transcript",
+    reference_global_note: str = "Reference text is the generated SAPI prompt used by this ASR GGUF+mmproj runtime row.",
+    max_normalized_wer: float | None = 0.85,
+) -> dict:
     if not SMOLLM_PATH.exists():
         return write_row(
             row_id,
@@ -393,8 +448,9 @@ def run_qwen3_asr_model_dir(row_id: str, evidence_dir: Path, model_dir: Path, in
             artifacts=[*artifacts, *dependency_artifacts],
         )
 
-    source = Path(config["folders"]["input"]) / "qwen3_asr_gguf_mmproj_sapi.wav"
-    generate_windows_sapi_wav(source, REFERENCE_TEXT)
+    if source is None:
+        source = Path(config["folders"]["input"]) / "qwen3_asr_gguf_mmproj_sapi.wav"
+        generate_windows_sapi_wav(source, REFERENCE_TEXT)
     output_dir = process_file_with_candidates(source, [candidate], config, unsupported, reference_llm=llm_candidate)
     if output_dir is None:
         return write_row(
@@ -418,8 +474,9 @@ def run_qwen3_asr_model_dir(row_id: str, evidence_dir: Path, model_dir: Path, in
     run = runs[0] if runs else {}
     transcript = "\n".join(chunk.get("text", "") for chunk in run.get("transcript_chunks", []))
     errors = run.get("errors", [])
-    normalized_wer = wer(REFERENCE_TEXT, transcript, normalized=True) if transcript.strip() else 1.0
-    scored = import_llm_reference(results, "SmolLM corrected reference fixture:\n```json\n" + json.dumps(_reference_for(results)) + "\n```")
+    normalized_wer = wer(reference_text, transcript, normalized=True) if reference_text and transcript.strip() else 1.0
+    reference = _reference_for(results, reference_text, reference_note, reference_global_note)
+    scored = import_llm_reference(results, "SmolLM corrected reference fixture:\n```json\n" + json.dumps(reference) + "\n```")
     scored_path = output_dir / "scored_report.json"
     scored_path.write_text(json.dumps(scored, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     scored_results = dict(results)
@@ -434,8 +491,8 @@ def run_qwen3_asr_model_dir(row_id: str, evidence_dir: Path, model_dir: Path, in
         failures.append("ASR GGUF+mmproj model run reported errors")
     if not transcript.strip():
         failures.append("ASR GGUF+mmproj speech transcript was empty")
-    if normalized_wer > 0.85:
-        failures.append(f"ASR GGUF+mmproj normalized WER {normalized_wer:.3f} exceeded threshold 0.850")
+    if max_normalized_wer is not None and normalized_wer > max_normalized_wer:
+        failures.append(f"ASR GGUF+mmproj normalized WER {normalized_wer:.3f} exceeded threshold {max_normalized_wer:.3f}")
     for name in ["results.json", "results.txt", "benchmark.csv", "compare.html", "scored_report.json", "compare_scored.html"]:
         if not (output_dir / name).exists():
             failures.append(f"missing report artifact {name}")
@@ -448,7 +505,7 @@ def run_qwen3_asr_model_dir(row_id: str, evidence_dir: Path, model_dir: Path, in
         status,
         evidence_dir,
         summary=(
-            "Public Qwen3-ASR GGUF+mmproj fixture transcribed generated speech, then SmolLM scoring/report validation completed."
+            "Public Qwen3-ASR GGUF+mmproj fixture transcribed speech, then SmolLM scoring/report validation completed."
             if not failures
             else "Public Qwen3-ASR GGUF+mmproj fixture was staged and attempted through the app pipeline, but runtime output is not yet release-pass quality."
         ),
@@ -466,10 +523,11 @@ def run_qwen3_asr_model_dir(row_id: str, evidence_dir: Path, model_dir: Path, in
             "candidate": _candidate_details(candidate),
             "runtime": cli_version,
             **dependency_details,
-            "reference_text": REFERENCE_TEXT,
+            "reference_text": reference_text,
             "transcript": transcript,
             "normalized_wer": normalized_wer,
-            "max_normalized_wer": 0.85,
+            "max_normalized_wer": max_normalized_wer,
+            "wer_release_gated": max_normalized_wer is not None,
             "quality_bearing": True,
             "output_dir": str(output_dir),
             "score_status": scored.get("status"),
@@ -501,4 +559,6 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
         return _scan_fixture(row_id, evidence_dir, "mismatched")
     if row_id in {"audio_asr_gguf_mmproj", "gguf_asr_mmproj_pair"}:
         return _run_public_qwen3_asr(row_id, evidence_dir, _install_deps, _allow_downloads)
+    if row_id == "real_public_media_gguf_asr_mmproj_smollm_grading":
+        return _run_real_public_qwen3_asr(row_id, evidence_dir, _install_deps, _allow_downloads)
     return write_row(row_id, "fail", evidence_dir, summary=f"Unhandled ASR GGUF+mmproj row: {row_id}")

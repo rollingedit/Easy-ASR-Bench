@@ -36,6 +36,7 @@ python qa\runtime_matrix\run_row.py --row real_public_media_whisper_cpp_ggml_smo
 python qa\runtime_matrix\run_row.py --row hf_whisper_safetensors_quality_smollm_grading_cpu --workdir Temp\runtime_matrix_hf_whisper_safetensors_quality_smollm --allow-downloads
 python qa\runtime_matrix\run_row.py --row real_public_media_hf_whisper_safetensors_smollm_grading_cpu --workdir Temp\runtime_matrix_real_public_media_hf_whisper_safetensors --allow-downloads
 python qa\runtime_matrix\run_row.py --row real_public_media_generic_onnx_ctc_smollm_grading_cpu --workdir Temp\runtime_matrix_real_public_media_generic_onnx_ctc --allow-downloads
+python qa\runtime_matrix\run_row.py --row real_public_media_gguf_asr_mmproj_smollm_grading --workdir Temp\runtime_matrix_real_public_media_gguf_asr_mmproj --allow-downloads
 python qa\runtime_matrix\run_row.py --row hf_safetensors_asr_quality_smollm_grading_cpu --workdir Temp\runtime_matrix_hf_safetensors_ctc_quality_smollm --allow-downloads
 python qa\runtime_matrix\run_row.py --row hf_whisper_sharded_safetensors_smollm_grading_cpu --workdir Temp\runtime_matrix_hf_whisper_sharded_safetensors_smollm --allow-downloads
 python qa\runtime_matrix\run_row.py --row setup_repair_all_safe --workdir Temp\runtime_matrix_setup_repair_all_safe
@@ -76,6 +77,8 @@ The `transformers_cpu_dependency_repair_contract` runtime-matrix row is a non-de
 The `media_tools_dependency_repair_contract` runtime-matrix row is a non-destructive repair contract for audio/video conversion prerequisites. It simulates missing `imageio_ffmpeg` and FFmpeg executable evidence, routes through `app.repair_plan.execute_repair_plan`, verifies `requirements\core.txt` is the repair target, reprobes the media-tools FFmpeg runtime, records the FFmpeg path, and persists a runtime-resolution record used by real audio/video smoke rows.
 
 The `llama_mtmd_dependency_repair_contract` runtime-matrix row is a non-destructive repair contract for the native ASR GGUF+mmproj runtime. It simulates missing `llama-mtmd-cli` / Qwen3 ASR handler evidence, routes through `app.repair_plan.execute_repair_plan`, verifies the dependency group remains a `native_tool` repair with the llama.cpp `winget` recovery command, reprobes `llama_mtmd_runtime_probe`, records the resolved CLI path, and persists a runtime-resolution record used by ASR GGUF+mmproj rows.
+
+The `real_public_media_gguf_asr_mmproj_smollm_grading` row adds real web-media coverage for the ASR GGUF+mmproj path. It reuses or downloads the Wikimedia CC0 WAV fixture and the public Qwen3-ASR Q4_K_M plus mmproj-Q8_0 pair, runs the normal app report pipeline through `llama-mtmd-cli`, records single-word WER without using it as a release gate, then validates SmolLM 135M GGUF scoring/report artifacts.
 
 The `directml_provider_conflict_repair` runtime-matrix row is a non-destructive repair contract for the reproduced ONNX Runtime DirectML conflict. It simulates plain `onnxruntime` blocking `DmlExecutionProvider`, routes through the product `install_group_for_config("onnx", ...)` repair executor with commands captured instead of executed, and verifies the repair removes plain `onnxruntime`, installs `requirements\onnx_directml.txt`, force-probes a compatible `onnxruntime-directml` package, and clears the missing-provider state.
 

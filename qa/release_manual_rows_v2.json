@@ -111,6 +111,7 @@
       "multi_file_onnx_ar_nar": "not_run",
       "audio_asr_gguf_mmproj": "not_run",
       "gguf_asr_mmproj_pair": "not_run",
+      "real_public_media_gguf_asr_mmproj_smollm_grading": "not_run",
       "incomplete_audio_asr_gguf_mmproj_rejected": "not_run",
       "mismatched_audio_asr_gguf_mmproj_rejected": "not_run",
       "gguf_reference_llm": "not_run",
