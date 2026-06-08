@@ -28,9 +28,23 @@ def test_setup_doctor_forwards_json_and_strict_flags():
     assert 'if /I "%~1"=="--doctor"' in setup
     assert 'if /I "%%~A"=="--json" set DOCTOR_ARGS=!DOCTOR_ARGS! --json' in setup
     assert 'if /I "%%~A"=="--strict" set DOCTOR_ARGS=!DOCTOR_ARGS! --strict' in setup
+    assert 'if /I "%%~A"=="--repair-plan" set DOCTOR_ARGS=!DOCTOR_ARGS! --repair-plan' in setup
+    assert 'if /I "%%~A"=="--repair-all-safe" set DOCTOR_ARGS=!DOCTOR_ARGS! --repair-all-safe' in setup
+    assert 'if /I "%%~A"=="--validate-real-smoke" set DOCTOR_ARGS=!DOCTOR_ARGS! --validate-real-smoke' in setup
+    assert 'if /I "%%~A"=="--install-deps" set DOCTOR_ARGS=!DOCTOR_ARGS! --install-deps' in setup
+    assert 'if /I "%%~A"=="--allow-downloads" set DOCTOR_ARGS=!DOCTOR_ARGS! --allow-downloads' in setup
+    assert 'if /I "%%~A"=="--no-network" set DOCTOR_ARGS=!DOCTOR_ARGS! --no-network' in setup
     assert "app.doctor --config config.json %DOCTOR_ARGS%" in setup
     assert 'app.doctor --config "%INSTALL_DIR%\\config.json" %DOCTOR_ARGS%' in setup
     assert "python -m app.doctor --config config.json %DOCTOR_ARGS%" in setup
+
+
+def test_setup_repair_forwards_repair_mode_to_public_installer():
+    setup = Path("setup.bat").read_text(encoding="utf-8")
+
+    assert "set INSTALLER_MODE_ARGS=" in setup
+    assert 'if /I "%%~A"=="--repair" set INSTALLER_MODE_ARGS=!INSTALLER_MODE_ARGS! -Repair' in setup
+    assert "%INSTALLER_MODE_ARGS%" in setup
 
 
 def test_public_installer_runs_local_setup_without_post_setup_menu():

@@ -95,6 +95,7 @@ def test_faster_whisper_cpu_float16_reports_effective_compute(monkeypatch, tmp_p
             return [], SimpleNamespace(language="en", language_probability=1.0)
 
     monkeypatch.setitem(__import__("sys").modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisperModel))
+    monkeypatch.setattr(module, "probe_faster_whisper_load", lambda path, device, compute_type: "")
     adapter = module.FasterWhisperASRAdapter()
     candidate = ModelCandidate(
         candidate_id="fw",

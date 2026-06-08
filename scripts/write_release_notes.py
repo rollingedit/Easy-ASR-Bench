@@ -155,7 +155,7 @@ def write_notes(tag: str, output: Path, smoke_path: Path | None = None) -> None:
         "## Known limits",
         "",
         "- Optional model dependency groups install only when needed.",
-        "- GPU/VRAM metrics require a CUDA-capable runtime; CPU runs report VRAM as `null`.",
+        "- VRAM metrics use Windows GPU Adapter Memory counters when available and Torch CUDA allocator metrics as a labeled fallback; unavailable telemetry is reported explicitly.",
         "- Unsafe pickle-backed `.pt` checkpoints remain blocked unless explicitly trusted.",
     ]
     output.parent.mkdir(parents=True, exist_ok=True)

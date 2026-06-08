@@ -55,15 +55,32 @@ def build_install_plan(
     candidate_names: list[str] | None = None,
     log_path: str | None = None,
 ) -> InstallPlan:
-    from .dependency_manager import DEPENDENCY_GROUPS, acceleration_install_decision
+    from .dependency_manager import DEPENDENCY_GROUPS, LLAMA_CPP_WINGET_PACKAGE_ID, acceleration_install_decision
 
     decision = acceleration_install_decision(config, group)
+    metadata = DEPENDENCY_GROUPS[group]
+    if metadata.install_kind == "native_tool":
+        selected = ", ".join(candidate_names or []) or "selected model(s)"
+        return InstallPlan(
+            dependency_group=group,
+            reason=f"{selected} require {metadata.description}. Installs or locates the native llama.cpp MTMD CLI without pinning a version.",
+            packages=[LLAMA_CPP_WINGET_PACKAGE_ID],
+            requirement_files=[],
+            index_urls=[],
+            install_location="Windows package manager / user PATH",
+            network_destinations=["Microsoft WinGet source"],
+            system_path_changes=["WinGet may expose llama-mtmd-cli through PATH or package aliases"],
+            estimated_size_class="medium",
+            confirmation_prompt="Press Enter to install, or type s to skip this group.",
+            fallback_if_declined="Only GGUF ASR+mmproj models are skipped; GGUF text reference/correction models can still use llama_cpp.",
+            log_path=log_path or f"Logs/dependency_install_{group}.log",
+        )
     if decision.get("use_accelerator"):
         requirement_files = list(decision.get("requirement_files", []))
         accelerator = str(decision.get("accelerator", "")).upper()
         size = "large" if accelerator in {"CUDA", "VULKAN"} else "medium"
     else:
-        requirement_files = [DEPENDENCY_GROUPS[group].requirement_file]
+        requirement_files = [metadata.requirement_file]
         size = "small-to-medium"
     paths = [project_root / item for item in requirement_files]
     packages = sorted({package for path in paths for package in _requirement_packages(path)})
@@ -71,7 +88,7 @@ def build_install_plan(
     selected = ", ".join(candidate_names or []) or "selected model(s)"
     return InstallPlan(
         dependency_group=group,
-        reason=f"{selected} require {DEPENDENCY_GROUPS[group].description}. {decision.get('reason', '')}".strip(),
+        reason=f"{selected} require {metadata.description}. {decision.get('reason', '')}".strip(),
         packages=packages,
         requirement_files=requirement_files,
         index_urls=indexes or ["PyPI default index"],

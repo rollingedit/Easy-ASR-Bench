@@ -21,6 +21,34 @@ def test_validate_release_smoke_requires_pass_when_strict():
     assert "win11_clean_no_python_setup status is not_run, expected pass" in errors
 
 
+def test_validate_release_smoke_allows_blocked_with_external_requirement_when_not_strict():
+    smoke = {
+        "schema": "easy_asr_bench.release_smoke.v2",
+        "manual_rows": [
+            {
+                "id": "nvidia_cuda_torch_onnx_faster_whisper_llama",
+                "status": "blocked",
+                "block_reason": "No NVIDIA GPU was detected.",
+                "external_requirement": "NVIDIA CUDA GPU",
+            }
+        ],
+    }
+
+    assert validate_smoke(smoke, ["nvidia_cuda_torch_onnx_faster_whisper_llama"]) == []
+
+
+def test_validate_release_smoke_requires_blocked_external_requirement():
+    smoke = {
+        "schema": "easy_asr_bench.release_smoke.v2",
+        "manual_rows": [{"id": "nvidia_cuda_torch_onnx_faster_whisper_llama", "status": "blocked"}],
+    }
+
+    errors = validate_smoke(smoke, ["nvidia_cuda_torch_onnx_faster_whisper_llama"])
+
+    assert "nvidia_cuda_torch_onnx_faster_whisper_llama blocked row is missing block_reason" in errors
+    assert "nvidia_cuda_torch_onnx_faster_whisper_llama blocked row is missing external_requirement" in errors
+
+
 def test_validate_release_smoke_requires_version_and_commit_when_strict():
     smoke = {"schema": "easy_asr_bench.release_smoke.v2", "manual_rows": [{"id": "win11_clean_no_python_setup", "status": "pass"}]}
 
@@ -67,6 +95,48 @@ def test_merge_release_evidence_replaces_matching_manual_rows(tmp_path: Path):
     assert merged["manual_rows"][0]["status"] == "pass"
     assert merged["manual_rows"][0]["app_version"] == "v0.3.7"
     assert merged["manual_rows"][1]["status"] == "not_run"
+    assert merged["manual_row_status_counts"] == {"pass": 1, "not_run": 1}
+
+
+def test_merge_release_evidence_updates_matrix_and_preserves_blocked_rows(tmp_path: Path):
+    row_dir = tmp_path / "evidence" / "real_media_download_cache"
+    row_dir.mkdir(parents=True)
+    blocked = {
+        "id": "real_media_download_cache",
+        "status": "blocked",
+        "block_reason": "network disabled",
+        "external_requirement": "rerun with --include-network --allow-downloads",
+    }
+    (row_dir / "row.json").write_text(json.dumps(blocked), encoding="utf-8")
+
+    merged = merge_manual_rows(
+        {
+            "schema": "easy_asr_bench.release_smoke.v2",
+            "manual_matrix": {
+                "media": {
+                    "real_media_download_cache": "not_run",
+                    "wav_mp3_mp4_media": "not_run",
+                }
+            },
+            "manual_rows": [
+                {"id": "real_media_download_cache", "status": "not_run"},
+                {"id": "wav_mp3_mp4_media", "status": "not_run"},
+            ],
+        },
+        evidence_rows(tmp_path / "evidence"),
+    )
+
+    assert merged["manual_rows"][0]["status"] == "blocked"
+    assert merged["manual_matrix"]["media"]["real_media_download_cache"] == "blocked"
+    assert merged["manual_matrix"]["media"]["wav_mp3_mp4_media"] == "not_run"
+    assert merged["manual_row_status_counts"] == {"blocked": 1, "not_run": 1}
+    assert merged["blocked_rows"] == [
+        {
+            "id": "real_media_download_cache",
+            "block_reason": "network disabled",
+            "external_requirement": "rerun with --include-network --allow-downloads",
+        }
+    ]
 
 
 def test_merge_release_evidence_reads_powershell_utf8_bom(tmp_path: Path):

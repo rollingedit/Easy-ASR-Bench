@@ -19,6 +19,7 @@ def test_windows_matrix_scripts_define_required_rows():
     assert "win11_clean_no_python_setup" in rows
     assert "gguf_asr_mmproj_pair" in rows
     assert "dependency_install_declined" in rows
+    assert "real_tiny_faster_whisper_report_smoke" in rows
     for row in required:
         assert row in rows
     assert 'Status "not_run"' in script
@@ -60,3 +61,41 @@ def test_public_asset_smoke_runner_captures_installed_app_json_evidence():
     assert "collect_release_evidence failed for empty_models_guided_first_run" in script
     assert "-Status \"pass\"" in script
     assert "-ReleaseCommit $ReleaseCommit" in script
+
+
+def test_release_verification_documents_real_tiny_model_smoke():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\run_real_tiny_model_smoke.py" in text
+    assert "non-empty transcript" in text
+    assert "VRAM measurement source" in text
+
+
+def test_release_verification_documents_repair_all_safe_runtime_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row setup_repair_all_safe" in text
+    assert "repair_plan.json" in text
+    assert "repair_all_safe.json" in text
+    assert "--install-deps" in text
+
+
+def test_release_verification_documents_clean_vm_bootstrap_runtime_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row clean_vm_zero_dependency_bootstrap" in text
+    assert "EASY_ASR_BENCH_CLEAN_VM_BOOTSTRAP_PROOF=1" in text
+    assert "same-media multi-model SmolLM benchmark" in text
+
+
+def test_release_verification_documents_validate_real_smoke_doctor_mode():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+    setup_text = Path("docs/what_setup_installs.md").read_text(encoding="utf-8")
+
+    assert "python -m app.doctor --config config.json --validate-real-smoke" in text
+    assert "easy_asr_bench.real_smoke_validation.v1" in text
+    assert "setup.bat --doctor --validate-real-smoke" in setup_text
+    assert "setup_repair_all_safe" in setup_text
+    assert "cpu_model_smoke" in setup_text
+    assert "--no-network" in setup_text
+    assert "--allow-downloads" in text

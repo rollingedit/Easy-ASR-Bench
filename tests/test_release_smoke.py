@@ -33,7 +33,10 @@ def test_write_release_smoke_records_automated_passes_and_manual_not_run(tmp_pat
     assert data["asset_hashes_verified"] is True
     assert all(check["status"] == "pass" for check in data["checks"])
     assert data["manual_matrix"]["win11_clean_no_python_setup"] == "not_run"
+    assert data["manual_matrix"]["clean_vm_zero_dependency_bootstrap"] == "not_run"
     assert data["manual_matrix"]["win10_existing_python_setup"] == "not_run"
+    assert data["manual_matrix"]["setup_doctor_strict"] == "not_run"
+    assert data["manual_matrix"]["setup_repair_all_safe"] == "not_run"
     assert data["manual_matrix"]["provider_smoke"]["nvidia_cuda_torch_onnx_faster_whisper_llama"] == "not_run"
     assert data["manual_matrix"]["model_smoke"]["gguf_reference_llm"] == "not_run"
     assert data["manual_matrix"]["model_smoke"]["audio_asr_gguf_mmproj"] == "not_run"
@@ -115,25 +118,25 @@ def test_verify_github_release_accepts_complete_mocked_release_with_smoke(tmp_pa
     zip_path = tmp_path / "Easy-ASR-Bench-v0.3.1-win.zip"
     app_root = tmp_path / "zip-root" / "Easy-ASR-Bench-v0.3.1"
     app_root.mkdir(parents=True)
-    (app_root / "setup.bat").write_text("@echo off\r\n" * 200, encoding="utf-8", newline="")
-    (app_root / "Run.bat").write_text("@echo off\r\necho run\r\n" * 5, encoding="utf-8", newline="")
-    (app_root / "Drop_Audio_Or_Folders_Here.bat").write_text("@echo off\r\necho drop\r\n" * 5, encoding="utf-8", newline="")
+    (app_root / "setup.bat").write_text("@echo off\r\nset APP_VERSION=0.3.1\r\nrem --dry-run --verify-release --local\r\n", encoding="utf-8", newline="")
+    (app_root / "Run.bat").write_text("@echo off\r\nrem python -m app.main --doctor --first-run-smoke\r\n", encoding="utf-8", newline="")
+    (app_root / "Drop_Audio_Or_Folders_Here.bat").write_text("@echo off\r\nrem python -m app.main\r\n", encoding="utf-8", newline="")
     (app_root / "installer").mkdir()
-    (app_root / "installer" / "install.ps1").write_text("Write-Host ok\r\n" * 250, encoding="utf-8", newline="")
+    (app_root / "installer" / "install.ps1").write_text("Write-Host 'Move-PreservedUserData Restore-MovedUserData Assert-StagingPhysicalFiles'\r\n", encoding="utf-8", newline="")
     (app_root / "scripts").mkdir()
-    (app_root / "scripts" / "validate_physical_files.py").write_text("print('ok')\n" * 150, encoding="utf-8", newline="\n")
-    (app_root / "scripts" / "verify_github_release.py").write_text("print('ok')\n" * 150, encoding="utf-8", newline="\n")
+    (app_root / "scripts" / "validate_physical_files.py").write_text("REQUIRED_TEXT_MARKERS = {}\ndef validate_root(root):\n    return None\n", encoding="utf-8", newline="\n")
+    (app_root / "scripts" / "verify_github_release.py").write_text("def verify_release():\n    return 'release-smoke checksums.json'\n", encoding="utf-8", newline="\n")
     (app_root / ".github" / "workflows").mkdir(parents=True)
-    (app_root / ".github" / "workflows" / "release-gate.yml").write_text("name: x\n" * 75, encoding="utf-8", newline="\n")
-    (app_root / ".github" / "workflows" / "publish-release.yml").write_text("name: x\n" * 50, encoding="utf-8", newline="\n")
+    (app_root / ".github" / "workflows" / "release-gate.yml").write_text("name: x\njobs:\n  validate:\n    steps:\n      - name: Validate release files\n        run: echo ok\n      - name: Run unit tests\n        run: echo ok\n", encoding="utf-8", newline="\n")
+    (app_root / ".github" / "workflows" / "publish-release.yml").write_text("name: x\njobs:\n  publish:\n    steps:\n      - name: Publish verified release\n        run: gh release upload\n", encoding="utf-8", newline="\n")
     (app_root / "app").mkdir()
-    (app_root / "app" / "model_scanner.py").write_text("print('ok')\n" * 600, encoding="utf-8", newline="\n")
-    (app_root / "app" / "hf_model_downloader.py").write_text("print('ok')\n" * 300, encoding="utf-8", newline="\n")
-    (app_root / "app" / "results_writer.py").write_text("print('ok')\n" * 100, encoding="utf-8", newline="\n")
-    (app_root / "app" / "scoring.py").write_text("print('ok')\n" * 80, encoding="utf-8", newline="\n")
-    (app_root / "app" / "main.py").write_text("print('ok')\n" * 100, encoding="utf-8", newline="\n")
+    (app_root / "app" / "model_scanner.py").write_text("class ModelCandidate: pass\ndef indexed_safetensor_missing_files(): pass\ndef scan_models(root): return [], []\n", encoding="utf-8", newline="\n")
+    (app_root / "app" / "hf_model_downloader.py").write_text("RECOMMENDED_BASELINE_REPO='x'\ndef offer_missing_file_repair(): pass\ndef download_hf_model_from_ref(): pass\n", encoding="utf-8", newline="\n")
+    (app_root / "app" / "results_writer.py").write_text("runtime_rankings = None\ndef build_results(): pass\ndef write_all_reports(): pass\n", encoding="utf-8", newline="\n")
+    (app_root / "app" / "scoring.py").write_text("def edit_distance(): pass\ndef balanced_score(): pass\ndef score_against_reference(): pass\n", encoding="utf-8", newline="\n")
+    (app_root / "app" / "main.py").write_text("def build_model_failure_error(): pass\ndef process_file_with_candidates(): pass\ndef main(): pass\n", encoding="utf-8", newline="\n")
     (app_root / "requirements").mkdir()
-    (app_root / "requirements" / "core.txt").write_text("numpy\nsoundfile\nlibrosa\npsutil\njiwer\n", encoding="utf-8", newline="\n")
+    (app_root / "requirements" / "core.txt").write_text("numpy\nsoundfile\nlibrosa\npsutil\nhuggingface_hub\n", encoding="utf-8", newline="\n")
     (app_root / "config.json").write_text(
         json.dumps(
             {
@@ -152,6 +155,7 @@ def test_verify_github_release_accepts_complete_mocked_release_with_smoke(tmp_pa
                     "file_stability_wait_seconds": 0,
                 },
                 "runtime": {"provider": "auto"},
+                "chunking": {"target_chunk_seconds": 30},
                 "advanced": {"keep_temp_wavs": False},
             },
             indent=2,

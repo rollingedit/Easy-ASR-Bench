@@ -10,19 +10,22 @@ from validate_physical_files import validate_root
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKIP_DIRS = {".git", ".venv", "dist", ".pytest_cache", ".pytest_tmp", "__pycache__"}
+SKIP_DIRS = {
+    ".git",
+    ".venv",
+    "dist",
+    ".pytest_cache",
+    ".pytest_tmp",
+    "__pycache__",
+    "Logs",
+    "Output",
+    "Temp",
+    "Cache",
+    "Models",
+    "Input",
+}
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
-MIN_LINES = {
-    "setup.bat": 50,
-    "Run.bat": 5,
-    "Drop_Audio_Or_Folders_Here.bat": 5,
-    "app/main.py": 100,
-    "requirements/core.txt": 5,
-    "config.json": 20,
-}
-
 
 def raw(path: Path) -> bytes:
     return path.read_bytes()
@@ -50,14 +53,6 @@ def assert_line_ending(path: Path, expected: bytes) -> None:
     elif expected == b"\n":
         if b"\r\n" in data:
             raise AssertionError(f"{path} must use LF")
-
-
-def validate_line_counts() -> None:
-    for rel, minimum in MIN_LINES.items():
-        path = ROOT / rel
-        count = physical_lines(raw(path))
-        if count < minimum:
-            raise AssertionError(f"{rel} has {count} physical lines, expected at least {minimum}")
 
 
 def validate_formats() -> None:
@@ -109,7 +104,6 @@ def main() -> int:
         import app
 
         validate_version_coherence("v" + app.__version__, require_checksums=(ROOT / "installer" / "checksums.json").exists())
-        validate_line_counts()
         validate_formats()
         validate_requirements()
         validate_installer_safety()

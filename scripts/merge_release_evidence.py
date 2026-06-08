@@ -20,6 +20,34 @@ def evidence_rows(evidence_dir: Path) -> dict[str, dict]:
     return rows
 
 
+def _status_for(row: object) -> str:
+    if isinstance(row, dict):
+        return str(row.get("status", "unknown"))
+    return str(row)
+
+
+def _status_counts(rows: list[object]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        status = _status_for(row)
+        counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
+def _update_matrix_statuses(value: object, evidence: dict[str, dict]) -> object:
+    if isinstance(value, dict):
+        updated = {}
+        for key, child in value.items():
+            if isinstance(child, dict):
+                updated[key] = _update_matrix_statuses(child, evidence)
+            elif key in evidence:
+                updated[key] = evidence[key].get("status", child)
+            else:
+                updated[key] = child
+        return updated
+    return value
+
+
 def merge_manual_rows(smoke: dict, evidence: dict[str, dict]) -> dict:
     rows = smoke.get("manual_rows")
     if not isinstance(rows, list):
@@ -38,8 +66,22 @@ def merge_manual_rows(smoke: dict, evidence: dict[str, dict]) -> dict:
         raise SystemExit("Evidence rows are not present in release smoke manual_rows: " + ", ".join(unknown))
     merged = dict(smoke)
     merged["manual_rows"] = output_rows
+    if isinstance(smoke.get("manual_matrix"), dict):
+        merged["manual_matrix"] = _update_matrix_statuses(smoke["manual_matrix"], evidence)
+    merged["manual_row_status_counts"] = _status_counts(output_rows)
+    blocked_rows = [
+        {
+            "id": str(row.get("id", "")),
+            "block_reason": str(row.get("block_reason", "")),
+            "external_requirement": str(row.get("external_requirement", "")),
+        }
+        for row in output_rows
+        if isinstance(row, dict) and row.get("status") == "blocked"
+    ]
+    if blocked_rows:
+        merged["blocked_rows"] = blocked_rows
     merged.setdefault("notes", [])
-    merged["notes"] = list(merged["notes"]) + ["Manual evidence rows were merged from qa/windows_matrix evidence row.json files."]
+    merged["notes"] = list(merged["notes"]) + ["Manual evidence rows were merged from qa/windows_matrix or qa/runtime_matrix row.json files; blocked rows are explicit evidence and are not counted as pass."]
     return merged
 
 

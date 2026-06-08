@@ -34,7 +34,7 @@ def validate_results_schema(results: dict) -> list[str]:
                 errors.append(f"run {index} missing {key}")
         metrics = run.get("metrics", {})
         if isinstance(metrics, dict):
-            for key in ["provider", "peak_process_memory_mb", "peak_vram_mb"]:
+            for key in ["provider", "peak_process_memory_mb", "peak_vram_mb", "vram_measurement_source"]:
                 if key not in metrics:
                     errors.append(f"run {index} metrics missing {key}")
     return errors

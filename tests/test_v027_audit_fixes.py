@@ -162,4 +162,5 @@ def test_vram_metrics_are_sampled_during_model_runs():
     text = Path("app/main.py").read_text(encoding="utf-8")
 
     assert "reset_peak_vram()" in text
-    assert 'result.metrics["peak_vram_mb"] = peak_vram_mb()' in text
+    assert "peak_vram_sample" in text
+    assert "result.metrics.update(peak_vram_sample())" in text

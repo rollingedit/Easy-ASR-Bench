@@ -1,6 +1,19 @@
 from app.runtime_plan import HardwareInfo, resolve_runtime_plan
 
 
+def test_cpu_runtime_plan_does_not_probe_hardware(monkeypatch):
+    def fail_probe():
+        raise AssertionError("CPU-only runtime planning should not import GPU/provider diagnostics")
+
+    monkeypatch.setattr("app.runtime_plan.hardware_from_dependency_manager", fail_probe)
+
+    plan = resolve_runtime_plan("faster_whisper", {"provider": "cpu", "prefer_gpu": False})
+
+    assert plan.actual_provider == "cpu"
+    assert plan.backend_verified is True
+    assert "without GPU dependency probing" in plan.reason
+
+
 def test_faster_whisper_prefer_gpu_without_verified_cuda_uses_cpu():
     plan = resolve_runtime_plan("faster_whisper", {"provider": "auto", "prefer_gpu": True}, HardwareInfo(nvidia=True, torch_cuda_available=True, ctranslate2_cuda_available=False))
 

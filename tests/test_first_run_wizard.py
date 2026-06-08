@@ -85,6 +85,13 @@ def test_first_run_smoke_report_is_noninteractive_and_actionable(monkeypatch, tm
     config = {"folders": {"models": str(tmp_path / "Models"), "input": str(tmp_path / "Input")}}
 
     monkeypatch.setattr("app.first_run.scan_models", lambda root: ([], []))
+    monkeypatch.setattr(
+        "app.first_run.build_repair_plan",
+        lambda config: {
+            "schema": "easy_asr_bench.repair_plan.v1",
+            "summary": {"total": 2, "needs_repair": 1, "can_auto_repair": 1},
+        },
+    )
 
     report = build_first_run_smoke_report(config)
 
@@ -93,3 +100,8 @@ def test_first_run_smoke_report_is_noninteractive_and_actionable(monkeypatch, tm
     assert report["dead_end"] is False
     assert report["recommended_next_action"] == "download_recommended_baseline"
     assert "paste_hugging_face_link" in report["available_actions"]
+    assert report["repair_plan_schema"] == "easy_asr_bench.repair_plan.v1"
+    assert report["repair_plan_summary"]["needs_repair"] == 1
+    assert report["repair_command"] == "setup.bat --doctor --repair-all-safe"
+    assert report["doctor_command"] == "setup.bat --doctor --repair-plan"
+    assert report["real_smoke_command"] == "setup.bat --doctor --validate-real-smoke"

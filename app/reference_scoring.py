@@ -1,6 +1,84 @@
 from __future__ import annotations
 
-from .scoring import align_words, edit_distance, normalize_words, strict_words
+from .scoring import align_words, balanced_score, edit_distance, normalize_words, strict_words
+
+
+def _higher_is_better_percentiles(values: dict[str, float]) -> dict[str, float]:
+    if not values:
+        return {}
+    if len(values) == 1:
+        return {next(iter(values)): 1.0}
+    ordered = sorted(values.items(), key=lambda item: item[1])
+    denominator = max(1, len(ordered) - 1)
+    return {candidate_id: rank / denominator for rank, (candidate_id, _value) in enumerate(ordered)}
+
+
+def _lower_is_better_percentiles(values: dict[str, float]) -> dict[str, float]:
+    higher = _higher_is_better_percentiles({candidate_id: -value for candidate_id, value in values.items()})
+    return higher
+
+
+def runtime_ranking_inputs(results: dict) -> tuple[dict[str, float], dict[str, float]]:
+    speed: dict[str, float] = {}
+    memory: dict[str, float] = {}
+    for run in results.get("runs", []):
+        candidate_id = run.get("model", {}).get("candidate_id", "")
+        if not candidate_id:
+            continue
+        metrics = run.get("metrics", {})
+        try:
+            speed_value = float(metrics.get("audio_seconds_per_wall_second", 0) or 0)
+        except (TypeError, ValueError):
+            speed_value = 0.0
+        if speed_value > 0:
+            speed[candidate_id] = speed_value
+        memory_values = []
+        for key in ("peak_process_memory_mb", "peak_vram_mb"):
+            try:
+                value = metrics.get(key)
+                if value is not None:
+                    memory_values.append(float(value))
+            except (TypeError, ValueError):
+                continue
+        if memory_values:
+            memory[candidate_id] = sum(memory_values)
+    return speed, memory
+
+
+def runtime_rankings(results: dict) -> dict:
+    speed, memory = runtime_ranking_inputs(results)
+    speed_percentiles = _higher_is_better_percentiles(speed)
+    memory_percentiles = _lower_is_better_percentiles(memory)
+    rows = []
+    for run in results.get("runs", []):
+        candidate_id = run.get("model", {}).get("candidate_id", "")
+        metrics = run.get("metrics", {})
+        rows.append(
+            {
+                "candidate_id": candidate_id,
+                "display_name": run.get("model", {}).get("display_name", candidate_id),
+                "speed_audio_seconds_per_wall_second": metrics.get("audio_seconds_per_wall_second"),
+                "peak_process_memory_mb": metrics.get("peak_process_memory_mb"),
+                "peak_vram_mb": metrics.get("peak_vram_mb"),
+                "speed_percentile": speed_percentiles.get(candidate_id),
+                "memory_percentile_inverse": memory_percentiles.get(candidate_id),
+                "rank_basis": "runtime_only_no_quality_reference",
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            row["speed_percentile"] if row["speed_percentile"] is not None else -1,
+            row["memory_percentile_inverse"] if row["memory_percentile_inverse"] is not None else -1,
+        ),
+        reverse=True,
+    )
+    for index, row in enumerate(rows, 1):
+        row["runtime_rank"] = index
+    return {
+        "schema": "easy_asr_bench.runtime_rankings.v1",
+        "note": "Runtime rankings do not measure transcript quality. Use LLM-corrected or human reference scores for accuracy-aware ranking.",
+        "rows": rows,
+    }
 
 
 def _chunk_metrics(reference: str, hypothesis: str, *, include_alignment: bool, max_alignment_cells: int) -> dict:
@@ -47,6 +125,9 @@ def score_results_against_reference(
 ) -> dict:
     reference_by_chunk = {segment["chunk_id"]: segment.get("text", "") for segment in reference.get("segments", [])}
     scores: dict[str, dict] = {}
+    speed, memory = runtime_ranking_inputs(results)
+    speed_percentiles = _higher_is_better_percentiles(speed)
+    memory_percentiles = _lower_is_better_percentiles(memory)
     for run in results.get("runs", []):
         candidate_id = run.get("model", {}).get("candidate_id", "")
         totals = {
@@ -85,11 +166,23 @@ def score_results_against_reference(
                     "alignment_too_large": metrics["alignment_too_large"],
                 }
             )
+        normalized_wer = totals["normalized_edits"] / max(1, totals["reference_word_count"])
+        quality = max(0.0, 1.0 - normalized_wer)
+        overall_score = balanced_score(
+            quality,
+            speed_percentiles.get(candidate_id, 0.0),
+            memory_percentiles.get(candidate_id, 0.0),
+        )
         scores[candidate_id] = {
-            "normalized_wer": totals["normalized_edits"] / max(1, totals["reference_word_count"]),
+            "normalized_wer": normalized_wer,
             "strict_wer": totals["strict_edits"] / max(1, totals["strict_reference_word_count"]),
             "cer": totals["cer_edits"] / max(1, totals["reference_char_count"]),
             "normalized_cer": totals["normalized_cer_edits"] / max(1, totals["normalized_reference_char_count"]),
+            "quality_component": quality,
+            "speed_percentile": speed_percentiles.get(candidate_id),
+            "memory_percentile_inverse": memory_percentiles.get(candidate_id),
+            "balanced_score": overall_score,
+            "balanced_score_note": "70% LLM-corrected reference quality, 20% speed percentile, 10% inverse RAM/VRAM percentile.",
             "substitutions": totals["substitutions"],
             "insertions": totals["insertions"],
             "deletions": totals["deletions"],
@@ -97,4 +190,6 @@ def score_results_against_reference(
             "chunk_scores": chunk_scores,
             "alignment_mode": "omitted_for_large_chunks" if any(item["alignment_too_large"] for item in chunk_scores) else "included",
         }
+    for rank, (_candidate_id, score) in enumerate(sorted(scores.items(), key=lambda item: item[1]["balanced_score"], reverse=True), 1):
+        score["balanced_rank"] = rank
     return scores

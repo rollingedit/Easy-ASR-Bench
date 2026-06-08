@@ -4,9 +4,11 @@ import argparse
 import json
 import logging
 import os
+import subprocess
 import sys
 import time
 import traceback
+import importlib.metadata
 from pathlib import Path
 
 from .adapters import BUILTIN_ADAPTERS
@@ -160,7 +162,9 @@ def ensure_dependencies(candidates: list[ModelCandidate], config: dict, referenc
             print(f"Install finished but {group} is still missing: {', '.join(still_missing)}")
             print(f"Manual repair command: {recovery_command_for_config(group, config)}")
             failed_groups.add(group)
-    return _drop_candidates_for_failed_dependency_groups(candidates, reference_llm, candidate_groups, failed_groups)
+    kept, reference_llm = _drop_candidates_for_failed_dependency_groups(candidates, reference_llm, candidate_groups, failed_groups)
+    kept = _repair_native_backend_preflights(kept, config)
+    return kept, reference_llm
 
 
 def _dependency_install_log_path(config: dict, group: str) -> str:
@@ -172,6 +176,194 @@ def _dependency_install_log_path(config: dict, group: str) -> str:
         logs_dir = Path("Logs")
     stamp = time.strftime("%Y%m%d_%H%M%S")
     return str(logs_dir / f"dependency_install_{group}_{stamp}.log")
+
+
+def _repair_native_backend_preflights(candidates: list[ModelCandidate], config: dict) -> list[ModelCandidate]:
+    kept: list[ModelCandidate] = []
+    for candidate in candidates:
+        adapter = adapter_for(candidate)
+        preflight = getattr(adapter, "preflight_native_load", None)
+        if preflight is None:
+            kept.append(candidate)
+            continue
+        error = preflight(candidate, runtime_config_for_candidate(config))
+        if not error:
+            kept.append(candidate)
+            continue
+        print(f"{candidate.display_name} native backend preflight failed before model run:")
+        print(f"  {error}")
+        if candidate.adapter_name in {"generic_onnx_manifest", "granite_onnx_ar", "granite_onnx_nar"}:
+            repaired_error = _repair_onnx_native_stack(candidate, config, error)
+            if repaired_error:
+                print(f"ONNX Runtime repair did not make this model loadable: {repaired_error}")
+                continue
+            kept.append(candidate)
+            continue
+        if candidate.adapter_name != "faster_whisper":
+            print("Skipping this model so the app stays running.")
+            continue
+        if not config.get("dependency_install", {}).get("auto_install_missing_runtime_dependencies", True):
+            print("Automatic dependency repair is disabled in config.json. Skipping this model.")
+            continue
+        decision = _dependency_install_confirmation("faster_whisper", recovery_command_for_faster_whisper_compatibility(config))
+        if decision != "install":
+            print("Skipped faster-whisper compatibility repair. Skipping this model.")
+            continue
+        repaired_error = _repair_faster_whisper_native_stack(candidate, config, error)
+        if repaired_error:
+            print(f"faster-whisper compatibility repair did not find a working native stack: {repaired_error}")
+            continue
+        kept.append(candidate)
+    return kept
+
+
+def _repair_onnx_native_stack(candidate: ModelCandidate, config: dict, initial_error: str) -> str:
+    if not config.get("dependency_install", {}).get("auto_install_missing_runtime_dependencies", True):
+        return "Automatic dependency repair is disabled in config.json."
+    from .dependency_manager import install_group_for_config, recovery_command_for_config
+
+    decision = _dependency_install_confirmation("onnx", recovery_command_for_config("onnx", config))
+    if decision != "install":
+        return "Skipped ONNX Runtime dependency repair."
+    project_root = Path(__file__).resolve().parent.parent
+    log_path = Path(_dependency_install_log_path(config, "onnx_native_preflight"))
+    try:
+        install_decision = install_group_for_config("onnx", project_root, config, log_path=log_path)
+    except Exception as exc:
+        return f"ONNX Runtime repair failed: {exc}; initial error: {initial_error}; install log: {log_path}"
+    adapter = adapter_for(candidate)
+    preflight = getattr(adapter, "preflight_native_load", None)
+    if preflight is None:
+        return ""
+    error = preflight(candidate, runtime_config_for_candidate(config))
+    if not error:
+        repaired = install_decision.get("provider_compatibility_repair") if install_decision else ""
+        if repaired:
+            print(f"ONNX Runtime provider compatibility repair selected {repaired}.")
+        return ""
+    return error
+
+
+def recovery_command_for_faster_whisper_compatibility(config: dict) -> str:
+    project_root = Path(__file__).resolve().parent.parent
+    requirement_file = project_root / "requirements" / "faster_whisper.txt"
+    return f'"{sys.executable}" -m pip install --upgrade --force-reinstall -r "{requirement_file}"'
+
+
+def _faster_whisper_ctranslate2_spec(project_root: Path) -> str:
+    try:
+        from packaging.requirements import Requirement
+    except Exception:
+        return ""
+    requirement_file = project_root / "requirements" / "faster_whisper.txt"
+    if not requirement_file.exists():
+        return ""
+    for raw in requirement_file.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            requirement = Requirement(line)
+        except Exception:
+            continue
+        if requirement.name.lower() == "ctranslate2":
+            return str(requirement.specifier)
+    return ""
+
+
+def _installed_distribution_version(package: str) -> str:
+    try:
+        return importlib.metadata.version(package)
+    except importlib.metadata.PackageNotFoundError:
+        return ""
+
+
+def _ctranslate2_version_allowed(version: str, specifier) -> bool:
+    if specifier is None:
+        return True
+    try:
+        return version in specifier
+    except Exception:
+        return False
+
+
+def _discover_ctranslate2_candidate_versions(config: dict, project_root: Path, log) -> list[str]:
+    spec_text = _faster_whisper_ctranslate2_spec(project_root)
+    try:
+        from packaging.specifiers import SpecifierSet
+    except Exception:
+        SpecifierSet = None  # type: ignore[assignment]
+    specifier = SpecifierSet(spec_text) if SpecifierSet and spec_text else None
+    configured = config.get("dependency_install", {}).get("ctranslate2_compatibility_versions")
+    if configured:
+        return [version for version in (str(item) for item in configured) if _ctranslate2_version_allowed(version, specifier)]
+    command = [sys.executable, "-m", "pip", "index", "versions", "ctranslate2"]
+    log.write(f"\n> {' '.join(command)}\n")
+    try:
+        completed = subprocess.run(command, cwd=str(project_root), text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=90)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log.write(f"pip index failed: {exc}\n")
+        completed = None
+    versions: list[str] = []
+    if completed is not None:
+        log.write(completed.stdout or "")
+        for line in (completed.stdout or "").splitlines():
+            if "Available versions:" not in line:
+                continue
+            raw_versions = line.split("Available versions:", 1)[1].split(",")
+            for raw_version in raw_versions:
+                version = raw_version.strip()
+                if version and _ctranslate2_version_allowed(version, specifier):
+                    versions.append(version)
+    installed = _installed_distribution_version("ctranslate2")
+    if installed and _ctranslate2_version_allowed(installed, specifier) and installed not in versions:
+        versions.insert(0, installed)
+    return versions
+
+
+def _repair_faster_whisper_native_stack(candidate: ModelCandidate, config: dict, initial_error: str) -> str:
+    from .adapters.faster_whisper_asr import probe_faster_whisper_load, faster_whisper_runtime_choices
+
+    project_root = Path(__file__).resolve().parent.parent
+    _plan, device, _compute_type, effective_compute_type, _warnings = faster_whisper_runtime_choices(candidate, runtime_config_for_candidate(config))
+    last_error = initial_error
+    log_path = Path(_dependency_install_log_path(config, "faster_whisper_native_compatibility"))
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("a", encoding="utf-8", newline="\n") as log:
+        log.write(f"Initial faster-whisper native preflight error: {initial_error}\n")
+        broad_command = [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", "-r", str(project_root / "requirements" / "faster_whisper.txt")]
+        log.write(f"\n> {' '.join(broad_command)}\n")
+        print("Trying the latest package set allowed by requirements/faster_whisper.txt...")
+        completed = subprocess.run(broad_command, cwd=str(project_root), text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        log.write(completed.stdout or "")
+        if completed.returncode == 0:
+            probe_error = probe_faster_whisper_load(candidate.path, device, effective_compute_type)
+            log.write(f"probe requirement set: {'pass' if not probe_error else probe_error}\n")
+            if not probe_error:
+                print("faster-whisper requirement set passed the native load probe.")
+                return ""
+            last_error = probe_error
+        else:
+            last_error = f"pip install requirements/faster_whisper.txt failed; see {log_path}"
+        versions = _discover_ctranslate2_candidate_versions(config, project_root, log)
+        if not versions:
+            return f"{last_error}; no CTranslate2 candidates could be discovered from pip index or the installed environment"
+        for version in versions:
+            command = [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", f"ctranslate2=={version}", "-r", str(project_root / "requirements" / "faster_whisper.txt")]
+            log.write(f"\n> {' '.join(command)}\n")
+            print(f"Trying discovered CTranslate2 candidate {version}...")
+            completed = subprocess.run(command, cwd=str(project_root), text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            log.write(completed.stdout or "")
+            if completed.returncode != 0:
+                last_error = f"pip install ctranslate2=={version} failed; see {log_path}"
+                continue
+            probe_error = probe_faster_whisper_load(candidate.path, device, effective_compute_type)
+            log.write(f"probe ctranslate2=={version}: {'pass' if not probe_error else probe_error}\n")
+            if not probe_error:
+                print(f"CTranslate2 {version} passed the native load probe.")
+                return ""
+            last_error = probe_error
+    return last_error
 
 
 def _dependency_install_confirmation(group: str, repair_command: str | None = None) -> str:
@@ -394,7 +586,7 @@ def process_file_with_candidates(
     unsupported_models: list[ModelCandidate] | None = None,
     reference_llm: ModelCandidate | None = None,
 ) -> Path | None:
-    from .benchmark import peak_vram_mb, process_memory_mb, reset_peak_vram, timer
+    from .benchmark import peak_vram_sample, process_memory_mb, reset_peak_vram, timer
     from .media import audio_duration_seconds, prepare_audio
     from .results_writer import build_failed_file_results, build_results, write_all_reports
 
@@ -432,7 +624,7 @@ def process_file_with_candidates(
                 result.metrics["total_wall_seconds"] = model_load_seconds + float(result.metrics.get("inference_seconds", 0))
                 audio_seconds_metric = float(result.metrics.get("audio_seconds", audio_seconds))
                 result.metrics["audio_seconds_per_wall_second"] = audio_seconds_metric / max(0.001, float(result.metrics["total_wall_seconds"]))
-                result.metrics["peak_vram_mb"] = peak_vram_mb()
+                result.metrics.update(peak_vram_sample())
             except Exception as exc:
                 logging.error("%s failed", candidate.candidate_id)
                 logging.exception("Model failed")
@@ -445,6 +637,7 @@ def process_file_with_candidates(
                         "chunk_count": len(chunks),
                         "media_normalization_seconds": media_seconds,
                         "peak_process_memory_mb": process_memory_mb(),
+                        **peak_vram_sample(),
                     },
                     errors=[
                         build_model_failure_error(
@@ -600,6 +793,12 @@ def main() -> None:
     parser.add_argument("--scan-only", action="store_true")
     parser.add_argument("--doctor", action="store_true")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--repair-plan", action="store_true")
+    parser.add_argument("--repair-all-safe", action="store_true")
+    parser.add_argument("--validate-real-smoke", action="store_true")
+    parser.add_argument("--install-deps", action="store_true")
+    parser.add_argument("--allow-downloads", action="store_true")
+    parser.add_argument("--no-network", action="store_true")
     parser.add_argument("--first-run", action="store_true")
     parser.add_argument("--first-run-smoke", action="store_true")
     parser.add_argument("--download-model", action="store_true")
@@ -622,7 +821,19 @@ def _main(args: argparse.Namespace) -> None:
     if args.doctor:
         from .doctor import run_doctor
 
-        raise SystemExit(run_doctor(Path(args.config), strict=False, json_output=bool(args.json)))
+        raise SystemExit(
+            run_doctor(
+                Path(args.config),
+                strict=False,
+                json_output=bool(args.json),
+                repair_plan_output=bool(args.repair_plan),
+                repair_all_safe=bool(args.repair_all_safe),
+                validate_real_smoke=bool(args.validate_real_smoke),
+                install_deps=bool(args.install_deps),
+                allow_downloads=bool(args.allow_downloads),
+                no_network=bool(args.no_network),
+            )
+        )
     models_root = folder_config(config, "models")
     if args.first_run_smoke:
         from .first_run import build_first_run_smoke_report

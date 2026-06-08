@@ -1,6 +1,6 @@
 param(
   [string]$InstallDir = "$env:LOCALAPPDATA\Easy-ASR-Bench",
-  [string]$Version = "v0.3.8",
+  [string]$Version = "v0.3.9",
   [switch]$DryRun,
   [switch]$VerifyRelease,
   [switch]$Repair,
@@ -12,6 +12,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+trap {
+  Write-Host $_
+  [Environment]::Exit(1)
+}
 $Repo = "https://github.com/rollingedit/Easy-ASR-Bench"
 $ReleaseBase = "$Repo/releases/download/$Version"
 $LogDir = Join-Path $InstallDir "Logs"
@@ -97,12 +101,6 @@ function Assert-Checksum($Path, $Expected, $Name) {
   Write-SetupLog "[OK] $Name SHA256 verified"
 }
 
-function Get-PhysicalLineCount($Path) {
-  $text = [System.IO.File]::ReadAllText($Path)
-  if ($text.Length -eq 0) { return 0 }
-  return ([regex]::Matches($text, "`r`n|`n|`r")).Count + 1
-}
-
 function Assert-TextLineEndings($Path, $Expected, $Name) {
   $bytes = [System.IO.File]::ReadAllBytes($Path)
   if ($bytes.Length -eq 0) { return }
@@ -124,25 +122,27 @@ function Assert-TextLineEndings($Path, $Expected, $Name) {
 }
 
 function Assert-StagingPhysicalFiles($Root) {
-  $minimums = @{
-    "setup.bat" = 200
-    "installer\install.ps1" = 250
-    "scripts\validate_physical_files.py" = 150
-    "scripts\verify_github_release.py" = 80
-    ".github\workflows\release-gate.yml" = 75
-    ".github\workflows\publish-release.yml" = 50
-    "app\model_scanner.py" = 600
-    "app\results_writer.py" = 100
-    "app\scoring.py" = 80
+  $markers = @{
+    "setup.bat" = @("APP_VERSION=", "--dry-run", "--verify-release", "--local")
+    "installer\install.ps1" = @("Move-PreservedUserData", "Restore-MovedUserData", "Assert-StagingPhysicalFiles")
+    "scripts\validate_physical_files.py" = @("REQUIRED_TEXT_MARKERS", "def validate_root")
+    "scripts\verify_github_release.py" = @("def verify_release", "release-smoke", "checksums.json")
+    ".github\workflows\release-gate.yml" = @("Validate release files", "Run unit tests")
+    ".github\workflows\publish-release.yml" = @("Publish verified release", "gh release upload")
+    "app\model_scanner.py" = @("def scan_models", "ModelCandidate", "indexed_safetensor_missing_files")
+    "app\results_writer.py" = @("def build_results", "def write_all_reports", "runtime_rankings")
+    "app\scoring.py" = @("def edit_distance", "def balanced_score", "def score_against_reference")
   }
-  foreach ($rel in $minimums.Keys) {
+  foreach ($rel in $markers.Keys) {
     $path = Join-Path $Root $rel
     if (-not (Test-Path $path)) {
       throw "Staging validation failed: missing $rel"
     }
-    $count = Get-PhysicalLineCount $path
-    if ($count -lt $minimums[$rel]) {
-      throw "Staging validation failed: $rel has $count physical lines, expected at least $($minimums[$rel])"
+    $text = Get-Content -Raw -LiteralPath $path
+    foreach ($marker in $markers[$rel]) {
+      if (-not $text.Contains($marker)) {
+        throw "Staging validation failed: $rel is missing required marker $marker"
+      }
     }
   }
   $crlfFiles = @("setup.bat", "installer\install.ps1")
@@ -243,27 +243,27 @@ function Get-TreeStats($Path) {
   return @{ file_count = $files.Count; byte_count = $bytes }
 }
 
-function Copy-PreservedUserData($From, $To) {
+function Move-PreservedUserData($From, $To) {
   $report = @{
     schema = "easy_asr_bench.install_preservation_report.v1"
     created = (Get-Date -Format s)
     source = $From
     destination = $To
+    method = "move_without_model_copy"
     items = @()
   }
   foreach ($name in @("Models", "Input", "Output", "Logs", "Cache", "Temp")) {
     $source = Join-Path $From $name
     $dest = Join-Path $To $name
     if (Test-Path $source) {
-      New-Item -ItemType Directory -Force -Path $dest | Out-Null
-      $children = @(Get-ChildItem -LiteralPath $source -Force -ErrorAction Stop)
-      foreach ($child in $children) {
-        Copy-Item -LiteralPath $child.FullName -Destination $dest -Recurse -Force -ErrorAction Stop
+      if (Test-Path $dest) {
+        Remove-Item -LiteralPath $dest -Recurse -Force -ErrorAction Stop
       }
+      Move-Item -LiteralPath $source -Destination $dest -Force -ErrorAction Stop
       $stats = Get-TreeStats $dest
       $report.items += @{
         name = $name
-        status = "preserved"
+        status = "moved"
         file_count = $stats.file_count
         byte_count = $stats.byte_count
       }
@@ -280,10 +280,13 @@ function Copy-PreservedUserData($From, $To) {
   $sourceConfig = Join-Path $From "config.json"
   $destConfig = Join-Path $To "config.json"
   if (Test-Path $sourceConfig) {
-    Copy-Item -LiteralPath $sourceConfig -Destination $destConfig -Force -ErrorAction Stop
+    if (Test-Path $destConfig) {
+      Remove-Item -LiteralPath $destConfig -Force -ErrorAction Stop
+    }
+    Move-Item -LiteralPath $sourceConfig -Destination $destConfig -Force -ErrorAction Stop
     $report.items += @{
       name = "config.json"
-      status = "preserved"
+      status = "moved"
       file_count = 1
       byte_count = (Get-Item -LiteralPath $destConfig).Length
     }
@@ -299,6 +302,27 @@ function Copy-PreservedUserData($From, $To) {
   $reportPath = Join-Path $To "Logs\install-preservation-report.json"
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $reportPath) | Out-Null
   $report | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $reportPath -Encoding UTF8
+}
+
+function Restore-MovedUserData($From, $To) {
+  foreach ($name in @("Models", "Input", "Output", "Logs", "Cache", "Temp")) {
+    $source = Join-Path $From $name
+    $dest = Join-Path $To $name
+    if (Test-Path $source) {
+      if (Test-Path $dest) {
+        Remove-Item -LiteralPath $dest -Recurse -Force -ErrorAction Stop
+      }
+      Move-Item -LiteralPath $source -Destination $dest -Force -ErrorAction Stop
+    }
+  }
+  $sourceConfig = Join-Path $From "config.json"
+  $destConfig = Join-Path $To "config.json"
+  if (Test-Path $sourceConfig) {
+    if (Test-Path $destConfig) {
+      Remove-Item -LiteralPath $destConfig -Force -ErrorAction Stop
+    }
+    Move-Item -LiteralPath $sourceConfig -Destination $destConfig -Force -ErrorAction Stop
+  }
 }
 
 if ($Doctor) {
@@ -374,6 +398,13 @@ if ($DryRun) {
   Write-SetupLog "  checksums: $ReleaseBase/checksums.json"
   Write-SetupLog "  install dir: $InstallDir"
   Write-SetupLog "  preserved user data: Models, Input, Output, Logs, Cache, Temp, config.json"
+  if ($Repair) {
+    Write-SetupLog "  repair mode: runtime files and .venv will be refreshed after release verification"
+    $venvPython = Join-Path $InstallDir ".venv\Scripts\python.exe"
+    if ((Test-Path $InstallDir) -and -not (Test-Path $venvPython)) {
+      Write-SetupLog "  detected broken venv: .venv\Scripts\python.exe is missing and will be recreated by local setup"
+    }
+  }
   if ($VerifyRelease) {
     Test-ReleaseAssets $Python
   }
@@ -430,18 +461,19 @@ Invoke-Step "Installing app atomically with user-data preservation" {
   Remove-Item -LiteralPath $New -Recurse -Force -ErrorAction SilentlyContinue
   New-Item -ItemType Directory -Force -Path $New | Out-Null
   Copy-Item -Path (Join-Path $Stage "*") -Destination $New -Recurse -Force
-  if (Test-Path $InstallDir) {
-    Copy-PreservedUserData $InstallDir $New
-  }
   try {
     if (Test-Path $InstallDir) {
       Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
       Move-Item -LiteralPath $InstallDir -Destination $Backup -Force
+      Move-PreservedUserData $Backup $New
     }
     Move-Item -LiteralPath $New -Destination $InstallDir -Force
   }
   catch {
     Write-SetupLog "Install swap failed; attempting rollback."
+    if ((Test-Path $Backup) -and (Test-Path $New)) {
+      Restore-MovedUserData $New $Backup
+    }
     if ((Test-Path $Backup) -and -not (Test-Path $InstallDir)) {
       Move-Item -LiteralPath $Backup -Destination $InstallDir -Force
     }

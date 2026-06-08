@@ -74,8 +74,24 @@ class GenericOnnxManifestAdapter:
         manifest = candidate.metadata["manifest"]
         model_path = candidate.path / manifest["files"]["model"]
         self.requested_providers = choose_providers(runtime_config.get("provider", "auto"))
+        probe_error = self.preflight_native_load(candidate, runtime_config, self.requested_providers)
+        if probe_error:
+            raise RuntimeError(
+                "ONNX Runtime session preflight failed before in-process load. "
+                "Run setup.bat --doctor or repair the ONNX provider package. "
+                f"Probe detail: {probe_error}"
+            )
         self.session = make_session(model_path, self.requested_providers, int(runtime_config.get("cpu_threads", 0)))
         return self
+
+    def preflight_native_load(self, candidate: ModelCandidate, runtime_config: dict, providers: list[str] | None = None) -> str:
+        from ..onnx_common import choose_providers
+        from ..onnx_probe import probe_onnx_sessions
+
+        manifest = candidate.metadata["manifest"]
+        model_path = candidate.path / manifest["files"]["model"]
+        selected = providers or choose_providers(runtime_config.get("provider", "auto"))
+        return probe_onnx_sessions([model_path], selected, int(runtime_config.get("cpu_threads", 0)))
 
     def transcribe_chunks(self, chunks: Sequence, chunk_metadata: list[dict]) -> ModelRunResult:
         manifest = self.candidate.metadata["manifest"]

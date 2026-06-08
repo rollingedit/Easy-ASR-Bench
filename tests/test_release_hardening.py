@@ -45,11 +45,20 @@ def test_release_version_coherence_matches_app_version():
 def test_raw_github_validator_catches_collapsed_lines():
     with patch("scripts.validate_raw_github_files.fetch", return_value=b"first\rsecond\rthird"):
         try:
-            validate_bytes("setup.bat", b"first\rsecond\rthird", 200)
+            validate_bytes("setup.bat", b"first\rsecond\rthird")
         except AssertionError as exc:
             assert "CR-only line endings" in str(exc)
         else:
             raise AssertionError("collapsed raw lines were accepted")
+
+
+def test_raw_github_validator_rejects_empty_files_without_line_count_proxy():
+    try:
+        validate_bytes("app/main.py", b"")
+    except AssertionError as exc:
+        assert "is empty" in str(exc)
+    else:
+        raise AssertionError("empty raw files were accepted")
 
 
 def test_raw_github_validator_reports_byte_diagnostics():
@@ -61,7 +70,7 @@ def test_raw_github_validator_reports_byte_diagnostics():
     assert diagnostics.bare_cr_count == 0
     assert diagnostics.physical_line_count_universal == 2
     assert "crlf_terminated_line_count_diagnostic" in formatted
-    assert "universal physical line count is the release gate" in formatted
+    assert "line counts are diagnostics, not behavior proof" in formatted
     assert "first_32_bytes_hex" in formatted
     assert "last_32_bytes_hex" in formatted
 
@@ -94,6 +103,8 @@ def test_installer_verify_release_checks_uploaded_bootstrap_assets():
     assert "Assert-Checksum $releaseInstaller $checksumsJson.files.'install.ps1' \"install.ps1\"" in installer
     assert "Legacy manifest does not declare installer_asset" in installer
     assert "Assert-StagingPhysicalFiles" in installer
+    assert "required marker" in installer
+    assert "expected at least" not in installer
     assert "Python 3.10-3.14" in installer
     assert "Validating installed app after local setup" in installer
     assert "Installed app validation failed" in installer

@@ -3,16 +3,17 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 set APP_NAME=Easy ASR Bench
-set APP_VERSION=v0.3.8
+set APP_VERSION=v0.3.9
 set INSTALL_DIR=%LOCALAPPDATA%\Easy-ASR-Bench
 set INSTALLER_PS1=%~dp0installer\install.ps1
 set INSTALLER_URL=https://github.com/rollingedit/Easy-ASR-Bench/releases/download/%APP_VERSION%/install.ps1
-set INSTALLER_SHA256=sha256:5b60faa21fce97ea806c1af28dd627578164393d83301a542cbc529eb86bbe4d
+set INSTALLER_SHA256=sha256:1c6ab7454d666f7f5e92bb40fa04764a5ad20827bda9fe305a7e8e5c72cd7ed2
 set VERIFY_RELEASE=0
 set ASSET_DIR=
 set NEXT_IS_ASSET_DIR=0
 set DOCTOR_ARGS=
 set NO_POST_SETUP_MENU=0
+set INSTALLER_MODE_ARGS=
 
 for %%A in (%*) do (
   if "!NEXT_IS_ASSET_DIR!"=="1" (
@@ -23,7 +24,14 @@ for %%A in (%*) do (
     if /I "%%~A"=="--asset-dir" set NEXT_IS_ASSET_DIR=1
     if /I "%%~A"=="--json" set DOCTOR_ARGS=!DOCTOR_ARGS! --json
     if /I "%%~A"=="--strict" set DOCTOR_ARGS=!DOCTOR_ARGS! --strict
+    if /I "%%~A"=="--repair-plan" set DOCTOR_ARGS=!DOCTOR_ARGS! --repair-plan
+    if /I "%%~A"=="--repair-all-safe" set DOCTOR_ARGS=!DOCTOR_ARGS! --repair-all-safe
+    if /I "%%~A"=="--validate-real-smoke" set DOCTOR_ARGS=!DOCTOR_ARGS! --validate-real-smoke
+    if /I "%%~A"=="--install-deps" set DOCTOR_ARGS=!DOCTOR_ARGS! --install-deps
+    if /I "%%~A"=="--allow-downloads" set DOCTOR_ARGS=!DOCTOR_ARGS! --allow-downloads
+    if /I "%%~A"=="--no-network" set DOCTOR_ARGS=!DOCTOR_ARGS! --no-network
     if /I "%%~A"=="--no-post-setup-menu" set NO_POST_SETUP_MENU=1
+    if /I "%%~A"=="--repair" set INSTALLER_MODE_ARGS=!INSTALLER_MODE_ARGS! -Repair
   )
 )
 
@@ -67,7 +75,8 @@ if errorlevel 1 (
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^
   -InstallDir "%INSTALL_DIR%" ^
-  -Version "%APP_VERSION%"
+  -Version "%APP_VERSION%" ^
+  %INSTALLER_MODE_ARGS%
 
 if errorlevel 1 (
   echo Setup failed. Check %INSTALL_DIR%\Logs\setup.log
@@ -138,35 +147,38 @@ if "%VERIFY_RELEASE%"=="1" (
       -InstallDir "%INSTALL_DIR%" ^
       -Version "%APP_VERSION%" ^
       -DryRun ^
-      -VerifyRelease
+      -VerifyRelease ^
+      %INSTALLER_MODE_ARGS%
   ) else (
     powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^
       -InstallDir "%INSTALL_DIR%" ^
       -Version "%APP_VERSION%" ^
       -DryRun ^
       -VerifyRelease ^
-      -AssetDir "%ASSET_DIR%"
+      -AssetDir "%ASSET_DIR%" ^
+      %INSTALLER_MODE_ARGS%
   )
-  exit /b %errorlevel%
+  exit /b !ERRORLEVEL!
 )
 powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^
   -InstallDir "%INSTALL_DIR%" ^
   -Version "%APP_VERSION%" ^
-  -DryRun
-exit /b %errorlevel%
+  -DryRun ^
+  %INSTALLER_MODE_ARGS%
+exit /b !ERRORLEVEL!
 
 :doctor
 if exist ".venv\Scripts\python.exe" (
   ".venv\Scripts\python.exe" -m app.doctor --config config.json %DOCTOR_ARGS%
-  exit /b %errorlevel%
+  exit /b !ERRORLEVEL!
 )
 if exist "%INSTALL_DIR%\.venv\Scripts\python.exe" (
   "%INSTALL_DIR%\.venv\Scripts\python.exe" -m app.doctor --config "%INSTALL_DIR%\config.json" %DOCTOR_ARGS%
-  exit /b %errorlevel%
+  exit /b !ERRORLEVEL!
 )
 if exist "%~dp0app\doctor.py" (
   python -m app.doctor --config config.json %DOCTOR_ARGS%
-  exit /b %errorlevel%
+  exit /b !ERRORLEVEL!
 )
 echo Easy ASR Bench is not installed here and no installed runtime was found.
 exit /b 1
@@ -185,7 +197,7 @@ if not exist "%INSTALLER_PS1%" (
 powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^
   -InstallDir "%INSTALL_DIR%" ^
   -Uninstall
-exit /b %errorlevel%
+exit /b !ERRORLEVEL!
 
 :local_setup
 echo %APP_NAME% - local setup

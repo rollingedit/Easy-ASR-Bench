@@ -465,6 +465,7 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
 
     known_paths = {candidate.path.resolve() for candidate in discovered}
     known_parent_paths = {candidate_root(candidate) for candidate in discovered}
+    known_runnable_parent_paths = {candidate_root(candidate) for candidate in discovered if candidate.runnable}
     unsupported: list[ModelCandidate] = []
     precision_folders = {"int8", "fp16w", "fp32", "f32", "float32"}
 
@@ -542,19 +543,28 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
     if root_asr_gguf is not None:
         unsupported.append(root_asr_gguf)
     for folder in [path for path in models_root.rglob("*") if path.is_dir()]:
-        if folder.resolve() in known_parent_paths:
-            continue
         if any(parent.resolve() in recognized_package_roots for parent in [folder, *folder.parents]):
+            continue
+        if folder.resolve() in known_runnable_parent_paths or any(parent.resolve() in known_runnable_parent_paths for parent in folder.parents):
+            continue
+        if folder.resolve() not in known_parent_paths and any(parent.resolve() in known_parent_paths for parent in folder.parents):
             continue
         special = recognize_special_package(folder, models_root)
         if special is not None:
             unsupported.append(special)
             recognized_package_roots.add(folder.resolve())
+            continue
+        if folder.resolve() in known_parent_paths:
+            continue
 
     for path in models_root.rglob("*"):
         if path.resolve() in known_paths:
             continue
         if any(parent.resolve() in recognized_package_roots for parent in [path.parent, *path.parent.parents]):
+            continue
+        if path.parent.resolve() in known_runnable_parent_paths or any(parent.resolve() in known_runnable_parent_paths for parent in path.parents):
+            continue
+        if path.resolve() not in known_parent_paths and any(parent.resolve() in known_parent_paths for parent in path.parents):
             continue
         special = recognize_special_package(path, models_root)
         if special is not None:
@@ -655,6 +665,10 @@ def scan_models(models_root: Path) -> tuple[list[ModelCandidate], list[ModelCand
         candidate
         for candidate in discovered
         if not candidate.runnable and candidate_root(candidate) not in runnable_roots
+        and not any(
+            parent.resolve() in recognized_package_roots
+            for parent in [candidate_root(candidate), *candidate_root(candidate).parents]
+        )
     ]
     unsupported_output = partial + list(unique_unsupported.values())
     return ensure_unique_candidate_ids(runnable, models_root), ensure_unique_candidate_ids(unsupported_output, models_root)

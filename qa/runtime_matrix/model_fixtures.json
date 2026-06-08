@@ -1,0 +1,189 @@
+{
+  "schema": "easy_asr_bench.runtime_matrix.model_fixtures.v1",
+  "fixtures": {
+    "same_media_multi_model_cpu_set": {
+      "kind": "same_media_multi_model_benchmark",
+      "rows": [
+        "same_media_multi_model_smollm_benchmark"
+      ],
+      "includes": [
+        "faster_whisper_tiny_en",
+        "openai_whisper_tiny_pt",
+        "generic_onnx_ctc_fixture",
+        "hf_tiny_random_whisper_safetensors",
+        "tiny_random_wav2vec2_ctc",
+        "whisper_cpp_tiny_en_q5",
+        "qwen3_asr_0_6b_gguf",
+        "smollm_135m_gguf"
+      ],
+      "notes": "Runs every currently staged/runnable CPU-format fixture on the same generated SAPI speech input, including the public int8 Generic ONNX CTC fixture and public Qwen3 ASR GGUF+mmproj fixture, then validates SmolLM grading and comparative report artifacts. Some included tiny HF fixtures are structural and not quality-bearing."
+    },
+    "same_media_multi_model_directml_set": {
+      "kind": "same_media_multi_model_benchmark_directml",
+      "rows": [
+        "same_media_multi_model_smollm_benchmark_directml"
+      ],
+      "includes": [
+        "faster_whisper_tiny_en",
+        "openai_whisper_tiny_pt",
+        "generic_onnx_ctc_fixture",
+        "hf_tiny_random_whisper_safetensors",
+        "tiny_random_wav2vec2_ctc",
+        "whisper_cpp_tiny_en_q5",
+        "qwen3_asr_0_6b_gguf",
+        "smollm_135m_gguf"
+      ],
+      "notes": "Runs the same comparative set as the CPU row with runtime.provider=directml, then asserts the public int8 Generic ONNX CTC leg used DmlExecutionProvider while CPU-only ASR adapters, ASR GGUF+mmproj, and CPU SmolLM grading remain explicitly mixed-provider coverage."
+    },
+    "faster_whisper_tiny_en": {
+      "repo": "Systran/faster-whisper-tiny.en",
+      "kind": "faster_whisper_ctranslate2",
+      "expected_max_mb": 90,
+      "rows": [
+        "cpu_model_smoke",
+        "faster_whisper_ctranslate2",
+        "real_tiny_faster_whisper_report_smoke",
+        "faster_whisper_cpu"
+      ]
+    },
+    "smollm_135m_gguf": {
+      "repo": "HuggingFaceTB/SmolLM-135M-GGUF",
+      "local_path": "Temp/real_tiny_llm_smoke/Models/SmolLM-135M-GGUF/SmolLM-135M.Q4_K_M.gguf",
+      "kind": "gguf_reference_llm",
+      "rows": [
+        "gguf_reference_llm",
+        "gguf_text_llm_reference_only"
+      ]
+    },
+    "hf_whisper_tiny_safetensors": {
+      "repo": "openai/whisper-tiny",
+      "source_url": "https://huggingface.co/openai/whisper-tiny",
+      "kind": "hf_whisper_safetensors",
+      "expected_max_mb": 200,
+      "rows": [
+        "hf_whisper_safetensors",
+        "hf_whisper_safetensors_cpu",
+        "hf_whisper_safetensors_smollm_grading_cpu",
+        "hf_whisper_safetensors_quality_smollm_grading_cpu",
+        "hf_safetensors_asr"
+      ],
+      "notes": "Real Whisper tiny safetensors fixture for quality-bearing CPU validation."
+    },
+    "hf_tiny_random_whisper_safetensors": {
+      "repo": "optimum-internal-testing/tiny-random-whisper",
+      "source_url": "https://huggingface.co/optimum-internal-testing/tiny-random-whisper",
+      "kind": "hf_whisper_safetensors_structural",
+      "rows": [
+        "hf_whisper_safetensors",
+        "hf_whisper_safetensors_cpu",
+        "hf_whisper_safetensors_smollm_grading_cpu"
+      ],
+      "notes": "Tiny random model is for fast load/pipeline regression only; it must not be used for transcript-quality claims."
+    },
+    "tiny_random_wav2vec2_ctc": {
+      "repo": "undermachine/wav2vec2-small-finetuned",
+      "source_url": "https://huggingface.co/undermachine/wav2vec2-small-finetuned",
+      "kind": "hf_safetensors_ctc_structural",
+      "rows": [
+        "hf_safetensors_asr",
+        "hf_safetensors_asr_smollm_grading_cpu",
+        "sharded_safetensors_index"
+      ],
+      "notes": "Small non-Whisper ASR Safetensors fixture with model.safetensors plus Wav2Vec2 CTC config/tokenizer/processor files; still use separate quality-bearing threshold rows before making broad accuracy claims."
+    },
+    "wav2vec2_base_960h_safetensors": {
+      "repo": "facebook/wav2vec2-base-960h",
+      "source_url": "https://huggingface.co/facebook/wav2vec2-base-960h",
+      "kind": "hf_safetensors_ctc_quality",
+      "expected_max_mb": 390,
+      "rows": [
+        "hf_safetensors_asr_quality_smollm_grading_cpu"
+      ],
+      "notes": "Quality-bearing non-Whisper Safetensors fixture. The smaller undermachine/wav2vec2-small-finetuned fixture is retained for structural regression but produced an empty transcript on generated speech."
+    },
+    "onnx_whisper_tiny_en": {
+      "repo": "onnx-community/whisper-tiny.en",
+      "source_url": "https://huggingface.co/onnx-community/whisper-tiny.en",
+      "kind": "onnx_whisper",
+      "expected_max_mb": 1500,
+      "rows": [
+        "amd_directml_onnx_smoke",
+        "intel_directml_onnx_smoke",
+        "intel_openvino_onnx_smoke"
+      ],
+      "notes": "ONNX Whisper package validates provider/runtime handling, but the current generic CTC manifest adapter needs a CTC manifest fixture separately."
+    },
+    "generic_onnx_ctc_fixture": {
+      "repo": "onnx-community/wav2vec2-base-960h-ONNX",
+      "source_url": "https://huggingface.co/onnx-community/wav2vec2-base-960h-ONNX",
+      "file": "onnx/model_int8.onnx",
+      "kind": "generic_onnx_ctc_manifest",
+      "expected_max_mb": 100,
+      "rows": [
+        "generic_onnx_ctc_manifest_v1",
+        "generic_onnx_manifest_cpu",
+        "generic_onnx_ctc_quality_smollm_grading_cpu",
+        "generic_onnx_without_manifest_rejected"
+      ],
+      "notes": "Public int8 Wav2Vec2 CTC ONNX package with vocab.json. The smaller q4f16 graph was probed first but failed ONNX Runtime CPU preflight during graph initialization, so int8 is the smallest probed public CTC quality fixture that completed the app pipeline."
+    },
+    "generated_tiny_onnx_ctc_manifest": {
+      "kind": "generic_onnx_ctc_manifest_generated",
+      "generator": "qa.runtime_matrix.rows.generic_onnx_ctc_tiny",
+      "expected_max_mb": 1,
+      "rows": [
+        "generic_onnx_ctc_manifest_v1",
+        "generic_onnx_manifest_cpu",
+        "generic_onnx_smollm_grading_cpu",
+        "generic_onnx_smollm_grading_directml",
+        "amd_directml_onnx_smoke",
+        "intel_directml_onnx_smoke"
+      ],
+      "notes": "Deterministic generated fixture for provider/session/CTC-decode regression. It proves the app's Generic ONNX CTC manifest path can load an ONNX graph and decode non-numeric text, but it is not a quality-bearing ASR model."
+    },
+    "whisper_cpp_tiny_en_q5": {
+      "repo": "ggerganov/whisper.cpp",
+      "source_url": "https://huggingface.co/ggerganov/whisper.cpp",
+      "file": "ggml-tiny.en-q5_1.bin",
+      "kind": "whisper_cpp_ggml",
+      "rows": [
+        "whisper_cpp_ggml",
+        "whisper_cpp_ggml_smollm_grading",
+        "whisper_cpp_ggml_speech_smollm_grading"
+      ],
+      "notes": "The blank-audio row is structural; the speech SmolLM row uses generated SAPI speech and asserts non-empty transcript plus WER threshold."
+    },
+    "openai_whisper_tiny_pt": {
+      "repo": "openai/whisper",
+      "source_url": "https://github.com/openai/whisper",
+      "file": "tiny.pt",
+      "kind": "openai_whisper_pt",
+      "rows": [
+        "openai_whisper_pt_checksum_verified",
+        "openai_whisper_pt_unknown_blocked",
+        "openai_pt_unverified_blocked"
+      ]
+    },
+    "qwen3_asr_0_6b_gguf": {
+      "repo": "mradermacher/Qwen3-ASR-0.6B-GGUF",
+      "source_url": "https://huggingface.co/mradermacher/Qwen3-ASR-0.6B-GGUF",
+      "file": "Qwen3-ASR-0.6B.Q4_K_M.gguf",
+      "mmproj_file": "Qwen3-ASR-0.6B.mmproj-Q8_0.gguf",
+      "kind": "gguf_asr_mmproj_candidate",
+      "expected_min_mb": 650,
+      "rows": [
+        "hf_downloader_qwen3_asr_gguf_mmproj_layout",
+        "hf_downloader_qwen3_asr_gguf_mmproj_public_listing",
+        "hf_downloader_qwen3_asr_gguf_mmproj_cached_materialization",
+        "hf_downloader_qwen3_asr_gguf_mmproj_noninteractive_flow",
+        "hf_downloader_qwen3_asr_gguf_mmproj_public_noninteractive_flow",
+        "hf_downloader_qwen3_asr_gguf_mmproj_public_download_to_asr",
+        "hf_downloader_qwen3_asr_gguf_mmproj_public_real_download_to_asr",
+        "audio_asr_gguf_mmproj",
+        "gguf_asr_mmproj_pair",
+        "incomplete_audio_asr_gguf_mmproj_rejected"
+      ],
+      "notes": "Quality-bearing public ASR GGUF+mmproj fixture. Q2_K is smaller but generated unusable text on llama-mtmd-cli 9544; Q4_K_M plus the Q8_0 projector produced the generated SAPI smoke phrase with WER 0.0 after Qwen ASR wrapper cleanup. The downloader-layout row verifies the real infix mmproj filename is selected and materialized with model_package.json; the public-listing row verifies the current live Hugging Face repo listing still maps to that ASR choice without downloading large model bytes; the cached-materialization row copies previously downloaded real GGUF bytes through the downloader path and verifies the exact manifest/scanner result; the noninteractive-flow row calls the product HF downloader entrypoint with a live-like multi-projector file list; the public-noninteractive-flow row uses the product HF downloader entrypoint with the live Hugging Face listing while copying only the selected cached real bytes; the public-download-to-ASR row runs the HF-downloaded folder through Qwen ASR inference and SmolLM scoring; the public-real-download-to-ASR row removes cached-byte redirection and uses product download bytes before inference."
+    }
+  }
+}

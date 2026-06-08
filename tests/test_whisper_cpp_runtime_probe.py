@@ -1,5 +1,6 @@
 import sys
 import types
+import builtins
 
 from app.adapters.whisper_cpp_asr import WhisperCppASRAdapter
 
@@ -19,6 +20,14 @@ def install_fake_pywhispercpp(monkeypatch, model_cls):
 
 def test_whisper_cpp_probe_reports_missing_module(monkeypatch):
     clear_pywhispercpp(monkeypatch)
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "pywhispercpp.model":
+            raise ModuleNotFoundError("No module named 'pywhispercpp'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
 
     result = WhisperCppASRAdapter().runtime_probe()
 

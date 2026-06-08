@@ -14,6 +14,7 @@ def make_results(chunk_count: int = 2, words_per_chunk: int = 3) -> dict:
         "runs": [
             {
                 "model": {"candidate_id": "model_a", "display_name": "Model A"},
+                "metrics": {"audio_seconds_per_wall_second": 2.0, "peak_process_memory_mb": 100, "peak_vram_mb": None},
                 "transcript_chunks": [{"chunk_id": chunk["chunk_id"], "text": text} for chunk in chunks],
             }
         ],
@@ -54,6 +55,8 @@ def test_import_llm_reference_validates_and_scores():
     assert scored["status"] == "scored"
     assert scored["score_type"] == "llm_corrected_reference"
     assert scored["scores"]["model_a"]["normalized_wer"] == 0
+    assert scored["scores"]["model_a"]["balanced_score"] == 0.7 + 0.2 + 0.1
+    assert scored["scores"]["model_a"]["balanced_rank"] == 1
 
 
 def test_import_llm_reference_rejects_invalid_source_hash():
@@ -77,3 +80,21 @@ def test_large_reference_scoring_runs_per_chunk_without_global_browser_dp():
 
     assert scores["model_a"]["normalized_wer"] == 0
     assert len(scores["model_a"]["chunk_scores"]) == 500
+
+
+def test_reference_scores_rank_accuracy_before_runtime_when_quality_differs():
+    results = make_results()
+    results["runs"].append(
+        {
+            "model": {"candidate_id": "model_b", "display_name": "Model B"},
+            "metrics": {"audio_seconds_per_wall_second": 10.0, "peak_process_memory_mb": 50, "peak_vram_mb": None},
+            "transcript_chunks": [{"chunk_id": chunk["chunk_id"], "text": "wrong wrong wrong"} for chunk in results["chunk_plan"]["chunks"]],
+        }
+    )
+    reference = make_reference(results)
+
+    scores = score_results_against_reference(results, reference)
+
+    assert scores["model_a"]["balanced_rank"] == 1
+    assert scores["model_b"]["balanced_rank"] == 2
+    assert scores["model_a"]["balanced_score"] > scores["model_b"]["balanced_score"]

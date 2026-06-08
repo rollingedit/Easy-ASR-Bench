@@ -18,7 +18,7 @@ def minimal_results(chunk_count: int = 1) -> dict:
         "runs": [
             {
                 "model": {"candidate_id": "m1", "display_name": "Model One", "precision": "fp32", "backend": "test"},
-                "metrics": {"audio_seconds_per_wall_second": 1.0, "peak_process_memory_mb": 100, "peak_vram_mb": None},
+                "metrics": {"audio_seconds_per_wall_second": 1.0, "peak_process_memory_mb": 100, "peak_vram_mb": None, "vram_measurement_source": "unavailable"},
                 "transcript_chunks": [{"chunk_id": chunk["chunk_id"], "text": "hello"} for chunk in chunks],
                 "errors": [],
             }
@@ -79,3 +79,27 @@ def test_html_report_can_display_precomputed_reference_scores():
     assert "precomputedReferenceScores" in html
     assert "Loaded precomputed LLM-corrected reference scores" in html
     assert "renderScoreboard(latestScores)" in html
+
+
+def test_html_report_separates_balanced_and_runtime_only_rankings():
+    data = minimal_results()
+    data["runtime_rankings"] = {
+        "note": "Runtime rankings do not measure transcript quality.",
+        "rows": [
+            {
+                "runtime_rank": 1,
+                "display_name": "Model One",
+                "speed_percentile": 1.0,
+                "memory_percentile_inverse": 1.0,
+                "speed_audio_seconds_per_wall_second": 1.0,
+                "peak_process_memory_mb": 100,
+                "peak_vram_mb": None,
+            }
+        ],
+    }
+
+    html = build_html_report(data)
+
+    assert "Runtime Ranking" in html
+    assert "Balanced rank requires a corrected reference" in html
+    assert "does not measure transcript quality" in html
