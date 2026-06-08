@@ -14,6 +14,7 @@
     "setup_repair_model_layouts",
     "windows_vc_runtime_repair_contract",
     "python_packaging_tools_repair_contract",
+    "transformers_cpu_dependency_repair_contract",
     "directml_provider_conflict_repair",
     "repair_broken_venv",
     "uninstall_preserve_user_data",
