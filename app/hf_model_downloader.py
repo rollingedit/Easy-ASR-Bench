@@ -627,6 +627,94 @@ def _download_validated_files(
     return downloaded
 
 
+def _candidate_inside_destination(candidate_path: Path, destination: Path) -> bool:
+    try:
+        candidate_resolved = candidate_path.resolve()
+        destination_resolved = destination.resolve()
+    except OSError:
+        return False
+    return destination_resolved in [candidate_resolved, *candidate_resolved.parents]
+
+
+def build_missing_file_repair_plan(
+    ref: HFModelRef,
+    choice: DownloadChoice,
+    repo_files: list[str],
+    destination: Path,
+    unsupported_candidates: list | None = None,
+) -> dict:
+    if unsupported_candidates is None:
+        from .model_scanner import scan_models
+
+        _runnable, unsupported_candidates = scan_models(destination)
+
+    records = []
+    for candidate in unsupported_candidates:
+        candidate_path = Path(getattr(candidate, "path", destination))
+        if not _candidate_inside_destination(candidate_path, destination):
+            continue
+        missing = sorted(set(str(item) for item in getattr(candidate, "missing_files", []) if item))
+        if not missing:
+            continue
+        exact_files: list[str] = []
+        for item in missing:
+            exact_files.extend(_remote_missing_candidates(item, repo_files, choice))
+        exact_files = sorted(set(exact_files) - set(choice.files))
+        same_package_files = [
+            filename
+            for filename in _safe_repair_relative_files(choice, repo_files)
+            if filename not in {*choice.files, *exact_files} and not (destination / local_relative_name(choice, filename)).exists()
+        ]
+        download_files = exact_files or same_package_files
+        if exact_files:
+            repair_action = "download_exact_missing_files"
+        elif same_package_files:
+            repair_action = "download_same_package_sidecars"
+        else:
+            repair_action = "write_llm_file_audit_request"
+        records.append(
+            {
+                "issue_id": f"model_layout:{getattr(candidate, 'candidate_id', 'unknown')}",
+                "status": "needs_repair",
+                "severity": "model_layout",
+                "affected_dependency_group": "",
+                "affected_models": [str(candidate_path)],
+                "adapter_name": str(getattr(candidate, "adapter_name", "")),
+                "container_format": str(getattr(candidate, "container_format", "")),
+                "missing": missing,
+                "exact_repo_files": exact_files,
+                "same_package_files": same_package_files,
+                "safe_download_files": download_files,
+                "can_auto_repair": bool(download_files),
+                "requires_confirmation": bool(download_files),
+                "repair_action": repair_action,
+                "repair_command": "Download the listed exact Hugging Face repo files through Easy ASR Bench.",
+                "block_reason": "" if download_files else "No exact or conservative same-package repair files matched the scanner requirements.",
+            }
+        )
+
+    return {
+        "schema": "easy_asr_bench.model_layout_repair_plan.v1",
+        "repo_id": ref.repo_id,
+        "revision": ref.revision,
+        "selected_choice": {
+            "label": choice.label,
+            "kind": choice.kind,
+            "task_hint": choice.task_hint,
+            "primary_files": list(choice.primary_files),
+            "downloaded_files": list(choice.files),
+        },
+        "destination": str(destination),
+        "records": records,
+        "summary": {
+            "total": len(records),
+            "needs_repair": len(records),
+            "can_auto_repair": sum(1 for record in records if record["can_auto_repair"]),
+            "blocked": sum(1 for record in records if not record["can_auto_repair"]),
+        },
+    }
+
+
 def _parse_llm_recommendation(raw: str, repo_files: list[str], already_selected: set[str]) -> tuple[list[str], str | None]:
     text = raw.strip()
     if not text:
@@ -668,19 +756,20 @@ def offer_missing_file_repair(
     destination: Path,
     input_func=input,
     print_func=print,
-) -> None:
+) -> dict | None:
     from .model_scanner import scan_models
 
     runnable, unsupported = scan_models(destination)
     if runnable:
-        return
+        return None
     missing: list[str] = []
     for candidate in unsupported:
         if destination.resolve() in [candidate.path.resolve(), *candidate.path.resolve().parents]:
             missing.extend(candidate.missing_files)
     missing = sorted(set(item for item in missing if item))
     if not missing:
-        return
+        return None
+    repair_plan = build_missing_file_repair_plan(ref, choice, repo_files, destination, unsupported)
     print_func("")
     print_func("Downloaded package still looks incomplete after rescan.")
     for item in missing:
@@ -697,7 +786,7 @@ def offer_missing_file_repair(
         answer = input_func(f"Download these missing files now? [{key('Y')}/{key('n')}] ").strip().lower()
         if answer not in {"n", "no"}:
             _download_validated_files(ref, choice, repair_files, destination, print_func=print_func)
-            return
+            return repair_plan
         print_func("Skipped exact missing-file repair download.")
 
     same_package_files = [
@@ -715,7 +804,7 @@ def offer_missing_file_repair(
         answer = input_func(f"Download these same-package repair files now? [{key('y')}/{key('N')}] ").strip().lower()
         if answer in {"y", "yes"}:
             _download_validated_files(ref, choice, same_package_files, destination, print_func=print_func)
-            return
+            return repair_plan
         print_func("Skipped same-package repair download.")
 
     print_func("No automatic repair download was attempted for the remaining ambiguous requirements.")
@@ -723,7 +812,7 @@ def offer_missing_file_repair(
     print_func(f"Wrote structured LLM/file-audit request to {destination / 'hf_missing_file_request.json'}")
     answer = input_func(f"Paste validated LLM recommendation JSON now? [{key('y')}/{key('N')}] ").strip().lower()
     if answer not in {"y", "yes"}:
-        return
+        return repair_plan
     raw_recommendation = input_func(prompt_label("Recommendation JSON or file path> ")).strip()
     if raw_recommendation:
         path_text = raw_recommendation.strip('"').strip("'")
@@ -733,10 +822,10 @@ def offer_missing_file_repair(
     recommended_files, error = _parse_llm_recommendation(raw_recommendation, repo_files, set(choice.files))
     if error:
         print_func(error)
-        return
+        return repair_plan
     if not recommended_files:
         print_func("LLM recommendation did not include any new exact repo files to download.")
-        return
+        return repair_plan
     print_func("")
     print_func("Validated LLM-recommended repo files:")
     for index, filename in enumerate(recommended_files, 1):
@@ -744,6 +833,7 @@ def offer_missing_file_repair(
     answer = input_func(f"Download these recommended files now? [{key('y')}/{key('N')}] ").strip().lower()
     if answer in {"y", "yes"}:
         _download_validated_files(ref, choice, recommended_files, destination, print_func=print_func)
+    return repair_plan
 
 
 def write_llm_file_audit_request(
