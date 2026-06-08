@@ -224,6 +224,41 @@ def test_evidence_rows_can_ignore_malformed_rows(tmp_path: Path):
     assert list(rows) == ["known"]
 
 
+def test_merge_release_evidence_adds_strict_evidence_fields(tmp_path: Path):
+    result = tmp_path / "results.json"
+    result.write_text(json.dumps({"ok": True}), encoding="utf-8")
+    merged = merge_manual_rows(
+        {
+            "tag": "v0.3.9",
+            "commit": "abc123",
+            "manual_rows": [{"id": "known", "status": "not_run"}],
+        },
+        {
+            "known": {
+                "id": "known",
+                "status": "pass",
+                "environment": {"system": "Windows", "python": "3.12"},
+                "artifacts": [{"path": str(result), "sha256": "sha256:result"}],
+            }
+        },
+    )
+
+    row = merged["manual_rows"][0]
+    assert row["app_version"] == "v0.3.9"
+    assert row["release_commit"] == "abc123"
+    assert row["environment_summary"] == {"system": "Windows", "python": "3.12"}
+    assert row["results_sha256"] == "sha256:result"
+
+
+def test_merge_release_evidence_hashes_row_file_when_no_result_artifact(tmp_path: Path):
+    evidence = tmp_path / "row.json"
+    evidence.write_text(json.dumps({"id": "known", "status": "pass"}), encoding="utf-8")
+    rows = evidence_rows(tmp_path)
+    merged = merge_manual_rows({"manual_rows": [{"id": "known", "status": "not_run"}]}, rows)
+
+    assert merged["manual_rows"][0]["results_sha256"].startswith("sha256:")
+
+
 def test_verify_release_transcript_rejects_self_hash_and_checksum_mismatch(tmp_path: Path):
     assets = tmp_path / "assets"
     assets.mkdir()
