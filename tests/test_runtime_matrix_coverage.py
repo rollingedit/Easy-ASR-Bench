@@ -107,6 +107,7 @@ def test_runtime_matrix_includes_native_runtime_prerequisite_rows():
     assert ROWS["python_packaging_tools_repair_contract"].module == "qa.runtime_matrix.rows.python_packaging_repair"
     assert ROWS["transformers_cpu_dependency_repair_contract"].module == "qa.runtime_matrix.rows.transformers_dependency_repair"
     assert ROWS["media_tools_dependency_repair_contract"].module == "qa.runtime_matrix.rows.media_tools_repair"
+    assert ROWS["llama_mtmd_dependency_repair_contract"].module == "qa.runtime_matrix.rows.llama_mtmd_repair"
     assert ROWS["windows_directml_provider"].module == "qa.runtime_matrix.rows.windows_directml_provider"
     assert ROWS["directml_provider_conflict_repair"].module == "qa.runtime_matrix.rows.windows_directml_provider"
     assert ROWS["windows_vulkan_runtime"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
@@ -161,6 +162,23 @@ def test_media_tools_dependency_repair_contract_row_records_ffmpeg_runtime_resol
     assert "requirements/core.txt" in row["details"]["repair_command"]
     assert row["details"]["backend_probe"]["kind"] == "media_tools_ffmpeg_probe"
     assert row["details"]["runtime_status"]["ffmpeg_path"]
+    assert row["details"]["runtime_resolution_path"]
+
+
+def test_llama_mtmd_dependency_repair_contract_row_records_native_runtime_resolution(tmp_path):
+    from qa.runtime_matrix.rows import llama_mtmd_repair
+
+    row = llama_mtmd_repair.run("llama_mtmd_dependency_repair_contract", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    assert row["details"]["missing_before"] == ["llama-mtmd-cli or llama-cpp-python Qwen3ASRChatHandler"]
+    assert row["details"]["missing_after"] == []
+    assert row["details"]["install_kind"] == "native_tool"
+    assert row["details"]["repair_action"] == "install_missing"
+    assert row["details"]["backend_probe"]["kind"] == "llama_mtmd_runtime_probe"
+    assert "ggml.llamacpp" in row["details"]["repair_command"]
+    assert row["details"]["runtime_status"]["path"].endswith("llama-mtmd-cli.exe")
+    assert row["details"]["runtime_resolution"]["runtime_path"].endswith("llama-mtmd-cli.exe")
     assert row["details"]["runtime_resolution_path"]
 
 
