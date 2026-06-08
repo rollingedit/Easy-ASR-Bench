@@ -80,6 +80,15 @@ def test_release_verification_documents_repair_all_safe_runtime_row():
     assert "--install-deps" in text
 
 
+def test_release_verification_documents_model_layout_repair_runtime_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row setup_repair_model_layouts" in text
+    assert "hf_model_layout_repair_plan.json" in text
+    assert "model_layout_repair_sweep.json" in text
+    assert "last_execution" in text
+
+
 def test_release_verification_documents_clean_vm_bootstrap_runtime_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 
