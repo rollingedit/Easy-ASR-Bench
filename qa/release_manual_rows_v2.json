@@ -46,6 +46,7 @@
       "onnxruntime_cuda_tiny_session": "not_run",
       "faster_whisper_ctranslate2_cuda_smoke": "not_run",
       "llama_cpp_cuda_smollm_smoke": "not_run",
+      "llama_cpp_vulkan_smollm_smoke": "not_run",
       "amd_directml_onnx_smoke": "not_run",
       "intel_directml_onnx_smoke": "not_run",
       "intel_openvino_onnx_smoke": "not_run",

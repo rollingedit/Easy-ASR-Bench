@@ -547,12 +547,18 @@ def llama_cpp_gpu_capable() -> bool:
             return False
     except (ModuleNotFoundError, ValueError):
         return False
+    code = (
+        "try:\n"
+        "    from llama_cpp import llama_supports_gpu_offload\n"
+        "    print('EASY_ASR_LLAMA_GPU_OFFLOAD=' + ('1' if llama_supports_gpu_offload() else '0'))\n"
+        "except Exception:\n"
+        "    print('EASY_ASR_LLAMA_GPU_OFFLOAD=0')\n"
+    )
     try:
-        from llama_cpp import llama_supports_gpu_offload
-
-        return bool(llama_supports_gpu_offload())
+        completed = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True, timeout=30)
     except Exception:
         return False
+    return "EASY_ASR_LLAMA_GPU_OFFLOAD=1" in completed.stdout
 
 
 LLAMA_MTMD_CLI_NAMES = ("llama-mtmd-cli.exe", "llama-mtmd-cli")
@@ -876,7 +882,7 @@ def resolve_llama_cpp_wheel(config: dict, accelerator: str) -> LlamaCppWheelDeci
         if tag not in LLAMA_CPP_CUDA_WHEEL_TAGS:
             tag = "cu124"
         index_url = f"https://abetlen.github.io/llama-cpp-python/whl/{tag}"
-        pip_args = ("--extra-index-url", index_url, "llama-cpp-python")
+        pip_args = ("--upgrade", "--force-reinstall", "--no-deps", "--index-url", index_url, "llama-cpp-python")
         return LlamaCppWheelDecision(
             accelerator="cuda",
             extra_index_url=index_url,
@@ -887,7 +893,7 @@ def resolve_llama_cpp_wheel(config: dict, accelerator: str) -> LlamaCppWheelDeci
         )
     if accelerator == "vulkan":
         index_url = LLAMA_CPP_VULKAN_WHEEL_INDEX
-        pip_args = ("--extra-index-url", index_url, "llama-cpp-python")
+        pip_args = ("--upgrade", "--force-reinstall", "--no-deps", "--index-url", index_url, "llama-cpp-python")
         if vulkan_detected():
             return LlamaCppWheelDecision(
                 accelerator="vulkan",

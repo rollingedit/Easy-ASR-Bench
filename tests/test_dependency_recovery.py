@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from app.config import DEFAULT_CONFIG
-from app.dependency_manager import ACCELERATOR_OVERRIDES, CUDA_INSTALL_OVERRIDES, acceleration_install_decision, cuda_diagnostics, cuda_install_decision, dependency_status, huggingface_cache_status, install_group_for_config, llama_cpp_cuda_tag_for_driver, llama_mtmd_cli_status, media_tools_status, missing_modules_for_config, recovery_command, recovery_command_for_config, requirement_version_issues, resolve_llama_cpp_wheel, visual_cpp_redistributable_status
+from app.dependency_manager import ACCELERATOR_OVERRIDES, CUDA_INSTALL_OVERRIDES, acceleration_install_decision, cuda_diagnostics, cuda_install_decision, dependency_status, huggingface_cache_status, install_group_for_config, llama_cpp_cuda_tag_for_driver, llama_cpp_gpu_capable, llama_mtmd_cli_status, media_tools_status, missing_modules_for_config, recovery_command, recovery_command_for_config, requirement_version_issues, resolve_llama_cpp_wheel, visual_cpp_redistributable_status
 from app.doctor import run_doctor, run_real_smoke_validation
 from app.main import _dependency_install_confirmation, ensure_dependencies, warn_runtime_dependency_fallbacks
 from app.repair_plan import backend_probe_for_group, build_repair_plan, execute_repair_plan
@@ -102,6 +102,17 @@ def test_media_tools_status_reports_missing_imageio_ffmpeg(monkeypatch):
 
     assert status["available"] is False
     assert status["missing"] == ["imageio_ffmpeg"]
+
+
+def test_llama_cpp_gpu_capable_uses_isolated_marker_probe(monkeypatch):
+    monkeypatch.setattr("app.dependency_manager.importlib.util.find_spec", lambda module: object())
+
+    class Completed:
+        stdout = "native log\nEASY_ASR_LLAMA_GPU_OFFLOAD=1\n"
+
+    monkeypatch.setattr("app.dependency_manager.subprocess.run", lambda *args, **kwargs: Completed())
+
+    assert llama_cpp_gpu_capable() is True
 
 
 def test_llama_mtmd_group_reports_native_runtime_without_blocking_text_llm(monkeypatch):
@@ -1090,6 +1101,8 @@ def test_llama_uses_vulkan_when_available_without_nvidia(monkeypatch):
     assert decision["accelerator"] == "vulkan"
     assert decision["extra_index_url"].endswith("/vulkan")
     assert "llama-cpp-python" in decision["pip_args"]
+    assert "--force-reinstall" in decision["pip_args"]
+    assert "--index-url" in decision["pip_args"]
 
 
 def test_llama_vulkan_prefers_prebuilt_wheel_without_sdk(monkeypatch):
@@ -1159,7 +1172,7 @@ def test_llama_cpp_cuda_resolver_uses_selected_prebuilt_index(monkeypatch):
 
     assert decision.supported is True
     assert decision.extra_index_url.endswith("/cu130")
-    assert decision.pip_args == ("--extra-index-url", decision.extra_index_url, "llama-cpp-python")
+    assert decision.pip_args == ("--upgrade", "--force-reinstall", "--no-deps", "--index-url", decision.extra_index_url, "llama-cpp-python")
 
 
 def test_llama_cpp_cuda_python_313_falls_back_cpu(monkeypatch):

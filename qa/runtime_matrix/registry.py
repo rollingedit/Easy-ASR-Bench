@@ -66,6 +66,7 @@ ROWS: dict[str, RowDefinition] = {
     "onnxruntime_cuda_tiny_session": row("onnxruntime_cuda_tiny_session", "qa.runtime_matrix.rows.cuda_provider_matrix", hardware="nvidia_cuda"),
     "faster_whisper_ctranslate2_cuda_smoke": row("faster_whisper_ctranslate2_cuda_smoke", "qa.runtime_matrix.rows.cuda_provider_matrix", hardware="nvidia_cuda"),
     "llama_cpp_cuda_smollm_smoke": row("llama_cpp_cuda_smollm_smoke", "qa.runtime_matrix.rows.cuda_provider_matrix", hardware="nvidia_cuda"),
+    "llama_cpp_vulkan_smollm_smoke": row("llama_cpp_vulkan_smollm_smoke", "qa.runtime_matrix.rows.windows_vulkan_runtime", hardware="vulkan"),
     "amd_directml_onnx_smoke": row("amd_directml_onnx_smoke", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny", hardware="directml"),
     "intel_directml_onnx_smoke": row("intel_directml_onnx_smoke", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny", hardware="intel_directml"),
     "intel_openvino_onnx_smoke": row("intel_openvino_onnx_smoke", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny", hardware="intel_openvino"),

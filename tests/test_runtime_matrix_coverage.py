@@ -106,6 +106,7 @@ def test_runtime_matrix_includes_native_runtime_prerequisite_rows():
     assert ROWS["onnxruntime_cuda_tiny_session"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
     assert ROWS["faster_whisper_ctranslate2_cuda_smoke"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
     assert ROWS["llama_cpp_cuda_smollm_smoke"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
+    assert ROWS["llama_cpp_vulkan_smollm_smoke"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
     assert ROWS["faster_whisper_cuda_unavailable_cpu_fallback"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
     assert ROWS["vulkan_runtime_no_sdk"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
 
@@ -119,6 +120,7 @@ def test_release_manual_matrix_includes_granular_cuda_rows():
         "onnxruntime_cuda_tiny_session",
         "faster_whisper_ctranslate2_cuda_smoke",
         "llama_cpp_cuda_smollm_smoke",
+        "llama_cpp_vulkan_smollm_smoke",
     } <= ids
 
 
@@ -526,6 +528,20 @@ def test_granular_cuda_rows_emit_pass_or_blocked_evidence(tmp_path):
         if row["status"] == "blocked":
             assert row["block_reason"]
             assert row["external_requirement"]
+
+
+def test_llama_cpp_vulkan_smollm_row_emits_pass_or_blocked_evidence(tmp_path):
+    from qa.runtime_matrix.rows import windows_vulkan_runtime
+
+    row = windows_vulkan_runtime.run("llama_cpp_vulkan_smollm_smoke", tmp_path, False, False)
+
+    assert row["status"] in {"pass", "blocked"}
+    assert "cuda_provider_checks" in row["details"]
+    assert "repair_command" in row["details"]
+    assert "llama_cpp_gpu_offload_before" in row["details"]
+    if row["status"] == "blocked":
+        assert row["block_reason"]
+        assert row["external_requirement"]
 
 
 def test_faster_whisper_cuda_fallback_row_records_runtime_plan(tmp_path):
