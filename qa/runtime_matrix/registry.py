@@ -123,6 +123,7 @@ ROWS: dict[str, RowDefinition] = {
     "generic_onnx_smollm_grading_cpu": row("generic_onnx_smollm_grading_cpu", "qa.runtime_matrix.rows.generic_onnx_smollm_grading"),
     "generic_onnx_smollm_grading_directml": row("generic_onnx_smollm_grading_directml", "qa.runtime_matrix.rows.generic_onnx_smollm_grading", hardware="directml"),
     "generic_onnx_ctc_quality_smollm_grading_cpu": row("generic_onnx_ctc_quality_smollm_grading_cpu", "qa.runtime_matrix.rows.generic_onnx_smollm_grading"),
+    "real_public_media_generic_onnx_ctc_smollm_grading_cpu": row("real_public_media_generic_onnx_ctc_smollm_grading_cpu", "qa.runtime_matrix.rows.generic_onnx_smollm_grading", hardware="network"),
     "generic_onnx_without_manifest_rejected": row("generic_onnx_without_manifest_rejected", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"),
     "multi_file_onnx_ar_nar": row("multi_file_onnx_ar_nar", "qa.runtime_matrix.rows.multi_file_onnx_ar_nar"),
     "audio_asr_gguf_mmproj": row("audio_asr_gguf_mmproj", "qa.runtime_matrix.rows.gguf_asr_mmproj", hardware="asr_gguf_mmproj_fixture"),

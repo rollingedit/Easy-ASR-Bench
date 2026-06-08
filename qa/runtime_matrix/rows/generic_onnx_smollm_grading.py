@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 import urllib.request
@@ -19,6 +20,7 @@ from app.scoring import wer
 from qa.run_real_tiny_model_smoke import REFERENCE_TEXT, generate_windows_sapi_wav, smoke_config
 from qa.runtime_matrix.common import dependency_resolution_report_failures, package_versions, write_row
 from qa.runtime_matrix.rows.generic_onnx_ctc_tiny import _provider_for_row, _write_tiny_ctc_fixture
+from qa.runtime_matrix.rows.real_public_media_faster_whisper_smollm import _download_fixture
 from qa.runtime_matrix.rows.smollm_reference_grading_report import SMOLLM_PATH, _smollm_candidate
 
 
@@ -136,6 +138,28 @@ def _write_public_ctc_manifest(model_dir: Path) -> Path:
     return path
 
 
+def _find_cached_public_ctc_fixture() -> Path | None:
+    folder_name = GENERIC_ONNX_QUALITY_REPO.replace("/", "__")
+    for root_name in ("Temp", "Models", "Cache"):
+        root = Path.cwd() / root_name
+        if not root.exists():
+            continue
+        for candidate in root.rglob(folder_name):
+            if not candidate.is_dir():
+                continue
+            if (candidate / "model.onnx").exists() and (candidate / "vocab.json").exists():
+                return candidate
+    return None
+
+
+def _copy_cached_public_ctc_fixture(source: Path, destination: Path) -> None:
+    if destination.exists():
+        shutil.rmtree(destination)
+    ignore = shutil.ignore_patterns(".hf_cache", "__pycache__")
+    shutil.copytree(source, destination, ignore=ignore)
+    _write_public_ctc_manifest(destination)
+
+
 def _ensure_public_ctc_fixture(row_id: str, evidence_dir: Path, allow_downloads: bool, artifacts: list[Path]) -> dict | Path:
     model_dir = evidence_dir / "Models" / GENERIC_ONNX_QUALITY_REPO.replace("/", "__")
     model_path = model_dir / "model.onnx"
@@ -143,6 +167,10 @@ def _ensure_public_ctc_fixture(row_id: str, evidence_dir: Path, allow_downloads:
     manifest_path = model_dir / "modelbench.json"
     if model_path.exists() and vocab_path.exists():
         _write_public_ctc_manifest(model_dir)
+        return model_dir
+    cached = _find_cached_public_ctc_fixture()
+    if cached is not None:
+        _copy_cached_public_ctc_fixture(cached, model_dir)
         return model_dir
     if not allow_downloads:
         return write_row(
@@ -198,6 +226,25 @@ def _reference_for_text(results: dict, text: str) -> dict:
             for chunk in results.get("chunk_plan", {}).get("chunks", [])
         ],
         "global_notes": ["Reference text is the known Windows SAPI smoke phrase used for quality-bearing runtime validation."],
+    }
+
+
+def _reference_for_public_media(results: dict, text: str) -> dict:
+    return {
+        "schema": "easy_asr_bench.llm_reference.v1",
+        "source_sha256": results["source"]["sha256"],
+        "reference_type": "llm_corrected_reference",
+        "segments": [
+            {
+                "chunk_id": chunk["chunk_id"],
+                "start_seconds": chunk["start_seconds"],
+                "end_seconds": chunk["end_seconds"],
+                "text": text,
+                "uncertain": ["single-word public media smoke; WER is recorded but not release-gated"],
+            }
+            for chunk in results.get("chunk_plan", {}).get("chunks", [])
+        ],
+        "global_notes": ["Reference text comes from the public real-media fixture manifest."],
     }
 
 
@@ -357,8 +404,179 @@ def _run_public_quality(row_id: str, evidence_dir: Path, install_deps: bool, all
     )
 
 
+def _run_real_public_media_quality(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bool) -> dict:
+    provider = "cpu"
+    dependency_block = _ensure_onnx_deps(row_id, evidence_dir, provider, install_deps, [SMOLLM_PATH])
+    if dependency_block is not None:
+        return dependency_block
+    try:
+        import onnx  # noqa: F401
+        import onnxruntime  # noqa: F401
+    except ModuleNotFoundError as exc:
+        return write_row(
+            row_id,
+            "blocked",
+            evidence_dir,
+            summary="ONNX dependency group is not installed, so real public Generic ONNX CTC validation cannot run.",
+            block_reason=f"missing {exc.name}",
+            external_requirement=recovery_command_for_config("onnx", smoke_config(evidence_dir, provider)),
+            details={"dependency_versions": package_versions(["onnx", "onnxruntime", "onnxruntime-directml"])},
+            artifacts=[SMOLLM_PATH],
+        )
+    fixture_or_row = _ensure_public_ctc_fixture(row_id, evidence_dir, allow_downloads, [SMOLLM_PATH])
+    if isinstance(fixture_or_row, dict):
+        return fixture_or_row
+    model_dir = fixture_or_row
+    source, fixture_details, fixture_error = _download_fixture("wikimedia_cc0_word_wav", evidence_dir, allow_downloads)
+    if fixture_error or source is None:
+        return write_row(
+            row_id,
+            "blocked" if not allow_downloads else "fail",
+            evidence_dir,
+            summary="Real public media fixture is not available for Generic ONNX CTC ASR+SmolLM validation.",
+            block_reason=fixture_error if not allow_downloads else None,
+            external_requirement="rerun with --allow-downloads after source/license review" if not allow_downloads else None,
+            details={"repo_id": GENERIC_ONNX_QUALITY_REPO, **fixture_details},
+            artifacts=[SMOLLM_PATH, model_dir / "model.onnx", model_dir / "vocab.json", model_dir / "modelbench.json"],
+        )
+    config = smoke_config(evidence_dir, provider)
+    config["runtime"]["cpu_threads"] = 1
+    config["runtime"]["max_chunk_seconds"] = 5
+    config["runtime"]["chunk_stride_seconds"] = 0
+    config["runtime"]["llm_context_tokens"] = 1024
+    config["runtime"]["llm_reference_max_tokens"] = 128
+    config["runtime"]["llm_reference_temperature"] = 0.0
+
+    runnable, unsupported = scan_models(model_dir)
+    candidates = [candidate for candidate in runnable if candidate.adapter_name == "generic_onnx_manifest"]
+    if not candidates:
+        return write_row(
+            row_id,
+            "fail",
+            evidence_dir,
+            summary=f"{GENERIC_ONNX_QUALITY_REPO} did not scan as a runnable Generic ONNX CTC manifest model.",
+            details={
+                "repo_id": GENERIC_ONNX_QUALITY_REPO,
+                **fixture_details,
+                "runnable": [candidate.adapter_name for candidate in runnable],
+                "unsupported": [{"adapter_name": candidate.adapter_name, "missing": candidate.missing_files, "warnings": candidate.warnings} for candidate in unsupported],
+            },
+            artifacts=[SMOLLM_PATH, model_dir / "model.onnx", model_dir / "vocab.json", model_dir / "modelbench.json", source],
+        )
+    llm_candidate, scan_details = _smollm_candidate()
+    if llm_candidate is None:
+        return write_row(
+            row_id,
+            "fail",
+            evidence_dir,
+            summary="SmolLM GGUF was not classified as a reference/correction LLM candidate.",
+            details={"repo_id": GENERIC_ONNX_QUALITY_REPO, **fixture_details, "smollm_scan": scan_details},
+            artifacts=[SMOLLM_PATH, model_dir / "model.onnx", model_dir / "vocab.json", model_dir / "modelbench.json", source],
+        )
+
+    output_dir = process_file_with_candidates(source, [candidates[0]], config, unsupported, reference_llm=llm_candidate)
+    if output_dir is None:
+        return write_row(
+            row_id,
+            "fail",
+            evidence_dir,
+            summary="Generic ONNX CTC real public-media row did not produce a report directory.",
+            details={"repo_id": GENERIC_ONNX_QUALITY_REPO, **fixture_details, "smollm_scan": scan_details},
+            artifacts=[SMOLLM_PATH, model_dir / "model.onnx", model_dir / "vocab.json", model_dir / "modelbench.json", source],
+        )
+    results = json.loads((output_dir / "results.json").read_text(encoding="utf-8"))
+    runs = results.get("runs", [])
+    transcript = "\n".join(chunk.get("text", "") for run in runs for chunk in run.get("transcript_chunks", []))
+    expected_text = fixture_details["fixture"].get("expected_text") or ""
+    normalized_wer = wer(expected_text, transcript, normalized=True) if expected_text and transcript.strip() else 1.0
+    reference = _reference_for_public_media(results, expected_text)
+    scored = import_llm_reference(results, "SmolLM corrected reference fixture:\n```json\n" + json.dumps(reference) + "\n```")
+    scored_path = output_dir / "scored_report.json"
+    scored_path.write_text(json.dumps(scored, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    scored_results = dict(results)
+    if scored.get("status") == "scored":
+        scored_results["reference_scores"] = scored["scores"]
+    scored_html = output_dir / "compare_scored.html"
+    scored_html.write_text(build_html_report(scored_results), encoding="utf-8", newline="\n")
+
+    dependency_report_failures, dependency_report_details = dependency_resolution_report_failures(results, expected_groups={"onnx", "llama_cpp"})
+    failures: list[str] = list(dependency_report_failures)
+    if not transcript.strip():
+        failures.append("Generic ONNX CTC public-media transcript was empty")
+    for name in ["results.json", "results.txt", "benchmark.csv", "compare.html", "scored_report.json", "compare_scored.html"]:
+        if not (output_dir / name).exists():
+            failures.append(f"missing report artifact {name}")
+    scored_html_text = scored_html.read_text(encoding="utf-8")
+    if "Loaded precomputed LLM-corrected reference scores" not in scored_html_text:
+        failures.append("compare_scored.html missing precomputed score marker")
+    run_id = runs[0]["model"]["candidate_id"] if runs else ""
+    score = scored.get("scores", {}).get(run_id, {})
+    if scored.get("status") != "scored" or score.get("normalized_wer") is None:
+        failures.append("Generic ONNX CTC public-media scored reference was not produced")
+
+    return write_row(
+        row_id,
+        "pass" if not failures else "fail",
+        evidence_dir,
+        summary=(
+            "Generic ONNX CTC transcribed real public Wikimedia media, then SmolLM scoring/report validation completed."
+            if not failures
+            else "Generic ONNX CTC real public-media SmolLM grading validation failed."
+        ),
+        details={
+            "repo_id": GENERIC_ONNX_QUALITY_REPO,
+            "model_file": GENERIC_ONNX_QUALITY_MODEL_FILE,
+            "adapter_name": "generic_onnx_manifest",
+            **fixture_details,
+            "generic_onnx_runnable_count": len(candidates),
+            "generic_onnx_unsupported_count": len(unsupported),
+            "smollm_scan": scan_details,
+            "transcript": transcript,
+            "expected_text": expected_text,
+            "normalized_wer": normalized_wer,
+            "quality_bearing": True,
+            "quality_note": "Single-word public-media WER is recorded but not release-gated.",
+            "output_dir": str(output_dir),
+            "score_status": scored.get("status"),
+            "generic_onnx_ctc_score": {
+                "candidate_id": run_id,
+                "normalized_wer": score.get("normalized_wer"),
+                "balanced_score": score.get("balanced_score"),
+                "balanced_rank": score.get("balanced_rank"),
+                "alignment_mode": score.get("alignment_mode"),
+            },
+            "dependency_versions": package_versions(["onnx", "onnxruntime", "onnxruntime-directml", "llama-cpp-python"]),
+            **dependency_report_details,
+            "rejected_smaller_candidate": {
+                "repo_id": GENERIC_ONNX_QUALITY_REPO,
+                "model_file": "onnx/model_q4f16.onnx",
+                "observed_failure": "ONNX Runtime CPU preflight failed during graph initialization on MatMulNBits/SimplifiedLayerNormFusion; int8 is the smallest probed public CTC candidate that completed this row.",
+            },
+            "failures": failures,
+        },
+        artifacts=[
+            SMOLLM_PATH,
+            model_dir / "model.onnx",
+            model_dir / "vocab.json",
+            model_dir / "modelbench.json",
+            source,
+            output_dir / "results.json",
+            output_dir / "results.txt",
+            output_dir / "benchmark.csv",
+            output_dir / "compare.html",
+            scored_path,
+            scored_html,
+        ],
+    )
+
+
 def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: bool) -> dict:
-    if row_id not in {"generic_onnx_smollm_grading_cpu", "generic_onnx_smollm_grading_directml", "generic_onnx_ctc_quality_smollm_grading_cpu"}:
+    if row_id not in {
+        "generic_onnx_smollm_grading_cpu",
+        "generic_onnx_smollm_grading_directml",
+        "generic_onnx_ctc_quality_smollm_grading_cpu",
+        "real_public_media_generic_onnx_ctc_smollm_grading_cpu",
+    }:
         return write_row(
             row_id,
             "fail",
@@ -390,6 +608,8 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
         )
     if row_id == "generic_onnx_ctc_quality_smollm_grading_cpu":
         return _run_public_quality(row_id, evidence_dir, _install_deps, _allow_downloads)
+    if row_id == "real_public_media_generic_onnx_ctc_smollm_grading_cpu":
+        return _run_real_public_media_quality(row_id, evidence_dir, _install_deps, _allow_downloads)
     try:
         import onnx  # noqa: F401
         import onnxruntime  # noqa: F401
