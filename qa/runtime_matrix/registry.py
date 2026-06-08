@@ -95,6 +95,7 @@ ROWS: dict[str, RowDefinition] = {
     "hf_whisper_safetensors_smollm_grading_cpu": row("hf_whisper_safetensors_smollm_grading_cpu", "qa.runtime_matrix.rows.hf_safetensors_smollm_grading"),
     "hf_whisper_sharded_safetensors_smollm_grading_cpu": row("hf_whisper_sharded_safetensors_smollm_grading_cpu", "qa.runtime_matrix.rows.hf_safetensors_smollm_grading"),
     "hf_whisper_safetensors_quality_smollm_grading_cpu": row("hf_whisper_safetensors_quality_smollm_grading_cpu", "qa.runtime_matrix.rows.hf_safetensors_smollm_grading"),
+    "real_public_media_hf_whisper_safetensors_smollm_grading_cpu": row("real_public_media_hf_whisper_safetensors_smollm_grading_cpu", "qa.runtime_matrix.rows.hf_safetensors_smollm_grading", hardware="network"),
     "hf_safetensors_asr_smollm_grading_cpu": row("hf_safetensors_asr_smollm_grading_cpu", "qa.runtime_matrix.rows.hf_safetensors_smollm_grading"),
     "hf_safetensors_asr_quality_smollm_grading_cpu": row("hf_safetensors_asr_quality_smollm_grading_cpu", "qa.runtime_matrix.rows.hf_safetensors_smollm_grading"),
     "sharded_safetensors_index": row("sharded_safetensors_index", "qa.runtime_matrix.rows.safetensors_classification"),

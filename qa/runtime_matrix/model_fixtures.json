@@ -57,9 +57,10 @@
         "real_media_download_cache",
         "real_public_media_faster_whisper_smollm_grading",
         "real_public_media_openai_whisper_pt_smollm_grading",
-        "real_public_media_whisper_cpp_ggml_smollm_grading"
+        "real_public_media_whisper_cpp_ggml_smollm_grading",
+        "real_public_media_hf_whisper_safetensors_smollm_grading_cpu"
       ],
-      "notes": "CC0/public-domain-dedicated spoken-word WAV from Wikimedia Commons. Used for real web-media normalization and faster-whisper/OpenAI Whisper .pt/whisper.cpp plus SmolLM scored-report validation; WER is recorded but not release-gated because this is a single-word public-media smoke fixture."
+      "notes": "CC0/public-domain-dedicated spoken-word WAV from Wikimedia Commons. Used for real web-media normalization and faster-whisper/OpenAI Whisper .pt/whisper.cpp/HF Whisper Safetensors plus SmolLM scored-report validation; WER is recorded but not release-gated because this is a single-word public-media smoke fixture."
     },
     "wikimedia_public_domain_spoken_words_webm": {
       "source_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Spoken%20Words.webm",
@@ -82,6 +83,7 @@
         "real_public_media_faster_whisper_smollm_grading",
         "real_public_media_openai_whisper_pt_smollm_grading",
         "real_public_media_whisper_cpp_ggml_smollm_grading",
+        "real_public_media_hf_whisper_safetensors_smollm_grading_cpu",
         "real_public_video_faster_whisper_smollm_grading",
         "llama_cpp_cuda_smollm_smoke",
         "llama_cpp_vulkan_smollm_smoke"
@@ -97,9 +99,10 @@
         "hf_whisper_safetensors_cpu",
         "hf_whisper_safetensors_smollm_grading_cpu",
         "hf_whisper_safetensors_quality_smollm_grading_cpu",
+        "real_public_media_hf_whisper_safetensors_smollm_grading_cpu",
         "hf_safetensors_asr"
       ],
-      "notes": "Real Whisper tiny safetensors fixture for quality-bearing CPU validation."
+      "notes": "Real Whisper tiny safetensors fixture for quality-bearing CPU validation, including generated speech and real public Wikimedia WAV ASR+SmolLM rows."
     },
     "hf_tiny_random_whisper_safetensors": {
       "repo": "optimum-internal-testing/tiny-random-whisper",

@@ -216,11 +216,13 @@ def test_release_verification_documents_required_safetensors_quality_rows():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 
     assert "qa\\runtime_matrix\\run_row.py --row hf_whisper_safetensors_quality_smollm_grading_cpu" in text
+    assert "qa\\runtime_matrix\\run_row.py --row real_public_media_hf_whisper_safetensors_smollm_grading_cpu" in text
     assert "qa\\runtime_matrix\\run_row.py --row hf_safetensors_asr_quality_smollm_grading_cpu" in text
     assert "qa\\runtime_matrix\\run_row.py --row hf_whisper_sharded_safetensors_smollm_grading_cpu" in text
     assert "`openai/whisper-tiny` Safetensors" in text
     assert "`facebook/wav2vec2-base-960h`" in text
     assert "structural sharded-loading evidence" in text
+    assert "Wikimedia CC0 WAV fixture" in text
 
 
 def test_release_verification_documents_faster_whisper_pkg_resources_repair_row():
