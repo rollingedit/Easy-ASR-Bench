@@ -35,7 +35,7 @@ from qa.runtime_matrix.rows.whisper_cpp_ggml import MODEL_URL as WHISPER_CPP_MOD
 from qa.runtime_matrix.rows.whisper_cpp_ggml import _download_model as _download_whisper_cpp_model
 
 
-GROUPS = ["faster_whisper", "onnx", "transformers_cpu", "whisper_cpp", "openai_whisper", "llama_cpp", "llama_mtmd"]
+GROUPS = ["media_tools", "faster_whisper", "onnx", "transformers_cpu", "whisper_cpp", "openai_whisper", "llama_cpp", "llama_mtmd"]
 REQUIRED_ADAPTERS = {
     "faster_whisper",
     "openai_whisper_pt",

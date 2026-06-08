@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from app.config import DEFAULT_CONFIG
-from app.dependency_manager import ACCELERATOR_OVERRIDES, CUDA_INSTALL_OVERRIDES, acceleration_install_decision, cuda_diagnostics, cuda_install_decision, dependency_status, huggingface_cache_status, install_group_for_config, llama_cpp_cuda_tag_for_driver, llama_mtmd_cli_status, missing_modules_for_config, recovery_command, recovery_command_for_config, requirement_version_issues, resolve_llama_cpp_wheel, visual_cpp_redistributable_status
+from app.dependency_manager import ACCELERATOR_OVERRIDES, CUDA_INSTALL_OVERRIDES, acceleration_install_decision, cuda_diagnostics, cuda_install_decision, dependency_status, huggingface_cache_status, install_group_for_config, llama_cpp_cuda_tag_for_driver, llama_mtmd_cli_status, media_tools_status, missing_modules_for_config, recovery_command, recovery_command_for_config, requirement_version_issues, resolve_llama_cpp_wheel, visual_cpp_redistributable_status
 from app.doctor import run_doctor, run_real_smoke_validation
 from app.main import _dependency_install_confirmation, ensure_dependencies, warn_runtime_dependency_fallbacks
 from app.repair_plan import backend_probe_for_group, build_repair_plan, execute_repair_plan
@@ -15,6 +15,10 @@ def test_dependency_status_includes_descriptions_and_repair_commands():
     assert DEFAULT_CONFIG["dependency_install"]["allow_cuda_install"] is True
     assert DEFAULT_CONFIG["dependency_install"]["prefer_cpu_safe_defaults"] is False
     assert status["onnx"]["description"]
+    assert status["media_tools"]["description"]
+    assert status["media_tools"]["requirement_file"] == "requirements/core.txt"
+    assert "pip install -r requirements/core.txt" in status["media_tools"]["recovery_command"]
+    assert "runtime_status" in status["media_tools"]
     assert status["onnx"]["requirement_file"] == "requirements/onnx.txt"
     assert "pip install -r requirements/onnx.txt" in status["onnx"]["recovery_command"]
     assert "requirements/onnx_cuda.txt" in status["onnx"]["cuda_recovery_command"]
@@ -50,6 +54,54 @@ def test_transformers_cpu_group_includes_full_hf_asr_runtime_stack():
     modules = set(DEPENDENCY_GROUPS["transformers_cpu"].modules)
 
     assert {"torch", "transformers", "safetensors", "sentencepiece", "google.protobuf", "torchaudio"} <= modules
+
+
+def test_media_tools_status_reports_ffmpeg_executable(monkeypatch, tmp_path: Path):
+    ffmpeg = tmp_path / "ffmpeg.exe"
+    ffmpeg.write_text("", encoding="utf-8")
+    ffprobe = tmp_path / "ffprobe.exe"
+    ffprobe.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr("app.dependency_manager.module_available", lambda module: module == "imageio_ffmpeg")
+
+    class ImageioFFmpeg:
+        @staticmethod
+        def get_ffmpeg_exe():
+            return str(ffmpeg)
+
+    monkeypatch.setitem(__import__("sys").modules, "imageio_ffmpeg", ImageioFFmpeg)
+
+    status = media_tools_status()
+
+    assert status["available"] is True
+    assert status["ffmpeg_path"] == str(ffmpeg)
+    assert status["ffprobe_available"] is True
+
+
+def test_media_tools_status_reports_missing_executable(monkeypatch, tmp_path: Path):
+    missing = tmp_path / "missing-ffmpeg.exe"
+    monkeypatch.setattr("app.dependency_manager.module_available", lambda module: module == "imageio_ffmpeg")
+
+    class ImageioFFmpeg:
+        @staticmethod
+        def get_ffmpeg_exe():
+            return str(missing)
+
+    monkeypatch.setitem(__import__("sys").modules, "imageio_ffmpeg", ImageioFFmpeg)
+
+    status = media_tools_status()
+
+    assert status["available"] is False
+    assert status["missing"] == ["ffmpeg executable"]
+
+
+def test_media_tools_status_reports_missing_imageio_ffmpeg(monkeypatch):
+    monkeypatch.setattr("app.dependency_manager.module_available", lambda module: False)
+
+    status = media_tools_status()
+
+    assert status["available"] is False
+    assert status["missing"] == ["imageio_ffmpeg"]
 
 
 def test_llama_mtmd_group_reports_native_runtime_without_blocking_text_llm(monkeypatch):
@@ -807,6 +859,24 @@ def test_repair_backend_probe_records_ctranslate2_native_probe(monkeypatch):
     assert [item["module"] for item in probe["imports"]["loaded"]] == ["faster_whisper", "ctranslate2", "pkg_resources"]
     assert probe["accelerator_probe"]["requested"] is False
     assert probe["accelerator_probe"]["ok"] is True
+
+
+def test_repair_backend_probe_records_media_tool_status(monkeypatch):
+    monkeypatch.setattr(
+        "app.dependency_manager.media_tools_status",
+        lambda: {
+            "available": True,
+            "ffmpeg_path": "C:/tools/ffmpeg.exe",
+            "ffprobe_available": False,
+            "missing": [],
+        },
+    )
+
+    probe = backend_probe_for_group("media_tools", {})
+
+    assert probe["kind"] == "media_tools_ffmpeg_probe"
+    assert probe["ok"] is True
+    assert probe["runtime_status"]["ffmpeg_path"] == "C:/tools/ffmpeg.exe"
 
 
 def test_repair_backend_probe_separates_llama_cpp_import_from_gpu_offload(monkeypatch):
