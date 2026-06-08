@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,6 +21,7 @@ from qa.runtime_matrix.rows.smollm_reference_grading_report import SMOLLM_PATH, 
 
 HF_WHISPER_QUALITY_REPO = "openai/whisper-tiny"
 HF_CTC_QUALITY_REPO = "facebook/wav2vec2-base-960h"
+HF_WHISPER_SHARDED_REPO = "optimum-internal-testing/tiny-random-whisper"
 
 
 def _reference_for(results: dict, text: str) -> dict:
@@ -106,6 +108,34 @@ def _ensure_repo(row_id: str, evidence_dir: Path, repo_id: str, allow_downloads:
             artifacts=artifacts,
         )
     return model_dir
+
+
+def _materialize_sharded_whisper(source_dir: Path, sharded_dir: Path) -> list[Path]:
+    index_files = list(sharded_dir.glob("*.safetensors.index*.json"))
+    shard_files = list(sharded_dir.glob("*.safetensors"))
+    if index_files and len(shard_files) > 1:
+        return [*index_files, *shard_files]
+
+    from transformers import AutoModelForSpeechSeq2Seq
+
+    if sharded_dir.exists():
+        shutil.rmtree(sharded_dir)
+    sharded_dir.mkdir(parents=True)
+    model = AutoModelForSpeechSeq2Seq.from_pretrained(source_dir, local_files_only=True)
+    model.save_pretrained(sharded_dir, safe_serialization=True, max_shard_size="50KB")
+    for path in source_dir.rglob("*"):
+        if not path.is_file():
+            continue
+        lower_name = path.name.lower()
+        if lower_name.endswith(".safetensors") or ".safetensors.index" in lower_name:
+            continue
+        if ".hf_cache" in path.parts:
+            continue
+        target = sharded_dir / path.relative_to(source_dir)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.exists():
+            shutil.copy2(path, target)
+    return [*sharded_dir.glob("*.safetensors.index*.json"), *sharded_dir.glob("*.safetensors")]
 
 
 def _run_whisper_quality(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bool) -> dict:
@@ -361,6 +391,7 @@ def _run_ctc_quality(row_id: str, evidence_dir: Path, install_deps: bool, allow_
 def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bool) -> dict:
     if row_id not in {
         "hf_whisper_safetensors_smollm_grading_cpu",
+        "hf_whisper_sharded_safetensors_smollm_grading_cpu",
         "hf_safetensors_asr_smollm_grading_cpu",
         "hf_whisper_safetensors_quality_smollm_grading_cpu",
         "hf_safetensors_asr_quality_smollm_grading_cpu",
@@ -441,6 +472,33 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
                 external_requirement=f"network access to https://huggingface.co/{repo_id}",
                 details={"repo_id": repo_id, "adapter_name": adapter_name},
                 artifacts=[SMOLLM_PATH],
+            )
+
+    sharded_artifacts: list[Path] = []
+    if row_id == "hf_whisper_sharded_safetensors_smollm_grading_cpu":
+        try:
+            sharded_dir = evidence_dir / "Models" / "tiny-random-whisper-sharded-safetensors"
+            sharded_artifacts = _materialize_sharded_whisper(model_dir, sharded_dir)
+            model_dir = sharded_dir
+        except Exception as exc:
+            return write_row(
+                row_id,
+                "blocked",
+                evidence_dir,
+                summary="Could not materialize a complete sharded Whisper Safetensors fixture.",
+                block_reason=f"{type(exc).__name__}: {exc}",
+                external_requirement=f"download and load {HF_WHISPER_SHARDED_REPO}, then save_pretrained(..., safe_serialization=True, max_shard_size='50KB')",
+                details={"repo_id": HF_WHISPER_SHARDED_REPO, "dependency_versions": package_versions(["torch", "transformers", "safetensors"])},
+                artifacts=[SMOLLM_PATH, *model_dir.glob("*.safetensors")],
+            )
+        if len([path for path in sharded_artifacts if path.suffix == ".safetensors"]) < 2 or not any(".safetensors.index" in path.name for path in sharded_artifacts):
+            return write_row(
+                row_id,
+                "fail",
+                evidence_dir,
+                summary="Sharded Whisper Safetensors fixture did not produce multiple shards plus an index.",
+                details={"sharded_artifacts": [str(path) for path in sharded_artifacts]},
+                artifacts=[SMOLLM_PATH, *sharded_artifacts],
             )
 
     runnable, unsupported = scan_models(model_dir)
@@ -576,6 +634,8 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
             "transcript": transcript,
             "quality_bearing": False,
             "quality_note": "Tiny Safetensors fixture is used for structural backend/report regression only; real WER proof remains pending.",
+            "sharded_safetensors": row_id == "hf_whisper_sharded_safetensors_smollm_grading_cpu",
+            "sharded_artifacts": [str(path) for path in sharded_artifacts],
             "metrics": result.metrics,
             "errors": result.errors,
             "output_dir": str(output_dir),
@@ -597,6 +657,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
         artifacts=[
             SMOLLM_PATH,
             *model_dir.glob("*.safetensors"),
+            *model_dir.glob("*.safetensors.index*.json"),
             output_dir / "results.json",
             output_dir / "results.txt",
             output_dir / "benchmark.csv",

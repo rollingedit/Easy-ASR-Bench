@@ -76,9 +76,21 @@
       "rows": [
         "hf_whisper_safetensors",
         "hf_whisper_safetensors_cpu",
-        "hf_whisper_safetensors_smollm_grading_cpu"
+        "hf_whisper_safetensors_smollm_grading_cpu",
+        "hf_whisper_sharded_safetensors_smollm_grading_cpu"
       ],
       "notes": "Tiny random model is for fast load/pipeline regression only; it must not be used for transcript-quality claims."
+    },
+    "hf_tiny_random_whisper_sharded_safetensors": {
+      "repo": "optimum-internal-testing/tiny-random-whisper",
+      "source_url": "https://huggingface.co/optimum-internal-testing/tiny-random-whisper",
+      "kind": "hf_whisper_sharded_safetensors_structural",
+      "generator": "AutoModelForSpeechSeq2Seq.save_pretrained(..., safe_serialization=True, max_shard_size='50KB')",
+      "rows": [
+        "hf_whisper_sharded_safetensors_smollm_grading_cpu",
+        "sharded_safetensors_index"
+      ],
+      "notes": "Materializes the tiny random Whisper fixture into multiple Safetensors shards plus an index, then runs the normal HF Whisper ASR path followed by SmolLM report/scoring validation. This proves complete sharded Safetensors loading; it is structural, not quality-bearing."
     },
     "tiny_random_wav2vec2_ctc": {
       "repo": "undermachine/wav2vec2-small-finetuned",
