@@ -9,14 +9,36 @@ def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
+def _status_rank(row: dict) -> int:
+    return {"pass": 4, "fail": 3, "blocked": 2, "not_run": 1}.get(str(row.get("status", "unknown")), 0)
+
+
+def _row_with_source(row: dict, row_path: Path) -> dict:
+    output = dict(row)
+    output["evidence_path"] = str(row_path)
+    return output
+
+
+def _merge_duplicate_row(existing: dict, incoming: dict) -> dict:
+    variants = list(existing.get("merged_evidence_variants") or [existing])
+    variants.extend(incoming.get("merged_evidence_variants") or [incoming])
+    best = max(variants, key=_status_rank)
+    output = dict(best)
+    output["merged_evidence_variants"] = variants
+    return output
+
+
 def evidence_rows(evidence_dir: Path) -> dict[str, dict]:
     rows: dict[str, dict] = {}
     for row_path in sorted(evidence_dir.rglob("row.json")):
-        row = load_json(row_path)
+        row = _row_with_source(load_json(row_path), row_path)
         row_id = row.get("id")
         if not isinstance(row_id, str) or not row_id:
             raise SystemExit(f"Evidence row missing id: {row_path}")
-        rows[row_id] = row
+        if row_id in rows:
+            rows[row_id] = _merge_duplicate_row(rows[row_id], row)
+        else:
+            rows[row_id] = row
     return rows
 
 
