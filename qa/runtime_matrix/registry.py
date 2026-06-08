@@ -47,6 +47,7 @@ ROWS: dict[str, RowDefinition] = {
     "hf_downloader_qwen3_asr_gguf_mmproj_public_noninteractive_flow": row("hf_downloader_qwen3_asr_gguf_mmproj_public_noninteractive_flow", "qa.runtime_matrix.rows.hf_downloader_layouts", hardware="network"),
     "hf_downloader_qwen3_asr_gguf_mmproj_public_download_to_asr": row("hf_downloader_qwen3_asr_gguf_mmproj_public_download_to_asr", "qa.runtime_matrix.rows.hf_downloader_layouts", hardware="network"),
     "hf_downloader_qwen3_asr_gguf_mmproj_public_real_download_to_asr": row("hf_downloader_qwen3_asr_gguf_mmproj_public_real_download_to_asr", "qa.runtime_matrix.rows.hf_downloader_layouts", hardware="network"),
+    "hf_downloader_supported_outcome_taxonomy": row("hf_downloader_supported_outcome_taxonomy", "qa.runtime_matrix.rows.hf_downloader_layouts"),
     "same_media_multi_model_smollm_benchmark": row("same_media_multi_model_smollm_benchmark", "qa.runtime_matrix.rows.same_media_multi_model_smollm_benchmark"),
     "same_media_multi_model_smollm_benchmark_directml": row("same_media_multi_model_smollm_benchmark_directml", "qa.runtime_matrix.rows.same_media_multi_model_smollm_benchmark", hardware="directml"),
     "compare_html_offline_large_transcript": row("compare_html_offline_large_transcript", "qa.runtime_matrix.rows.report_reference_validation"),
