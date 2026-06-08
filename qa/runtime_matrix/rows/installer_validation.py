@@ -10,6 +10,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+from app.doctor import run_model_layout_repair_sweep
+from app import hf_model_downloader
 from qa.runtime_matrix.common import ROOT, write_row
 
 
@@ -397,6 +399,103 @@ def _setup_repair_all_safe(row_id: str, evidence_dir: Path, install_deps: bool) 
     )
 
 
+def _write_model_layout_repair_fixture(evidence_dir: Path) -> tuple[Path, Path, Path]:
+    config_path, folders = _write_isolated_config(evidence_dir)
+    model_dir = Path(folders["models"]) / "owner__tiny-asr"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    (model_dir / "model.safetensors").write_bytes(b"fixture model bytes")
+    plan_path = model_dir / "hf_model_layout_repair_plan.json"
+    plan = {
+        "schema": "easy_asr_bench.model_layout_repair_plan.v1",
+        "repo_id": "owner/tiny-asr",
+        "revision": None,
+        "selected_choice": {
+            "label": "tiny safetensors ASR",
+            "kind": "safetensors",
+            "task_hint": "metadata_required",
+            "primary_files": ["model.safetensors"],
+            "downloaded_files": ["model.safetensors"],
+        },
+        "destination": str(model_dir),
+        "records": [
+            {
+                "issue_id": "model_layout:tiny-asr-missing-config",
+                "status": "needs_repair",
+                "repair_action": "download_exact_missing_files",
+                "safe_download_files": ["config.json"],
+                "can_auto_repair": True,
+                "requires_confirmation": True,
+                "block_reason": "",
+            }
+        ],
+        "summary": {"total": 1, "needs_repair": 1, "can_auto_repair": 1, "blocked": 0},
+    }
+    plan_path.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return config_path, model_dir, plan_path
+
+
+def _setup_repair_model_layouts(row_id: str, evidence_dir: Path) -> dict:
+    config_path, model_dir, plan_path = _write_model_layout_repair_fixture(evidence_dir)
+    original_list_repo_files = hf_model_downloader.list_repo_files
+    original_download_file = hf_model_downloader._download_file
+
+    def fake_list_repo_files(ref) -> list[str]:
+        if ref.repo_id != "owner/tiny-asr":
+            raise RuntimeError(f"unexpected repo: {ref.repo_id}")
+        return ["model.safetensors", "config.json"]
+
+    def fake_download_file(repo_id: str, revision: str | None, filename: str, destination: Path, relative_name: str | None = None) -> Path:
+        if repo_id != "owner/tiny-asr" or filename != "config.json":
+            raise RuntimeError(f"unexpected download: {repo_id} {filename}")
+        target = destination / (relative_name or filename)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('{"model_type":"wav2vec2","architectures":["Wav2Vec2ForCTC"]}\n', encoding="utf-8", newline="\n")
+        return target
+
+    try:
+        hf_model_downloader.list_repo_files = fake_list_repo_files
+        hf_model_downloader._download_file = fake_download_file
+        sweep = run_model_layout_repair_sweep(config_path, allow_downloads=True)
+    finally:
+        hf_model_downloader.list_repo_files = original_list_repo_files
+        hf_model_downloader._download_file = original_download_file
+
+    sweep_path = evidence_dir / "model_layout_repair_sweep.json"
+    sweep_path.write_text(json.dumps(sweep, indent=2) + "\n", encoding="utf-8", newline="\n")
+    persisted_plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    execution = persisted_plan.get("last_execution", {})
+    failures = []
+    if sweep.get("schema") != "easy_asr_bench.model_layout_repair_sweep.v1":
+        failures.append("repair sweep schema marker missing")
+    if sweep.get("summary", {}).get("repaired") != 1:
+        failures.append("repair sweep did not repair the persisted model-layout plan")
+    if sweep.get("summary", {}).get("downloaded_files") != 1:
+        failures.append("repair sweep did not record the downloaded sidecar")
+    if sweep.get("summary", {}).get("blocked") != 0 or sweep.get("summary", {}).get("failed") != 0:
+        failures.append("repair sweep reported blocked or failed model-layout repairs")
+    if not (model_dir / "config.json").exists():
+        failures.append("repair sweep did not write the missing config.json sidecar")
+    if execution.get("schema") != "easy_asr_bench.model_layout_repair_execution.v1":
+        failures.append("persisted plan did not record last_execution schema")
+    if execution.get("summary", {}).get("repaired") != 1:
+        failures.append("persisted plan did not record repaired execution")
+    return write_row(
+        row_id,
+        "pass" if not failures else "fail",
+        evidence_dir,
+        summary="setup model-layout repair sweep executes persisted HF sidecar repair plans and records execution evidence." if not failures else "setup model-layout repair validation failed.",
+        details={
+            "config_path": str(config_path),
+            "models_root": str(model_dir.parent),
+            "plan_path": str(plan_path),
+            "sweep_summary": sweep.get("summary", {}),
+            "last_execution_summary": execution.get("summary", {}),
+            "failures": failures,
+        },
+        artifacts=[config_path, plan_path, sweep_path, model_dir / "config.json"],
+    )
+
+
 def _write_fake_install_tree(install_dir: Path) -> dict[str, Path]:
     runtime_paths = [
         install_dir / "app" / "main.py",
@@ -695,6 +794,8 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
         return _setup_doctor_strict(row_id, evidence_dir)
     if row_id == "setup_repair_all_safe":
         return _setup_repair_all_safe(row_id, evidence_dir, _install_deps)
+    if row_id == "setup_repair_model_layouts":
+        return _setup_repair_model_layouts(row_id, evidence_dir)
     if row_id == "update_preserves_user_data":
         return _update_preserves_user_data(row_id, evidence_dir)
     if row_id == "interrupted_download_rollback":

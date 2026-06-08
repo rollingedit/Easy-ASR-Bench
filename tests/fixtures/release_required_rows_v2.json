@@ -7,6 +7,7 @@
     "setup_verify_release_bad_checksum",
     "setup_doctor_strict",
     "setup_repair_all_safe",
+    "setup_repair_model_layouts",
     "repair_broken_venv",
     "uninstall_preserve_user_data",
     "empty_models",

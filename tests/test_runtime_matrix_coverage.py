@@ -36,6 +36,7 @@ def test_required_release_rows_include_bootstrapper_diagnostics_and_repair():
 
     assert "setup_doctor_strict" in data["rows"]
     assert "setup_repair_all_safe" in data["rows"]
+    assert "setup_repair_model_layouts" in data["rows"]
 
 
 def test_required_release_rows_include_same_media_smollm_benchmarks():
@@ -267,6 +268,7 @@ def test_runtime_matrix_maps_safe_installer_validation_rows():
     assert ROWS["setup_dry_run_verify_release"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["setup_doctor_strict"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["setup_repair_all_safe"].module == "qa.runtime_matrix.rows.installer_validation"
+    assert ROWS["setup_repair_model_layouts"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["update_preserves_user_data"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["repair_broken_venv"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["uninstall_preserve_user_data"].module == "qa.runtime_matrix.rows.installer_validation"
@@ -360,6 +362,19 @@ def test_setup_repair_all_safe_row_blocks_before_install_without_permission(tmp_
     assert row["status"] == "blocked"
     assert "--install-deps was not allowed" in row["summary"]
     assert "setup_repair_all_safe --install-deps" in row["external_requirement"]
+
+
+def test_setup_repair_model_layouts_row_executes_persisted_sidecar_plan(tmp_path):
+    from qa.runtime_matrix.rows import installer_validation
+
+    row = installer_validation.run("setup_repair_model_layouts", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    assert row["details"]["sweep_summary"]["repaired"] == 1
+    assert row["details"]["sweep_summary"]["downloaded_files"] == 1
+    assert row["details"]["last_execution_summary"]["repaired"] == 1
+    artifact_names = {Path(artifact["path"]).name for artifact in row["artifacts"]}
+    assert {"config.json", "hf_model_layout_repair_plan.json", "model_layout_repair_sweep.json"} <= artifact_names
 
 
 def test_update_preservation_row_moves_user_data_into_new_install(tmp_path):
