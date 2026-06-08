@@ -370,6 +370,10 @@ def _setup_repair_all_safe(row_id: str, evidence_dir: Path, install_deps: bool) 
     if int(summary.get("backend_probe_failed", 0) or 0) != 0:
         failures.append("one or more dependency backends failed after repair")
     records = repair.get("records", [])
+    if not all(record.get("repair_action") for record in records):
+        failures.append("one or more repair records are missing repair_action")
+    if not all(record.get("after", {}).get("repair_action") for record in records if record.get("after")):
+        failures.append("one or more repair after-states are missing repair_action")
     if not all(record.get("after", {}).get("backend_probe") for record in records if record.get("after", {}).get("repair_result") in {"already_ok", "repaired"}):
         failures.append("one or more repaired/ok records are missing backend_probe evidence")
     if not all(record.get("after", {}).get("runtime_resolution_path") for record in records if record.get("after", {}).get("repair_result") in {"already_ok", "repaired"} and record.get("after", {}).get("backend_probe", {}).get("ok")):

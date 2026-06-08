@@ -465,6 +465,7 @@ def build_repair_plan(config: dict, project_root: Path | None = None, status: di
         acceleration = acceleration_install_decision(config, group)
         command = data.get("accelerator_recovery_command") if acceleration.get("use_accelerator") else data.get("recovery_command")
         can_auto_repair = bool(command) and bool(missing)
+        repair_action = classify_repair_action(missing, can_auto_repair)
         records.append(
             {
                 "issue_id": f"dependency_group:{group}",
@@ -474,6 +475,7 @@ def build_repair_plan(config: dict, project_root: Path | None = None, status: di
                 "affected_models": [],
                 "missing": missing,
                 "can_auto_repair": can_auto_repair,
+                "repair_action": repair_action,
                 "repair_command": str(command or ""),
                 "log_path": str(project_root / "Logs" / f"dependency_install_{group}.log") if can_auto_repair else "",
                 "before": {
@@ -500,6 +502,19 @@ def build_repair_plan(config: dict, project_root: Path | None = None, status: di
     }
 
 
+def classify_repair_action(missing: list[str], can_auto_repair: bool) -> str:
+    if not missing:
+        return "verify_cached"
+    if not can_auto_repair:
+        return "block_no_safe_repair"
+    text = " ".join(str(item).lower() for item in missing)
+    if any(marker in text for marker in ["outdated", "too old", "stale", "version outside", "wrong version", "upgrade"]):
+        return "upgrade_outdated"
+    if any(marker in text for marker in ["conflict", "conflicting", "cpu-only", "wrong provider", "provider hidden", "replace"]):
+        return "replace_conflicting"
+    return "install_missing"
+
+
 def execute_repair_plan(config: dict, project_root: Path | None = None, status: dict[str, dict] | None = None) -> dict:
     project_root = project_root or Path(__file__).resolve().parent.parent
     plan = build_repair_plan(config, project_root=project_root, status=status)
@@ -519,6 +534,7 @@ def execute_repair_plan(config: dict, project_root: Path | None = None, status: 
                         "available": True,
                         "missing": [],
                         "repair_result": "already_ok_cached_resolution",
+                        "repair_action": record.get("repair_action", "verify_cached"),
                         "backend_probe": {
                             "kind": "cached_runtime_resolution",
                             "ok": True,
@@ -540,6 +556,7 @@ def execute_repair_plan(config: dict, project_root: Path | None = None, status: 
                 "available": True,
                 "missing": [],
                 "repair_result": "already_ok",
+                "repair_action": record.get("repair_action", "verify_cached"),
                 "backend_probe": backend_probe,
             }
             if backend_probe.get("ok", False):
@@ -554,11 +571,13 @@ def execute_repair_plan(config: dict, project_root: Path | None = None, status: 
                 "available": False,
                 "missing": list(record["missing"]),
                 "repair_result": "blocked",
+                "repair_action": record.get("repair_action", "block_no_safe_repair"),
                 "block_reason": record["block_reason"] or "No safe automatic repair is available.",
             }
             continue
         attempt = {
             "attempt_number": 1,
+            "repair_action": record.get("repair_action", "install_missing"),
             "repair_command": record["repair_command"],
             "log_path": record["log_path"],
             "status": "running",
@@ -578,6 +597,7 @@ def execute_repair_plan(config: dict, project_root: Path | None = None, status: 
                 "available": False,
                 "missing": list(record["missing"]),
                 "repair_result": "failed",
+                "repair_action": record.get("repair_action", "install_missing"),
                 "error_type": type(exc).__name__,
                 "message": str(exc) or type(exc).__name__,
             }
@@ -588,6 +608,7 @@ def execute_repair_plan(config: dict, project_root: Path | None = None, status: 
             "available": not bool(after_missing),
             "missing": list(after_missing),
             "repair_result": "repaired" if not after_missing else "still_missing",
+            "repair_action": record.get("repair_action", "install_missing"),
             "backend_probe": backend_probe,
         }
         if not after_missing and backend_probe.get("ok", False):

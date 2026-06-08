@@ -146,6 +146,7 @@ def _compact_repair_record(record: dict) -> dict:
     return {
         "dependency_group": record.get("affected_dependency_group", ""),
         "status": record.get("status", ""),
+        "repair_action": record.get("repair_action", after.get("repair_action", "")),
         "repair_result": after.get("repair_result", ""),
         "backend_probe_kind": backend_probe.get("kind", ""),
         "cached_runtime_resolution_status": record.get("cached_runtime_resolution_check", {}).get("status", ""),
