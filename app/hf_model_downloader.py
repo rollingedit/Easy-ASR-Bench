@@ -715,6 +715,13 @@ def build_missing_file_repair_plan(
     }
 
 
+def write_missing_file_repair_plan(destination: Path, plan: dict) -> Path:
+    destination.mkdir(parents=True, exist_ok=True)
+    path = destination / "hf_model_layout_repair_plan.json"
+    path.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return path
+
+
 def _parse_llm_recommendation(raw: str, repo_files: list[str], already_selected: set[str]) -> tuple[list[str], str | None]:
     text = raw.strip()
     if not text:
@@ -770,10 +777,12 @@ def offer_missing_file_repair(
     if not missing:
         return None
     repair_plan = build_missing_file_repair_plan(ref, choice, repo_files, destination, unsupported)
+    repair_plan_path = write_missing_file_repair_plan(destination, repair_plan)
     print_func("")
     print_func("Downloaded package still looks incomplete after rescan.")
     for item in missing:
         print_func(f"  missing: {item}")
+    print_func(f"Wrote model-layout repair plan to {repair_plan_path}")
     repair_files: list[str] = []
     for item in missing:
         repair_files.extend(_remote_missing_candidates(item, repo_files, choice))
