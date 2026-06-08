@@ -2,6 +2,7 @@
   "schema": "easy_asr_bench.release_required_rows.v2",
   "rows": [
     "win11_clean_no_python_setup",
+    "windows_sandbox_clean_bootstrap_deploy",
     "win10_existing_python_setup",
     "install_path_with_spaces",
     "setup_dry_run_json",
