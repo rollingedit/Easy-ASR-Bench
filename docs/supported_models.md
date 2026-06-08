@@ -31,7 +31,7 @@ These package types are recognized so the app can explain what was found, list m
 - sherpa-onnx Whisper folders
 - Split Whisper/Transformers.js ONNX, Granite-style split ONNX, Qwen split ONNX, and ORT edge graph packages
 - Core ML / WhisperKit `.mlmodelc`
-- Complete Audio/ASR GGUF packages with matching `mmproj` projectors, currently recognized as experimental until a real release smoke proves transcription through this app
+- Complete Audio/ASR GGUF packages with matching `mmproj` projectors, runnable through the dependency-gated llama.cpp MTMD path when `llama-mtmd-cli` or `llama-cpp-python` Qwen3ASR support is available
 - Incomplete or mismatched Audio/ASR GGUF packages, including missing or nonmatching `mmproj` projectors
 - Incomplete sharded Hugging Face Safetensors folders with Safetensors index JSON files
 

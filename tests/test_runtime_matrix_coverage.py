@@ -1086,6 +1086,7 @@ def test_required_asr_gguf_mmproj_pair_row_targets_public_runtime_fixture(tmp_pa
     smollm = tmp_path / "SmolLM-135M.Q4_K_M.gguf"
     smollm.write_bytes(b"fixture-smollm")
     monkeypatch.setattr(gguf_asr_mmproj, "SMOLLM_PATH", smollm)
+    monkeypatch.setattr(gguf_asr_mmproj, "LOCAL_PUBLIC_FIXTURE_SEARCH_ROOTS", ())
 
     row = gguf_asr_mmproj.run("gguf_asr_mmproj_pair", tmp_path, False, False)
 
@@ -1094,6 +1095,26 @@ def test_required_asr_gguf_mmproj_pair_row_targets_public_runtime_fixture(tmp_pa
     assert row["details"]["model_file"] == "Qwen3-ASR-0.6B.Q4_K_M.gguf"
     assert row["details"]["mmproj_file"] == "Qwen3-ASR-0.6B.mmproj-Q8_0.gguf"
     assert "--allow-downloads" in row["external_requirement"]
+
+
+def test_asr_gguf_mmproj_required_row_reuses_cached_public_fixture_without_downloads(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import gguf_asr_mmproj
+
+    monkeypatch.chdir(tmp_path)
+    cache = tmp_path / "Temp" / "cached-qwen"
+    cache.mkdir(parents=True)
+    (cache / gguf_asr_mmproj.PUBLIC_QWEN3_ASR_MODEL_FILE).write_bytes(b"cached-qwen-main")
+    (cache / gguf_asr_mmproj.PUBLIC_QWEN3_ASR_MMPROJ_FILE).write_bytes(b"cached-qwen-mmproj")
+    evidence_dir = tmp_path / "evidence" / "gguf_asr_mmproj_pair"
+
+    result = gguf_asr_mmproj._ensure_public_fixture("gguf_asr_mmproj_pair", evidence_dir, allow_downloads=False)
+
+    assert result == evidence_dir / "Models" / "mradermacher__Qwen3-ASR-0.6B-GGUF"
+    assert (result / gguf_asr_mmproj.PUBLIC_QWEN3_ASR_MODEL_FILE).read_bytes() == b"cached-qwen-main"
+    assert (result / gguf_asr_mmproj.PUBLIC_QWEN3_ASR_MMPROJ_FILE).read_bytes() == b"cached-qwen-mmproj"
+    manifest = json.loads((result / "model_package.json").read_text(encoding="utf-8"))
+    assert manifest["artifacts"]["main_model"] == gguf_asr_mmproj.PUBLIC_QWEN3_ASR_MODEL_FILE
+    assert manifest["artifacts"]["projector"] == gguf_asr_mmproj.PUBLIC_QWEN3_ASR_MMPROJ_FILE
 
 
 def test_smollm_reference_grading_row_blocks_without_fixture(tmp_path, monkeypatch):

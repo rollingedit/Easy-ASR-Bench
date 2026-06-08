@@ -282,12 +282,14 @@ def test_asr_gguf_with_mmproj_is_not_text_reference_llm(tmp_path: Path):
 
     runnable, unsupported = scan_models(tmp_path)
 
-    assert not any(candidate.adapter_name == "gguf_asr_mmproj" for candidate in runnable)
-    candidate = next(candidate for candidate in unsupported if candidate.adapter_name == "gguf_asr_mmproj")
+    candidate = next(candidate for candidate in runnable if candidate.adapter_name == "gguf_asr_mmproj")
     assert candidate.container_format == "gguf+mmproj"
     assert candidate.category == "asr"
     assert candidate.missing_files == []
-    assert candidate.metadata["model_status"] == "recognized_experimental"
+    assert candidate.runnable is True
+    assert candidate.runnable_after_dependency_install is True
+    assert candidate.dependency_groups == ["llama_cpp", "llama_mtmd"]
+    assert candidate.metadata["model_status"] == ""
     assert candidate.metadata["mmproj_path"].endswith("mmproj-Qwen3-ASR-1.7B-Q8_0.gguf")
     assert not any(candidate.adapter_name == "gguf_llm_reference" for candidate in unsupported)
 

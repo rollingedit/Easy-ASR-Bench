@@ -50,7 +50,7 @@ The scanner also recognizes common model packages that should not be silently tr
 - sherpa-onnx Whisper packages with matching encoder, decoder, tokens, and optional weights
 - Split Whisper/Transformers.js ONNX, Granite-style split ONNX, Qwen split ONNX, and ORT edge graph packages
 - Core ML / WhisperKit `.mlmodelc` packages, which are not runnable in this Windows-first app
-- Audio/ASR GGUF packages with `mmproj` projectors. Complete pairs are recognized as experimental, not stable runnable ASR, until a real ASR GGUF smoke fixture proves transcription through this app.
+- Audio/ASR GGUF packages with matching `mmproj` projectors. Complete pairs run through the dependency-gated llama.cpp MTMD path when `llama-mtmd-cli` or `llama-cpp-python` Qwen3ASR support is available.
 - Incomplete or mismatched Audio/ASR GGUF packages, including missing or nonmatching `mmproj` projectors
 - Incomplete sharded Hugging Face Safetensors folders, including missing shard detection from Safetensors index JSON files
 
@@ -241,7 +241,7 @@ The smoke artifact is the authority for what was proven in that release. Automat
 
 ## Safety
 
-Easy ASR Bench does not execute arbitrary Python files from model folders. Safetensors are used for Hugging Face ASR folders because they avoid pickle-style checkpoint execution. Generic ONNX models run only through built-in manifest recipes. GGUF text models are treated as local LLMs for reference/correction; Audio/ASR GGUF+projector packages are recognized as experimental until release smoke proves transcription.
+Easy ASR Bench does not execute arbitrary Python files from model folders. Safetensors are used for Hugging Face ASR folders because they avoid pickle-style checkpoint execution. Generic ONNX models run only through built-in manifest recipes. GGUF text models are treated as local LLMs for reference/correction; Audio/ASR GGUF+projector packages require a matching projector and the packaged llama.cpp MTMD runtime path.
 
 ## Troubleshooting
 
