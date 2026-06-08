@@ -87,6 +87,35 @@ def test_unsafe_trusted_config_allows_load_with_warning_path(tmp_path: Path, mon
     assert result.metrics["checkpoint_sha256_verified"] is False
 
 
+def test_openai_whisper_cuda_request_records_cpu_fallback(tmp_path: Path, monkeypatch):
+    path = tmp_path / "tiny.pt"
+    digest = write_checkpoint(path)
+    monkeypatch.setattr(openai_pt, "KNOWN_OFFICIAL_SHA256", {"tiny.pt": digest})
+
+    torch = types.ModuleType("torch")
+    torch.cuda = types.SimpleNamespace(is_available=lambda: False)
+    whisper = types.ModuleType("whisper")
+
+    def fake_load_model(model_path, device=None):
+        return types.SimpleNamespace(device=device or "cpu", transcribe=lambda samples, fp16=False: {"text": "hello"})
+
+    whisper.load_model = fake_load_model
+    monkeypatch.setitem(sys.modules, "torch", torch)
+    monkeypatch.setitem(sys.modules, "whisper", whisper)
+
+    candidate = OpenAIWhisperPTAdapter().discover(tmp_path)[0]
+    adapter = OpenAIWhisperPTAdapter().load(candidate, {"provider": "cuda", "prefer_gpu": True, "fallback_to_cpu": True})
+    result = adapter.transcribe_chunks(
+        [AudioChunk(0, 0.0, 1.0, np.zeros(16000, dtype=np.float32))],
+        [{"chunk_id": "0001", "start_seconds": 0.0, "end_seconds": 1.0}],
+    )
+
+    assert result.metrics["device"] == "cpu"
+    assert result.metrics["provider_summary"]["requested_provider"] == "cuda"
+    assert result.metrics["provider_summary"]["actual_provider"] == "cpu"
+    assert result.metrics["provider_summary"]["fallback_reason"]
+
+
 def test_unsafe_pt_load_is_rejected_without_config(tmp_path: Path, monkeypatch):
     path = tmp_path / "custom.pt"
     write_checkpoint(path)

@@ -37,6 +37,14 @@ def test_transformers_asr_prefer_gpu_without_torch_cuda_uses_cpu():
     assert "CUDA-enabled Torch" in (plan.fallback_reason or "")
 
 
+def test_openai_whisper_prefer_gpu_without_torch_cuda_uses_cpu():
+    plan = resolve_runtime_plan("openai_whisper", {"provider": "auto", "prefer_gpu": True}, HardwareInfo(nvidia=True, torch_cuda_available=False))
+
+    assert plan.actual_provider == "cpu"
+    assert plan.backend_verified is False
+    assert "OpenAI Whisper" in (plan.fallback_reason or "")
+
+
 def test_llama_cpp_prefer_gpu_without_backend_uses_cpu():
     plan = resolve_runtime_plan("llama_cpp", {"provider": "auto", "prefer_gpu": True}, HardwareInfo(nvidia=True, llama_cpp_gpu_offload=False))
 

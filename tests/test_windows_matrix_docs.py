@@ -155,6 +155,15 @@ def test_release_verification_documents_transformers_cuda_fallback_row():
     assert "explicit CPU fallback" in text
 
 
+def test_release_verification_documents_openai_whisper_cuda_fallback_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row openai_whisper_cuda_unavailable_cpu_fallback" in text
+    assert "requirements\\torch_cuda_cu128.txt" in text
+    assert "requirements\\openai_whisper.txt" in text
+    assert "OpenAI Whisper `.pt` CUDA fallback" in text
+
+
 def test_release_verification_documents_generic_onnx_openvino_fallback_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 
