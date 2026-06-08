@@ -6,6 +6,7 @@
     "win10_existing_python_setup": "not_run",
     "first_run_smoke_json": "not_run",
     "windows_vc_runtime_repair_contract": "not_run",
+    "python_packaging_tools_repair_contract": "not_run",
     "directml_provider_conflict_repair": "not_run",
     "install_path_with_spaces": "not_run",
     "setup_verify_release_bad_checksum": "not_run",

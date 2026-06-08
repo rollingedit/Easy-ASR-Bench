@@ -12,6 +12,9 @@ from app.results_writer import dependency_resolution_environment, runtime_enviro
 def test_dependency_status_includes_descriptions_and_repair_commands():
     status = dependency_status()
 
+    assert status["python_packaging"]["description"]
+    assert "pip" in status["python_packaging"]["missing"] or status["python_packaging"]["available"]
+    assert "requirements/python_packaging.txt" in status["python_packaging"]["recovery_command"]
     assert DEFAULT_CONFIG["runtime"]["prefer_gpu"] is True
     assert DEFAULT_CONFIG["dependency_install"]["allow_cuda_install"] is True
     assert DEFAULT_CONFIG["dependency_install"]["prefer_cpu_safe_defaults"] is False
@@ -55,6 +58,17 @@ def test_transformers_cpu_group_includes_full_hf_asr_runtime_stack():
     modules = set(DEPENDENCY_GROUPS["transformers_cpu"].modules)
 
     assert {"torch", "transformers", "safetensors", "sentencepiece", "google.protobuf", "torchaudio"} <= modules
+
+
+def test_python_packaging_group_covers_pkg_resources_repair_prerequisites():
+    from app.dependency_manager import DEPENDENCY_GROUPS
+    from app.repair_plan import GROUP_IMPORT_PROBES
+
+    modules = set(DEPENDENCY_GROUPS["python_packaging"].modules)
+
+    assert {"pip", "setuptools", "pkg_resources"} <= modules
+    assert DEPENDENCY_GROUPS["python_packaging"].requirement_file == "requirements/python_packaging.txt"
+    assert set(GROUP_IMPORT_PROBES["python_packaging"]) == {"pip", "setuptools", "pkg_resources"}
 
 
 def test_media_tools_status_reports_ffmpeg_executable(monkeypatch, tmp_path: Path):
