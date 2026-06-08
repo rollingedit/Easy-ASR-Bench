@@ -33,7 +33,7 @@
         "qwen3_asr_0_6b_gguf",
         "smollm_135m_gguf"
       ],
-      "notes": "Runs the same comparative set as the CPU row with runtime.provider=directml, then asserts the public int8 Generic ONNX CTC leg used DmlExecutionProvider while CPU-only ASR adapters, ASR GGUF+mmproj, and CPU SmolLM grading remain explicitly mixed-provider coverage."
+      "notes": "Runs the same comparative set as the CPU row with runtime.provider=directml, then asserts the public int8 Generic ONNX CTC leg used DmlExecutionProvider while CPU-only ASR adapters, ASR GGUF+mmproj, and CPU SmolLM grading remain explicitly mixed-provider coverage. Some included tiny HF fixtures are structural and not quality-bearing."
     },
     "faster_whisper_tiny_en": {
       "repo": "Systran/faster-whisper-tiny.en",
@@ -129,7 +129,7 @@
         "hf_safetensors_asr_smollm_grading_cpu",
         "sharded_safetensors_index"
       ],
-      "notes": "Small non-Whisper ASR Safetensors fixture with model.safetensors plus Wav2Vec2 CTC config/tokenizer/processor files; still use separate quality-bearing threshold rows before making broad accuracy claims."
+      "notes": "Small non-Whisper ASR Safetensors fixture with model.safetensors plus Wav2Vec2 CTC config/tokenizer/processor files. This fixture is structural and not quality-bearing; use separate quality-bearing threshold rows before making broad accuracy claims."
     },
     "wav2vec2_base_960h_safetensors": {
       "repo": "facebook/wav2vec2-base-960h",

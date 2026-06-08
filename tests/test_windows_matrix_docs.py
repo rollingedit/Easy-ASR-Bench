@@ -168,6 +168,14 @@ def test_release_verification_documents_report_atomic_write_cleanup_row():
     assert "previous complete artifact remains intact" in text
 
 
+def test_release_verification_documents_model_fixture_quality_claims_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row model_fixture_quality_claims" in text
+    assert "structural tiny/random/generated fixtures" in text
+    assert "not quality-bearing" in text
+
+
 def test_release_verification_documents_validate_real_smoke_doctor_mode():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
     setup_text = Path("docs/what_setup_installs.md").read_text(encoding="utf-8")

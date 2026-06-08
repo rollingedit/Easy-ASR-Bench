@@ -121,4 +121,5 @@ ROWS: dict[str, RowDefinition] = {
     "standalone_safetensors_incomplete": row("standalone_safetensors_incomplete", "qa.runtime_matrix.rows.safetensors_classification"),
     "hf_text_llm_safetensors_unsupported": row("hf_text_llm_safetensors_unsupported", "qa.runtime_matrix.rows.safetensors_classification"),
     "known_unsupported_asr_families_explained": row("known_unsupported_asr_families_explained", "qa.runtime_matrix.rows.known_unsupported_asr"),
+    "model_fixture_quality_claims": row("model_fixture_quality_claims", "qa.runtime_matrix.rows.model_fixture_claims"),
 }

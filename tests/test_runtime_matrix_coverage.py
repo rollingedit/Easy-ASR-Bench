@@ -1298,10 +1298,20 @@ def test_runtime_fixture_manifest_covers_core_runtime_formats():
     assert "llama_cpp_vulkan_smollm_smoke" in fixtures["smollm_135m_gguf"]["rows"]
     assert "real_public_media_faster_whisper_smollm_grading" in fixtures["wikimedia_cc0_word_wav"]["rows"]
     assert "real_public_video_faster_whisper_smollm_grading" in fixtures["wikimedia_public_domain_spoken_words_webm"]["rows"]
-
     fixture_ids = set(fixtures)
     for fixture_id, fixture in fixtures.items():
         for row_id in fixture.get("rows", []):
             assert row_id in ROWS, f"{fixture_id} references unknown runtime row {row_id}"
         for included in fixture.get("includes", []):
             assert included in fixture_ids, f"{fixture_id} includes unknown fixture {included}"
+
+
+def test_model_fixture_quality_claims_row_separates_structural_and_quality(tmp_path):
+    from qa.runtime_matrix.rows import model_fixture_claims
+
+    row = model_fixture_claims.run("model_fixture_quality_claims", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    assert row["details"]["structural_fixture_count"] >= 3
+    assert row["details"]["quality_fixture_count"] >= 3
+    assert row["details"]["failures"] == []
