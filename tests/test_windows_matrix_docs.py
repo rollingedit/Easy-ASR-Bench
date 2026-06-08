@@ -241,6 +241,14 @@ def test_release_verification_documents_report_atomic_write_cleanup_row():
     assert "previous complete artifact remains intact" in text
 
 
+def test_release_verification_documents_watched_folder_queue_contract_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row watched_folder_partial_write_queue_contract" in text
+    assert "waits through a partial write" in text
+    assert "completed fast keys are skipped without rehashing" in text
+
+
 def test_release_verification_documents_model_fixture_quality_claims_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 
