@@ -890,6 +890,12 @@ def test_runtime_matrix_maps_openai_whisper_pt_safety_rows():
     assert ROWS["openai_whisper_cuda_unavailable_cpu_fallback"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
 
 
+def test_required_release_rows_include_openai_whisper_pt_checksum_runtime_proof():
+    data = json.loads((ROOT / "tests" / "fixtures" / "release_required_rows_v2.json").read_text(encoding="utf-8"))
+
+    assert "openai_whisper_pt_checksum_verified" in data["rows"]
+
+
 def test_runtime_matrix_maps_whisper_cpp_ggml_row():
     assert ROWS["whisper_cpp_ggml"].module == "qa.runtime_matrix.rows.whisper_cpp_ggml"
     assert ROWS["whisper_cpp_ggml_smollm_grading"].module == "qa.runtime_matrix.rows.whisper_cpp_smollm_grading"
