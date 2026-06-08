@@ -4,6 +4,7 @@
     "win11_clean_no_python_setup",
     "win10_existing_python_setup",
     "install_path_with_spaces",
+    "setup_dry_run_json",
     "setup_verify_release_bad_checksum",
     "setup_doctor_strict",
     "setup_repair_all_safe",

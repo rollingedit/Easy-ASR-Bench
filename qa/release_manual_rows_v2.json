@@ -12,6 +12,7 @@
     "setup_verify_release_bad_checksum": "not_run",
     "setup_double_click_equivalent": "not_run",
     "setup_dry_run_verify_release": "not_run",
+    "setup_dry_run_json": "not_run",
     "setup_doctor_strict": "not_run",
     "setup_repair_all_safe": "not_run",
     "repair_all_safe_failure_isolation": "not_run",

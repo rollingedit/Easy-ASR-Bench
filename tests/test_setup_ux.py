@@ -26,7 +26,9 @@ def test_setup_doctor_forwards_json_and_strict_flags():
     setup = Path("setup.bat").read_text(encoding="utf-8")
 
     assert 'if /I "%~1"=="--doctor"' in setup
-    assert 'if /I "%%~A"=="--json" set DOCTOR_ARGS=!DOCTOR_ARGS! --json' in setup
+    assert 'if /I "%%~A"=="--json" (' in setup
+    assert "set DOCTOR_ARGS=!DOCTOR_ARGS! --json" in setup
+    assert "set SETUP_JSON=1" in setup
     assert 'if /I "%%~A"=="--strict" set DOCTOR_ARGS=!DOCTOR_ARGS! --strict' in setup
     assert 'if /I "%%~A"=="--repair-plan" set DOCTOR_ARGS=!DOCTOR_ARGS! --repair-plan' in setup
     assert 'if /I "%%~A"=="--repair-all-safe" set DOCTOR_ARGS=!DOCTOR_ARGS! --repair-all-safe' in setup
@@ -46,6 +48,15 @@ def test_setup_repair_forwards_repair_mode_to_public_installer():
     assert "set INSTALLER_MODE_ARGS=" in setup
     assert 'if /I "%%~A"=="--repair" set INSTALLER_MODE_ARGS=!INSTALLER_MODE_ARGS! -Repair' in setup
     assert "%INSTALLER_MODE_ARGS%" in setup
+
+
+def test_setup_dry_run_json_emits_machine_readable_contract():
+    setup = Path("setup.bat").read_text(encoding="utf-8")
+
+    assert ":emit_dry_run_json" in setup
+    assert "easy_asr_bench.setup_dry_run.v1" in setup
+    assert "no_files_modified" in setup
+    assert 'if "%SETUP_JSON%"=="1" call :emit_dry_run_json' in setup
 
 
 def test_public_installer_runs_local_setup_without_post_setup_menu():

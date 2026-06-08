@@ -14,6 +14,7 @@ set NEXT_IS_ASSET_DIR=0
 set DOCTOR_ARGS=
 set NO_POST_SETUP_MENU=0
 set INSTALLER_MODE_ARGS=
+set SETUP_JSON=0
 
 for %%A in (%*) do (
   if "!NEXT_IS_ASSET_DIR!"=="1" (
@@ -22,7 +23,10 @@ for %%A in (%*) do (
   ) else (
     if /I "%%~A"=="--verify-release" set VERIFY_RELEASE=1
     if /I "%%~A"=="--asset-dir" set NEXT_IS_ASSET_DIR=1
-    if /I "%%~A"=="--json" set DOCTOR_ARGS=!DOCTOR_ARGS! --json
+    if /I "%%~A"=="--json" (
+      set DOCTOR_ARGS=!DOCTOR_ARGS! --json
+      set SETUP_JSON=1
+    )
     if /I "%%~A"=="--strict" set DOCTOR_ARGS=!DOCTOR_ARGS! --strict
     if /I "%%~A"=="--repair-plan" set DOCTOR_ARGS=!DOCTOR_ARGS! --repair-plan
     if /I "%%~A"=="--repair-all-safe" set DOCTOR_ARGS=!DOCTOR_ARGS! --repair-all-safe
@@ -130,6 +134,7 @@ if not exist "%INSTALLER_PS1%" (
     echo Standalone setup will download and verify it from:
     echo   %INSTALLER_URL%
     echo Use --dry-run --verify-release to validate public release assets.
+    if "%SETUP_JSON%"=="1" call :emit_dry_run_json 0 standalone_download_available
     exit /b 0
   )
   echo Downloading installer script for release verification...
@@ -137,11 +142,15 @@ if not exist "%INSTALLER_PS1%" (
   powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '%INSTALLER_URL%' -OutFile '%INSTALLER_PS1%'"
   if errorlevel 1 (
     echo Could not download installer script.
+    if "%SETUP_JSON%"=="1" call :emit_dry_run_json 1 installer_download_failed
     exit /b 1
   )
 )
 call :verify_sha "%INSTALLER_PS1%" "%INSTALLER_SHA256%" "installer/install.ps1"
-if errorlevel 1 exit /b 1
+if errorlevel 1 (
+  if "%SETUP_JSON%"=="1" call :emit_dry_run_json 1 installer_sha_failed
+  exit /b 1
+)
 if "%VERIFY_RELEASE%"=="1" (
   if "%ASSET_DIR%"=="" (
     powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^
@@ -159,14 +168,18 @@ if "%VERIFY_RELEASE%"=="1" (
       -AssetDir "%ASSET_DIR%" ^
       %INSTALLER_MODE_ARGS%
   )
-  exit /b !ERRORLEVEL!
+  set DRY_RUN_EXIT=!ERRORLEVEL!
+  if "%SETUP_JSON%"=="1" call :emit_dry_run_json !DRY_RUN_EXIT! verify_release
+  exit /b !DRY_RUN_EXIT!
 )
 powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALLER_PS1%" ^
   -InstallDir "%INSTALL_DIR%" ^
   -Version "%APP_VERSION%" ^
   -DryRun ^
   %INSTALLER_MODE_ARGS%
-exit /b !ERRORLEVEL!
+set DRY_RUN_EXIT=!ERRORLEVEL!
+if "%SETUP_JSON%"=="1" call :emit_dry_run_json !DRY_RUN_EXIT! local_or_standalone
+exit /b !DRY_RUN_EXIT!
 
 :doctor
 if exist ".venv\Scripts\python.exe" (
@@ -313,4 +326,15 @@ if /I not "%ACTUAL_SHA%"=="%EXPECTED_SHA%" (
   exit /b 1
 )
 echo Verified %VERIFY_LABEL% SHA256.
+exit /b 0
+
+:emit_dry_run_json
+set JSON_EXIT=%~1
+set JSON_STATUS=%~2
+set "JSON_INSTALL_DIR=%INSTALL_DIR:\=\\%"
+set "JSON_ASSET_DIR="
+if not "%ASSET_DIR%"=="" set "JSON_ASSET_DIR=%ASSET_DIR:\=\\%"
+set JSON_INSTALLER_EXISTS=false
+if exist "%INSTALLER_PS1%" set JSON_INSTALLER_EXISTS=true
+echo {"schema":"easy_asr_bench.setup_dry_run.v1","mode":"dry_run","version":"%APP_VERSION%","status":"%JSON_STATUS%","exit_code":%JSON_EXIT%,"verify_release":%VERIFY_RELEASE%,"installer_exists":%JSON_INSTALLER_EXISTS%,"install_dir":"!JSON_INSTALL_DIR!","asset_dir":"!JSON_ASSET_DIR!","no_files_modified":true}
 exit /b 0

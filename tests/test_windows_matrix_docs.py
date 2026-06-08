@@ -80,6 +80,15 @@ def test_release_verification_documents_repair_all_safe_runtime_row():
     assert "--install-deps" in text
 
 
+def test_release_verification_documents_setup_dry_run_json_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "cmd /c setup.bat --dry-run --local --json" in text
+    assert "qa\\runtime_matrix\\run_row.py --row setup_dry_run_json" in text
+    assert "easy_asr_bench.setup_dry_run.v1" in text
+    assert "no_files_modified=true" in text
+
+
 def test_release_verification_documents_vc_runtime_repair_contract_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 
