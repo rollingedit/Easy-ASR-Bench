@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from app.adapters.gguf_asr_mmproj import GGUFASRMMProjAdapter, extract_cli_transcript, runtime_value
+from app.adapters.gguf_asr_mmproj import GGUFASRMMProjAdapter, extract_cli_transcript, llama_mtmd_cli_path, runtime_value, transcribe_with_cli_backend
 from app.media import AudioChunk
 
 
@@ -157,6 +157,68 @@ def test_runtime_value_accepts_flat_app_config_and_nested_direct_config():
 
 def test_required_dependency_groups_separates_text_llm_and_mtmd_runtime():
     assert GGUFASRMMProjAdapter().required_dependency_groups(None) == ["llama_cpp", "llama_mtmd"]
+
+
+def test_llama_mtmd_cli_path_skips_unprobeable_existing_binary(tmp_path: Path, monkeypatch):
+    blocked = tmp_path / "llama-mtmd-cli.exe"
+    blocked.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr("app.dependency_manager.llama_mtmd_cli_status", lambda config: {"available": False, "path": ""})
+    monkeypatch.setattr(
+        "app.dependency_manager.probe_llama_mtmd_cli_path",
+        lambda path: {"ok": False, "path": str(path), "reason": "permission_denied"},
+    )
+    monkeypatch.setattr("app.adapters.gguf_asr_mmproj.shutil.which", lambda name: str(blocked))
+
+    assert llama_mtmd_cli_path({"llama_cpp": {}}, tmp_path) == ""
+
+
+def test_llama_mtmd_cli_path_reuses_cached_status_runtime_path(tmp_path: Path, monkeypatch):
+    cli = tmp_path / "llama-mtmd-cli.exe"
+    cli.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "app.dependency_manager.llama_mtmd_cli_status",
+        lambda config: {"available": True, "path": str(cli), "source": "cached_runtime_resolution_after_permission_denied"},
+    )
+    monkeypatch.setattr(
+        "app.dependency_manager.probe_llama_mtmd_cli_path",
+        lambda path: (_ for _ in ()).throw(AssertionError("cached status path should skip direct CLI probe")),
+    )
+
+    assert llama_mtmd_cli_path({"llama_cpp": {}}, tmp_path) == str(cli)
+
+
+def test_transcribe_with_cli_backend_retries_transient_permission_denied(tmp_path: Path, monkeypatch):
+    cli = tmp_path / "llama-mtmd-cli.exe"
+    model_path = tmp_path / "model.gguf"
+    mmproj_path = tmp_path / "mmproj.gguf"
+    audio_path = tmp_path / "audio.wav"
+    for path in [cli, model_path, mmproj_path, audio_path]:
+        path.write_text("", encoding="utf-8")
+    calls = {"count": 0}
+
+    class Completed:
+        returncode = 0
+        stdout = "language English<asr_text>easy asr bench real model smoke test"
+        stderr = ""
+
+    def fake_run(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise PermissionError("[WinError 5] Access is denied")
+        return Completed()
+
+    monkeypatch.setattr("app.adapters.gguf_asr_mmproj.subprocess.run", fake_run)
+    monkeypatch.setattr("app.adapters.gguf_asr_mmproj.time.sleep", lambda seconds: None)
+
+    text = transcribe_with_cli_backend(
+        {"cli": cli, "model_path": model_path, "mmproj_path": mmproj_path},
+        audio_path,
+        {"llama_cpp": {"timeout_seconds": 1}},
+    )
+
+    assert calls["count"] == 2
+    assert text == "easy asr bench real model smoke test"
 
 
 def test_extract_cli_transcript_removes_qwen_asr_language_prefix():

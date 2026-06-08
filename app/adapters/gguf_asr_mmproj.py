@@ -18,6 +18,10 @@ from ..precision_detector import detect_from_path
 from ..runtime_plan import resolve_runtime_plan
 
 
+LLAMA_MTMD_TRANSIENT_LAUNCH_ATTEMPTS = 30
+LLAMA_MTMD_TRANSIENT_LAUNCH_BACKOFF_SECONDS = 2.0
+
+
 class GGUFASRMMProjAdapter:
     name = "gguf_asr_mmproj"
 
@@ -240,6 +244,12 @@ def load_python_backend(model_path: Path, mmproj_path: Path, runtime_config: dic
 
 
 def llama_mtmd_cli_path(runtime_config: dict, model_folder: Path) -> str:
+    from ..dependency_manager import llama_mtmd_cli_status
+    from ..dependency_manager import probe_llama_mtmd_cli_path
+
+    status = llama_mtmd_cli_status(runtime_config)
+    if status.get("available") and status.get("path"):
+        return str(status["path"])
     configured = runtime_config.get("llama_cpp", {}).get("mtmd_cli_path", "")
     candidates = [configured] if configured else []
     candidates.extend(
@@ -251,7 +261,7 @@ def llama_mtmd_cli_path(runtime_config: dict, model_folder: Path) -> str:
         ]
     )
     for candidate in candidates:
-        if candidate and Path(candidate).exists():
+        if candidate and probe_llama_mtmd_cli_path(candidate).get("ok"):
             return candidate
     return ""
 
@@ -288,7 +298,18 @@ def transcribe_with_cli_backend(model: dict, audio_path: Path, runtime_config: d
         "--temp",
         str(float(runtime_value(runtime_config, "temperature", 0.0))),
     ]
-    completed = subprocess.run(command, text=True, capture_output=True, timeout=int(runtime_value(runtime_config, "timeout_seconds", 600, "llama_cpp")))
+    timeout_seconds = int(runtime_value(runtime_config, "timeout_seconds", 600, "llama_cpp"))
+    last_error = ""
+    for attempt in range(LLAMA_MTMD_TRANSIENT_LAUNCH_ATTEMPTS):
+        try:
+            completed = subprocess.run(command, text=True, capture_output=True, timeout=timeout_seconds)
+            break
+        except PermissionError as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+            if attempt < LLAMA_MTMD_TRANSIENT_LAUNCH_ATTEMPTS - 1:
+                time.sleep(LLAMA_MTMD_TRANSIENT_LAUNCH_BACKOFF_SECONDS)
+                continue
+            raise RuntimeError(f"llama-mtmd-cli could not be launched after transient access-denied retries: {last_error}") from exc
     if completed.returncode != 0:
         raise RuntimeError((completed.stderr or completed.stdout or f"llama-mtmd-cli exited {completed.returncode}").strip())
     return extract_cli_transcript(completed.stdout or completed.stderr)

@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -583,6 +584,132 @@ def llama_cpp_qwen3_asr_handler_available() -> bool:
         return False
 
 
+def probe_llama_mtmd_cli_path(path: str | Path) -> dict:
+    candidate = Path(path)
+    if not candidate.exists() or not candidate.is_file():
+        return {"ok": False, "path": str(candidate), "reason": "missing"}
+    last_error = ""
+    for attempt in range(6):
+        try:
+            completed = subprocess.run([str(candidate), "--help"], text=True, capture_output=True, timeout=15)
+        except PermissionError as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+            if attempt < 5:
+                time.sleep(1.0)
+                continue
+            return {"ok": False, "path": str(candidate), "reason": "permission_denied", "error": last_error, "attempts": attempt + 1}
+        except Exception as exc:
+            return {"ok": False, "path": str(candidate), "reason": "probe_failed", "error": f"{type(exc).__name__}: {exc}", "attempts": attempt + 1}
+        break
+    output = (completed.stdout or "") + "\n" + (completed.stderr or "")
+    ok = completed.returncode == 0 or "llama" in output.lower() or "usage" in output.lower()
+    return {
+        "ok": ok,
+        "path": str(candidate),
+        "reason": "probe_ok" if ok else "probe_exit_nonzero",
+        "attempts": attempt + 1,
+        "exit_code": completed.returncode,
+        "stdout_tail": (completed.stdout or "")[-500:],
+        "stderr_tail": (completed.stderr or "")[-500:],
+    }
+
+
+def _llama_mtmd_stage_dir(config: dict | None, source: Path) -> Path:
+    cache_root = ""
+    if config:
+        folders = config.get("folders", {})
+        if isinstance(folders, dict):
+            cache_root = str(folders.get("cache") or "")
+    root = Path(cache_root) if cache_root else Path.cwd() / "Cache"
+    safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in source.parent.name) or "llama_mtmd"
+    return root / "native_tools" / "llama_mtmd" / safe_name
+
+
+def _stage_llama_mtmd_runtime_copy(path: str | Path, config: dict | None = None) -> dict:
+    source = Path(path)
+    if not source.exists() or not source.is_file():
+        return {"ok": False, "reason": "source_missing", "source_path": str(source)}
+    destination_dir = _llama_mtmd_stage_dir(config, source)
+    try:
+        if source.parent.resolve() == destination_dir.resolve():
+            return {"ok": True, "path": str(source), "source_path": str(source), "reason": "already_staged"}
+    except OSError:
+        pass
+    try:
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        for item in source.parent.iterdir():
+            if item.is_file():
+                shutil.copy2(item, destination_dir / item.name)
+    except Exception as exc:
+        return {"ok": False, "reason": "stage_copy_failed", "source_path": str(source), "stage_dir": str(destination_dir), "error": f"{type(exc).__name__}: {exc}"}
+    staged = destination_dir / source.name
+    if not staged.exists():
+        return {"ok": False, "reason": "staged_executable_missing", "source_path": str(source), "stage_dir": str(destination_dir)}
+    return {"ok": True, "path": str(staged), "source_path": str(source), "stage_dir": str(destination_dir), "reason": "staged_copy"}
+
+
+def _cached_llama_mtmd_status_after_transient_denial(config: dict | None, rejected: list[dict]) -> dict | None:
+    denied_paths = []
+    for item in rejected:
+        if item.get("reason") != "permission_denied":
+            continue
+        raw_path = str(item.get("path") or "")
+        if not raw_path:
+            continue
+        try:
+            denied_paths.append(str(Path(raw_path).resolve()).lower())
+        except OSError:
+            denied_paths.append(raw_path.lower())
+    if not denied_paths:
+        return None
+    log_dirs: list[Path] = []
+    if config:
+        folders = config.get("folders", {})
+        if isinstance(folders, dict) and folders.get("logs"):
+            log_dirs.append(Path(str(folders["logs"])))
+    log_dirs.append(Path.cwd() / "Logs")
+    log_dirs.append(Path(__file__).resolve().parent.parent / "Logs")
+    seen_dirs: set[str] = set()
+    for log_dir in log_dirs:
+        try:
+            resolved_dir = str(log_dir.resolve()).lower()
+        except OSError:
+            resolved_dir = str(log_dir).lower()
+        if resolved_dir in seen_dirs:
+            continue
+        seen_dirs.add(resolved_dir)
+        path = log_dir / "dependency_resolution_llama_mtmd.json"
+        if not path.exists():
+            continue
+        try:
+            saved = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        runtime_path = str(saved.get("runtime_path") or "")
+        if not runtime_path:
+            continue
+        try:
+            resolved_runtime_path = str(Path(runtime_path).resolve()).lower()
+        except OSError:
+            resolved_runtime_path = runtime_path.lower()
+        if resolved_runtime_path not in denied_paths:
+            continue
+        if (
+            saved.get("schema") == "easy_asr_bench.runtime_resolution.v1"
+            and saved.get("dependency_group") == "llama_mtmd"
+            and saved.get("backend_verified") is True
+            and saved.get("backend_probe_kind") == "llama_mtmd_runtime_probe"
+            and Path(runtime_path).exists()
+            and Path(runtime_path).is_file()
+        ):
+            return {
+                "path": runtime_path,
+                "source_resolution_path": str(path),
+                "resolution": saved,
+            }
+    return None
+
+
 def llama_mtmd_cli_status(config: dict | None = None) -> dict:
     configured = ""
     if config:
@@ -603,26 +730,89 @@ def llama_mtmd_cli_status(config: dict | None = None) -> dict:
             for name in LLAMA_MTMD_CLI_NAMES:
                 candidates.extend(("winget_packages", str(path)) for path in packages_root.glob(f"ggml.llamacpp*/*{name}"))
     checked: list[str] = []
+    rejected: list[dict] = []
+    seen: set[str] = set()
     for source, candidate in candidates:
         if not candidate:
             continue
+        try:
+            resolved_candidate = str(Path(candidate).resolve())
+        except OSError:
+            resolved_candidate = str(candidate)
+        if resolved_candidate.lower() in seen:
+            continue
+        seen.add(resolved_candidate.lower())
         checked.append(candidate)
         path = Path(candidate)
         if path.exists() and path.is_file():
+            probe = probe_llama_mtmd_cli_path(path)
+            if not probe.get("ok"):
+                rejected.append({"source": source, **probe})
+                if probe.get("reason") == "permission_denied":
+                    staged = _stage_llama_mtmd_runtime_copy(path, config)
+                    if staged.get("ok"):
+                        staged_probe = probe_llama_mtmd_cli_path(staged["path"])
+                        if staged_probe.get("ok"):
+                            return {
+                                "available": True,
+                                "path": str(staged["path"]),
+                                "source": "staged_copy_after_permission_denied",
+                                "probe": staged_probe,
+                                "staged_runtime": staged,
+                                "repair_command": LLAMA_MTMD_REPAIR_COMMAND,
+                                "checked": checked,
+                                "rejected": rejected,
+                                "qwen3_asr_handler_available": llama_cpp_qwen3_asr_handler_available(),
+                            }
+                        rejected.append({"source": "staged_copy", **staged_probe, "staged_runtime": staged})
+                    else:
+                        rejected.append({"source": "staged_copy", "ok": False, **staged})
+                continue
             return {
                 "available": True,
                 "path": str(path),
                 "source": source,
+                "probe": probe,
                 "repair_command": LLAMA_MTMD_REPAIR_COMMAND,
                 "checked": checked,
+                "rejected": rejected,
                 "qwen3_asr_handler_available": llama_cpp_qwen3_asr_handler_available(),
             }
+    cached = _cached_llama_mtmd_status_after_transient_denial(config, rejected)
+    if cached is not None:
+        staged = _stage_llama_mtmd_runtime_copy(cached["path"], config)
+        path = cached["path"]
+        source = "cached_runtime_resolution_after_permission_denied"
+        staged_probe = {}
+        if staged.get("ok"):
+            staged_probe = probe_llama_mtmd_cli_path(staged["path"])
+            if staged_probe.get("ok"):
+                path = str(staged["path"])
+                source = "staged_cached_runtime_resolution_after_permission_denied"
+        return {
+            "available": True,
+            "path": path,
+            "source": source,
+            "probe": {
+                "ok": True,
+                "reason": "cached_runtime_resolution_after_transient_permission_denied",
+                "source_resolution_path": cached["source_resolution_path"],
+                "staged_probe": staged_probe,
+            },
+            "repair_command": LLAMA_MTMD_REPAIR_COMMAND,
+            "checked": checked,
+            "rejected": rejected,
+            "staged_runtime": staged,
+            "cached_runtime_resolution": cached["resolution"],
+            "qwen3_asr_handler_available": llama_cpp_qwen3_asr_handler_available(),
+        }
     return {
         "available": False,
         "path": "",
         "source": "",
         "repair_command": LLAMA_MTMD_REPAIR_COMMAND,
         "checked": checked,
+        "rejected": rejected,
         "qwen3_asr_handler_available": llama_cpp_qwen3_asr_handler_available(),
     }
 

@@ -1125,6 +1125,71 @@ def test_asr_gguf_mmproj_required_row_reuses_cached_public_fixture_without_downl
     assert manifest["artifacts"]["projector"] == gguf_asr_mmproj.PUBLIC_QWEN3_ASR_MMPROJ_FILE
 
 
+def test_real_public_faster_whisper_row_reuses_cached_model_repo_without_downloads(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import real_public_media_faster_whisper_smollm
+
+    monkeypatch.chdir(tmp_path)
+    cache = tmp_path / "Temp" / "Systran__faster-whisper-tiny.en"
+    cache.mkdir(parents=True)
+    for name in ["model.bin", "config.json", "tokenizer.json"]:
+        (cache / name).write_text(name, encoding="utf-8")
+    destination_root = tmp_path / "evidence" / "Models"
+
+    result, error = real_public_media_faster_whisper_smollm._ensure_faster_whisper(destination_root, allow_downloads=False)
+
+    assert error is None
+    assert result == destination_root / "Systran__faster-whisper-tiny.en"
+    assert (result / "model.bin").read_text(encoding="utf-8") == "model.bin"
+
+
+def test_same_media_model_staging_reuses_cached_quality_fixtures_without_downloads(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import generic_onnx_smollm_grading
+    from qa.runtime_matrix.rows import gguf_asr_mmproj
+    from qa.runtime_matrix.rows import same_media_multi_model_smollm_benchmark
+
+    monkeypatch.chdir(tmp_path)
+    faster = tmp_path / "Temp" / "Systran__faster-whisper-tiny.en"
+    faster.mkdir(parents=True)
+    for name in ["model.bin", "config.json", "tokenizer.json"]:
+        (faster / name).write_text(name, encoding="utf-8")
+    hf = tmp_path / "Temp" / "undermachine__wav2vec2-small-finetuned"
+    hf.mkdir(parents=True)
+    (hf / "config.json").write_text("{}", encoding="utf-8")
+    (hf / "model.safetensors").write_bytes(b"safe")
+    onnx = tmp_path / "Temp" / "onnx-community__wav2vec2-base-960h-ONNX"
+    onnx.mkdir(parents=True)
+    (onnx / "model.onnx").write_bytes(b"onnx")
+    (onnx / "vocab.json").write_text("{}", encoding="utf-8")
+    qwen = tmp_path / "Temp" / "qwen-cache"
+    qwen.mkdir(parents=True)
+    (qwen / gguf_asr_mmproj.PUBLIC_QWEN3_ASR_MODEL_FILE).write_bytes(b"qwen-main")
+    (qwen / gguf_asr_mmproj.PUBLIC_QWEN3_ASR_MMPROJ_FILE).write_bytes(b"qwen-mmproj")
+    models_root = tmp_path / "evidence" / "Models"
+
+    faster_result, faster_error = same_media_multi_model_smollm_benchmark._ensure_faster_whisper(models_root, allow_downloads=False)
+    hf_result, hf_error = same_media_multi_model_smollm_benchmark._ensure_hf_safetensors(models_root, "undermachine/wav2vec2-small-finetuned", allow_downloads=False)
+    onnx_result, onnx_error, onnx_artifacts = same_media_multi_model_smollm_benchmark._ensure_generic_onnx_quality(models_root, allow_downloads=False)
+    qwen_result, qwen_error, qwen_artifacts = same_media_multi_model_smollm_benchmark._ensure_gguf_asr_mmproj(models_root, allow_downloads=False)
+
+    assert faster_error is None
+    assert faster_result == models_root / "Systran__faster-whisper-tiny.en"
+    assert hf_error is None
+    assert hf_result == models_root / "undermachine__wav2vec2-small-finetuned"
+    assert onnx_error is None
+    assert onnx_result == models_root / "onnx-community__wav2vec2-base-960h-ONNX"
+    assert {path.name for path in onnx_artifacts} == {"model.onnx", "vocab.json", "modelbench.json"}
+    assert json.loads((onnx_result / "modelbench.json").read_text(encoding="utf-8"))["decoding"]["vocab_file"] == "vocab.json"
+    assert qwen_error is None
+    assert qwen_result == models_root / "mradermacher__Qwen3-ASR-0.6B-GGUF"
+    assert {path.name for path in qwen_artifacts} == {
+        gguf_asr_mmproj.PUBLIC_QWEN3_ASR_MODEL_FILE,
+        gguf_asr_mmproj.PUBLIC_QWEN3_ASR_MMPROJ_FILE,
+        "model_package.json",
+    }
+    assert (qwen_result / gguf_asr_mmproj.PUBLIC_QWEN3_ASR_MODEL_FILE).read_bytes() == b"qwen-main"
+    assert generic_onnx_smollm_grading.GENERIC_ONNX_QUALITY_REPO.replace("/", "__") in str(onnx_result)
+
+
 def test_smollm_reference_grading_row_blocks_without_fixture(tmp_path, monkeypatch):
     from qa.runtime_matrix.rows import smollm_reference_grading_report
 

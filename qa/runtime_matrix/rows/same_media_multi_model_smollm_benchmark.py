@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import replace
 from pathlib import Path
 
+from app.adapters.openai_whisper_pt import is_verified_official_checkpoint
 from app.config import load_config
 from app.dependency_manager import cuda_diagnostics, install_group_for_config, missing_modules_for_config, recovery_command_for_config
 from app.hf_model_downloader import RECOMMENDED_BASELINE_REPO, download_hf_model_from_ref
@@ -19,21 +21,28 @@ from qa.runtime_matrix.rows.generic_onnx_smollm_grading import GENERIC_ONNX_QUAL
 from qa.runtime_matrix.rows.generic_onnx_smollm_grading import GENERIC_ONNX_QUALITY_MODEL_URL
 from qa.runtime_matrix.rows.generic_onnx_smollm_grading import GENERIC_ONNX_QUALITY_REPO
 from qa.runtime_matrix.rows.generic_onnx_smollm_grading import GENERIC_ONNX_QUALITY_VOCAB_URL
+from qa.runtime_matrix.rows.generic_onnx_smollm_grading import _copy_cached_public_ctc_fixture
 from qa.runtime_matrix.rows.generic_onnx_smollm_grading import _download as _download_generic_onnx_file
+from qa.runtime_matrix.rows.generic_onnx_smollm_grading import _find_cached_public_ctc_fixture
 from qa.runtime_matrix.rows.generic_onnx_smollm_grading import _write_public_ctc_manifest
 from qa.runtime_matrix.rows.gguf_asr_mmproj import PUBLIC_QWEN3_ASR_MMPROJ_FILE
 from qa.runtime_matrix.rows.gguf_asr_mmproj import PUBLIC_QWEN3_ASR_MMPROJ_URL
 from qa.runtime_matrix.rows.gguf_asr_mmproj import PUBLIC_QWEN3_ASR_MODEL_FILE
 from qa.runtime_matrix.rows.gguf_asr_mmproj import PUBLIC_QWEN3_ASR_MODEL_URL
 from qa.runtime_matrix.rows.gguf_asr_mmproj import PUBLIC_QWEN3_ASR_REPO
+from qa.runtime_matrix.rows.gguf_asr_mmproj import _copy_cached_public_fixture as _copy_cached_gguf_asr_fixture
 from qa.runtime_matrix.rows.gguf_asr_mmproj import _download as _download_gguf_asr_file
+from qa.runtime_matrix.rows.gguf_asr_mmproj import _find_cached_public_fixture as _find_cached_gguf_asr_fixture
 from qa.runtime_matrix.rows.gguf_asr_mmproj import _write_manifest as _write_gguf_asr_manifest
 from qa.runtime_matrix.rows.hf_safetensors_tiny import HF_CTC_REPO, HF_WHISPER_REPO, _download_repo
-from qa.runtime_matrix.rows.openai_whisper_pt_safety import TINY_PT, TINY_PT_URL, _download_official_checkpoint
+from qa.runtime_matrix.rows.openai_whisper_pt_safety import TINY_PT, TINY_PT_SHA256, TINY_PT_URL, _download_official_checkpoint
+from qa.runtime_matrix.rows.real_public_media_faster_whisper_smollm import _find_cached_file as _find_cached_public_media_file
 from qa.runtime_matrix.rows.smollm_reference_grading_report import SMOLLM_PATH, _smollm_candidate
 from qa.runtime_matrix.rows.whisper_cpp_ggml import MODEL_FILE as WHISPER_CPP_MODEL_FILE
+from qa.runtime_matrix.rows.whisper_cpp_ggml import MODEL_SHA256 as WHISPER_CPP_MODEL_SHA256
 from qa.runtime_matrix.rows.whisper_cpp_ggml import MODEL_URL as WHISPER_CPP_MODEL_URL
 from qa.runtime_matrix.rows.whisper_cpp_ggml import _download_model as _download_whisper_cpp_model
+from qa.runtime_matrix.rows.whisper_cpp_smollm_grading import _find_cached_model as _find_cached_whisper_cpp_model
 
 
 GROUPS = ["python_packaging", "media_tools", "faster_whisper", "onnx", "transformers_cpu", "whisper_cpp", "openai_whisper", "llama_cpp", "llama_mtmd"]
@@ -47,6 +56,69 @@ REQUIRED_ADAPTERS = {
     "gguf_asr_mmproj",
 }
 QUALITY_ADAPTERS = {"faster_whisper", "openai_whisper_pt", "generic_onnx_manifest", "gguf_asr_mmproj"}
+LOCAL_REPO_FIXTURE_SEARCH_ROOTS = ("Temp", "Models", "Cache")
+LOCAL_OPENAI_PT_SEARCH_ROOTS = ("Temp", "Models", "Cache")
+
+
+def _repo_folder_name(repo_id: str) -> str:
+    return repo_id.replace("/", "__")
+
+
+def _copy_repo_folder(source: Path, destination: Path) -> None:
+    if destination.exists():
+        shutil.rmtree(destination)
+    ignore = shutil.ignore_patterns(".hf_cache", "__pycache__")
+    shutil.copytree(source, destination, ignore=ignore)
+
+
+def _find_cached_repo_folder(repo_id: str, required_names: set[str], exclude: Path | None = None) -> Path | None:
+    folder_name = _repo_folder_name(repo_id)
+    excluded = exclude.resolve() if exclude is not None and exclude.exists() else None
+    for root_name in LOCAL_REPO_FIXTURE_SEARCH_ROOTS:
+        root = Path.cwd() / root_name
+        if not root.exists():
+            continue
+        for candidate in root.rglob(folder_name):
+            if not candidate.is_dir():
+                continue
+            try:
+                if excluded is not None and candidate.resolve() == excluded:
+                    continue
+            except OSError:
+                continue
+            names = {path.name for path in candidate.rglob("*") if path.is_file()}
+            if required_names <= names:
+                return candidate
+    return None
+
+
+def _find_cached_model_folder(required_names: set[str], any_name_groups: tuple[set[str], ...], exclude: Path | None = None) -> Path | None:
+    excluded = exclude.resolve() if exclude is not None and exclude.exists() else None
+    for root_name in LOCAL_REPO_FIXTURE_SEARCH_ROOTS:
+        root = Path.cwd() / root_name
+        if not root.exists():
+            continue
+        for model_bin in root.rglob("model.bin"):
+            candidate = model_bin.parent
+            if not candidate.is_dir():
+                continue
+            try:
+                if excluded is not None and candidate.resolve() == excluded:
+                    continue
+            except OSError:
+                continue
+            names = {path.name for path in candidate.rglob("*") if path.is_file()}
+            if required_names <= names and all(names & group for group in any_name_groups):
+                return candidate
+    return None
+
+
+def _copy_cached_repo_if_available(repo_id: str, destination: Path, required_names: set[str]) -> bool:
+    cached = _find_cached_repo_folder(repo_id, required_names, exclude=destination)
+    if cached is None:
+        return False
+    _copy_repo_folder(cached, destination)
+    return True
 
 
 def _repair_dependencies(config: dict, evidence_dir: Path, install_deps: bool) -> tuple[list[str], dict, list[Path]]:
@@ -78,6 +150,20 @@ def _ensure_faster_whisper(models_root: Path, allow_downloads: bool) -> tuple[Pa
     candidates = [candidate for candidate in runnable if candidate.adapter_name == "faster_whisper"]
     if candidates:
         return candidates[0].path, None
+    destination = models_root / _repo_folder_name(RECOMMENDED_BASELINE_REPO)
+    cached = _find_cached_repo_folder(RECOMMENDED_BASELINE_REPO, {"model.bin", "config.json"}, exclude=destination)
+    if cached is None:
+        cached = _find_cached_model_folder(
+            {"model.bin", "config.json"},
+            ({"tokenizer.json", "vocabulary.json", "vocabulary.txt", "vocab.json"},),
+            exclude=destination,
+        )
+    if cached is not None:
+        _copy_repo_folder(cached, destination)
+        runnable, _ = scan_models(models_root)
+        candidates = [candidate for candidate in runnable if candidate.adapter_name == "faster_whisper"]
+        if candidates:
+            return candidates[0].path, None
     if not allow_downloads:
         return None, f"missing {RECOMMENDED_BASELINE_REPO}; rerun with --allow-downloads"
     destination = download_hf_model_from_ref(models_root, RECOMMENDED_BASELINE_REPO, input_func=lambda _prompt="": "1", print_func=lambda _line="": None)
@@ -90,6 +176,9 @@ def _ensure_hf_safetensors(models_root: Path, repo_id: str, allow_downloads: boo
     model_dir = models_root / repo_id.replace("/", "__")
     if list(model_dir.glob("*.safetensors")):
         return model_dir, None
+    if _copy_cached_repo_if_available(repo_id, model_dir, {"config.json"}):
+        if list(model_dir.glob("*.safetensors")):
+            return model_dir, None
     if not allow_downloads:
         return None, f"missing {repo_id}; rerun with --allow-downloads"
     try:
@@ -103,6 +192,11 @@ def _ensure_whisper_cpp(models_root: Path, allow_downloads: bool) -> tuple[Path 
     model_path = models_root / "whisper_cpp" / WHISPER_CPP_MODEL_FILE
     if model_path.exists():
         return model_path, None
+    cached = _find_cached_whisper_cpp_model(WHISPER_CPP_MODEL_FILE, WHISPER_CPP_MODEL_SHA256)
+    if cached is not None:
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(cached, model_path)
+        return model_path, None
     if not allow_downloads:
         return None, f"missing {WHISPER_CPP_MODEL_FILE}; rerun with --allow-downloads"
     try:
@@ -114,10 +208,15 @@ def _ensure_whisper_cpp(models_root: Path, allow_downloads: bool) -> tuple[Path 
 
 def _ensure_openai_pt(models_root: Path, allow_downloads: bool) -> tuple[Path | None, str | None]:
     model_path = models_root / "openai_whisper" / TINY_PT
-    if model_path.exists():
+    if model_path.exists() and is_verified_official_checkpoint(model_path):
+        return model_path, None
+    cached = _find_cached_public_media_file(TINY_PT, TINY_PT_SHA256, LOCAL_OPENAI_PT_SEARCH_ROOTS, exclude_parent=model_path.parent)
+    if cached is not None:
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(cached, model_path)
         return model_path, None
     if not allow_downloads:
-        return None, f"missing official {TINY_PT}; rerun with --allow-downloads"
+        return None, f"missing official allowlisted {TINY_PT}; rerun with --allow-downloads"
     try:
         _download_official_checkpoint(model_path)
     except Exception as exc:
@@ -132,6 +231,10 @@ def _ensure_generic_onnx_quality(models_root: Path, allow_downloads: bool) -> tu
     manifest_path = model_dir / "modelbench.json"
     if model_path.exists() and vocab_path.exists():
         _write_public_ctc_manifest(model_dir)
+        return model_dir, None, [model_path, vocab_path, manifest_path]
+    cached = _find_cached_public_ctc_fixture()
+    if cached is not None:
+        _copy_cached_public_ctc_fixture(cached, model_dir)
         return model_dir, None, [model_path, vocab_path, manifest_path]
     if not allow_downloads:
         return None, f"missing {GENERIC_ONNX_QUALITY_REPO} {GENERIC_ONNX_QUALITY_MODEL_FILE}; rerun with --allow-downloads", [model_path, vocab_path, manifest_path]
@@ -152,6 +255,10 @@ def _ensure_gguf_asr_mmproj(models_root: Path, allow_downloads: bool) -> tuple[P
     manifest_path = _write_gguf_asr_manifest(model_dir)
     artifacts = [model_path, mmproj_path, manifest_path]
     if model_path.exists() and mmproj_path.exists():
+        return model_dir, None, artifacts
+    cached = _find_cached_gguf_asr_fixture(model_dir)
+    if cached is not None:
+        _copy_cached_gguf_asr_fixture(cached, model_dir)
         return model_dir, None, artifacts
     if not allow_downloads:
         return None, f"missing {PUBLIC_QWEN3_ASR_REPO} {PUBLIC_QWEN3_ASR_MODEL_FILE} plus {PUBLIC_QWEN3_ASR_MMPROJ_FILE}; rerun with --allow-downloads", artifacts

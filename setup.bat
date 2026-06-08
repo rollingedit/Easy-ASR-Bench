@@ -35,6 +35,7 @@ for %%A in (%*) do (
     if /I "%%~A"=="--install-deps" set DOCTOR_ARGS=!DOCTOR_ARGS! --install-deps
     if /I "%%~A"=="--allow-downloads" set DOCTOR_ARGS=!DOCTOR_ARGS! --allow-downloads
     if /I "%%~A"=="--no-network" set DOCTOR_ARGS=!DOCTOR_ARGS! --no-network
+    if /I "%%~A"=="--full-real-smoke" set DOCTOR_ARGS=!DOCTOR_ARGS! --full-real-smoke
     if /I "%%~A"=="--no-post-setup-menu" set NO_POST_SETUP_MENU=1
     if /I "%%~A"=="--repair" set INSTALLER_MODE_ARGS=!INSTALLER_MODE_ARGS! -Repair
   )

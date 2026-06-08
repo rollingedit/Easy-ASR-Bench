@@ -328,9 +328,11 @@ def test_release_verification_documents_validate_real_smoke_doctor_mode():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
     setup_text = Path("docs/what_setup_installs.md").read_text(encoding="utf-8")
 
-    assert "python -m app.doctor --config config.json --validate-real-smoke" in text
+    assert "python -m app.doctor --config config.json --validate-real-smoke --full-real-smoke" in text
     assert "easy_asr_bench.real_smoke_validation.v1" in text
     assert "setup.bat --doctor --validate-real-smoke" in setup_text
+    assert "--full-real-smoke" in setup_text
+    assert "ASR GGUF+mmproj" in setup_text
     assert "setup_repair_all_safe" in setup_text
     assert "cpu_model_smoke" in setup_text
     assert "--no-network" in setup_text
