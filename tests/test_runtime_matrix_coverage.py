@@ -803,6 +803,14 @@ def test_runtime_matrix_maps_hf_safetensors_rows_to_real_tiny_fixture_runner():
     assert ROWS["hf_safetensors_asr_quality_smollm_grading_cpu"].module == "qa.runtime_matrix.rows.hf_safetensors_smollm_grading"
 
 
+def test_required_release_rows_include_quality_and_sharded_safetensors_rows():
+    data = json.loads((ROOT / "tests" / "fixtures" / "release_required_rows_v2.json").read_text(encoding="utf-8"))
+
+    assert "hf_whisper_safetensors_quality_smollm_grading_cpu" in data["rows"]
+    assert "hf_safetensors_asr_quality_smollm_grading_cpu" in data["rows"]
+    assert "hf_whisper_sharded_safetensors_smollm_grading_cpu" in data["rows"]
+
+
 def test_hf_safetensors_smollm_grading_row_blocks_without_smollm_fixture(tmp_path, monkeypatch):
     from qa.runtime_matrix.rows import hf_safetensors_smollm_grading
 
