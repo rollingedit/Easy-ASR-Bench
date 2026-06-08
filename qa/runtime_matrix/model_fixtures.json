@@ -52,7 +52,10 @@
       "kind": "gguf_reference_llm",
       "rows": [
         "gguf_reference_llm",
-        "gguf_text_llm_reference_only"
+        "gguf_text_llm_reference_only",
+        "smollm_reference_grading_report",
+        "llama_cpp_cuda_smollm_smoke",
+        "llama_cpp_vulkan_smollm_smoke"
       ]
     },
     "hf_whisper_tiny_safetensors": {
