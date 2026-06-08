@@ -708,6 +708,7 @@ def test_runtime_matrix_maps_asr_gguf_mmproj_rows():
     assert ROWS["audio_asr_gguf_mmproj"].module == "qa.runtime_matrix.rows.gguf_asr_mmproj"
     assert ROWS["gguf_asr_mmproj_pair"].module == "qa.runtime_matrix.rows.gguf_asr_mmproj"
     assert ROWS["incomplete_audio_asr_gguf_mmproj_rejected"].module == "qa.runtime_matrix.rows.gguf_asr_mmproj"
+    assert ROWS["mismatched_audio_asr_gguf_mmproj_rejected"].module == "qa.runtime_matrix.rows.gguf_asr_mmproj"
     assert ROWS["smollm_reference_grading_report"].module == "qa.runtime_matrix.rows.smollm_reference_grading_report"
 
 
@@ -753,6 +754,17 @@ def test_incomplete_asr_gguf_mmproj_row_reports_projector_requirement(tmp_path):
     from qa.runtime_matrix.rows import gguf_asr_mmproj
 
     row = gguf_asr_mmproj.run("incomplete_audio_asr_gguf_mmproj_rejected", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    candidate = row["details"]["candidates"][0]
+    assert candidate["container_format"] == "gguf+mmproj"
+    assert "matching mmproj .gguf" in candidate["missing_files"]
+
+
+def test_mismatched_asr_gguf_mmproj_row_reports_projector_requirement(tmp_path):
+    from qa.runtime_matrix.rows import gguf_asr_mmproj
+
+    row = gguf_asr_mmproj.run("mismatched_audio_asr_gguf_mmproj_rejected", tmp_path, False, False)
 
     assert row["status"] == "pass"
     candidate = row["details"]["candidates"][0]
