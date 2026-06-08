@@ -164,6 +164,15 @@ def test_release_verification_documents_openai_whisper_cuda_fallback_row():
     assert "OpenAI Whisper `.pt` CUDA fallback" in text
 
 
+def test_release_verification_documents_openai_whisper_pt_checksum_runtime_proof():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row openai_whisper_pt_checksum_verified" in text
+    assert "official `tiny.pt`" in text
+    assert "unsafe pickle loading disabled" in text
+    assert "SmolLM 135M GGUF grading" in text
+
+
 def test_release_verification_documents_generic_onnx_openvino_fallback_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 

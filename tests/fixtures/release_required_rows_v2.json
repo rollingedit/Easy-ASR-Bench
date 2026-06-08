@@ -39,6 +39,7 @@
     "generic_onnx_openvino_unavailable_cpu_fallback",
     "generic_onnx_without_manifest_rejected",
     "openai_whisper_cuda_unavailable_cpu_fallback",
+    "openai_whisper_pt_checksum_verified",
     "openai_pt_unverified_blocked",
     "gguf_text_llm_reference_only",
     "gguf_asr_mmproj_pair",
