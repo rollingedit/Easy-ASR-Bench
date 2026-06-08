@@ -695,7 +695,23 @@ def test_runtime_matrix_maps_whisper_cpp_ggml_row():
 
 
 def test_runtime_matrix_maps_real_faster_whisper_smollm_grading_row():
+    assert ROWS["faster_whisper_pkg_resources_repair"].module == "qa.runtime_matrix.rows.ctranslate2_dynamic_resolver"
     assert ROWS["real_tiny_faster_whisper_smollm_grading"].module == "qa.runtime_matrix.rows.real_faster_whisper_smollm_grading"
+
+
+def test_faster_whisper_pkg_resources_repair_row_records_native_repair_contract(tmp_path):
+    from qa.runtime_matrix.rows import ctranslate2_dynamic_resolver
+
+    row = ctranslate2_dynamic_resolver.run("faster_whisper_pkg_resources_repair", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    assert "pkg_resources" in row["details"]["missing_before"]
+    assert row["details"]["repair_error"] == ""
+    assert row["details"]["commands"]
+    command = row["details"]["commands"][0]
+    assert "--force-reinstall" in command
+    assert command[-2:] == ["-r", row["details"]["expected_requirement"]]
+    assert row["details"]["probe_calls"][0]["device"] == "cpu"
 
 
 def test_real_faster_whisper_smollm_grading_row_blocks_without_smollm_fixture(tmp_path, monkeypatch):

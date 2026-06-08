@@ -84,6 +84,7 @@ ROWS: dict[str, RowDefinition] = {
     "hf_safetensors_asr_quality_smollm_grading_cpu": row("hf_safetensors_asr_quality_smollm_grading_cpu", "qa.runtime_matrix.rows.hf_safetensors_smollm_grading"),
     "sharded_safetensors_index": row("sharded_safetensors_index", "qa.runtime_matrix.rows.safetensors_classification"),
     "faster_whisper_ctranslate2": row("faster_whisper_ctranslate2", "qa.runtime_matrix.rows.ctranslate2_dynamic_resolver"),
+    "faster_whisper_pkg_resources_repair": row("faster_whisper_pkg_resources_repair", "qa.runtime_matrix.rows.ctranslate2_dynamic_resolver"),
     "real_tiny_faster_whisper_report_smoke": row("real_tiny_faster_whisper_report_smoke", "qa.runtime_matrix.rows.real_tiny_faster_whisper_report_smoke"),
     "faster_whisper_cpu": row("faster_whisper_cpu", "qa.runtime_matrix.rows.real_tiny_faster_whisper_report_smoke"),
     "real_tiny_faster_whisper_smollm_grading": row("real_tiny_faster_whisper_smollm_grading", "qa.runtime_matrix.rows.real_faster_whisper_smollm_grading"),
