@@ -126,6 +126,16 @@ def test_release_verification_documents_media_tools_repair_contract_row():
     assert "real audio/video smoke rows" in text
 
 
+def test_release_verification_documents_llama_mtmd_repair_contract_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row llama_mtmd_dependency_repair_contract" in text
+    assert "llama-mtmd-cli" in text
+    assert "llama_mtmd_runtime_probe" in text
+    assert "native_tool" in text
+    assert "ASR GGUF+mmproj rows" in text
+
+
 def test_release_verification_documents_directml_conflict_repair_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 
