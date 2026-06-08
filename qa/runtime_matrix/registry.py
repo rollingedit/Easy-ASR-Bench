@@ -27,7 +27,7 @@ ROWS: dict[str, RowDefinition] = {
     "first_run_smoke_json": row("first_run_smoke_json", "qa.runtime_matrix.rows.setup_environment"),
     "install_path_with_spaces": row("install_path_with_spaces", "qa.runtime_matrix.rows.installer_validation"),
     "setup_verify_release_bad_checksum": row("setup_verify_release_bad_checksum", "qa.runtime_matrix.rows.installer_validation"),
-    "setup_double_click_equivalent": row("setup_double_click_equivalent", "qa.runtime_matrix.rows.setup_environment", hardware="interactive_windows_shell"),
+    "setup_double_click_equivalent": row("setup_double_click_equivalent", "qa.runtime_matrix.rows.setup_environment", hardware="windows"),
     "setup_dry_run_verify_release": row("setup_dry_run_verify_release", "qa.runtime_matrix.rows.installer_validation"),
     "setup_dry_run_json": row("setup_dry_run_json", "qa.runtime_matrix.rows.installer_validation"),
     "setup_doctor_strict": row("setup_doctor_strict", "qa.runtime_matrix.rows.installer_validation"),
