@@ -66,6 +66,7 @@
       "hf_safetensors_asr_quality_smollm_grading_cpu": "not_run",
       "sharded_safetensors_index": "not_run",
       "faster_whisper_ctranslate2": "not_run",
+      "faster_whisper_pkg_resources_repair": "not_run",
       "real_tiny_faster_whisper_report_smoke": "not_run",
       "faster_whisper_cpu": "not_run",
       "real_tiny_faster_whisper_smollm_grading": "not_run",

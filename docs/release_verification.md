@@ -18,6 +18,7 @@ python scripts\write_release_smoke.py --tag vX.Y.Z --commit <commit> --output re
 python scripts\validate_release_smoke.py --smoke release-smoke-vX.Y.Z.json --required tests\fixtures\release_required_rows_v2.json
 cmd /c setup.bat --dry-run --local
 python qa\runtime_matrix\run_row.py --row directml_provider_conflict_repair --workdir Temp\runtime_matrix_directml_conflict_repair
+python qa\runtime_matrix\run_row.py --row faster_whisper_pkg_resources_repair --workdir Temp\runtime_matrix_faster_whisper_pkg_resources_repair
 python qa\runtime_matrix\run_row.py --row setup_repair_all_safe --workdir Temp\runtime_matrix_setup_repair_all_safe
 python qa\runtime_matrix\run_row.py --row setup_repair_model_layouts --workdir Temp\runtime_matrix_setup_repair_model_layouts
 python qa\runtime_matrix\run_row.py --row clean_vm_zero_dependency_bootstrap --workdir Temp\runtime_matrix_clean_vm_bootstrap
@@ -36,6 +37,8 @@ python -m app.doctor --config config.json --strict
 The staged `--asset-dir` check must run before a draft release is published. It validates the same `setup.bat`, `install.ps1`, `manifest.json`, `checksums.json`, and ZIP bytes that will become release assets, without depending on public release URLs.
 
 The `directml_provider_conflict_repair` runtime-matrix row is a non-destructive repair contract for the reproduced ONNX Runtime DirectML conflict. It simulates plain `onnxruntime` blocking `DmlExecutionProvider`, routes through the product `install_group_for_config("onnx", ...)` repair executor with commands captured instead of executed, and verifies the repair removes plain `onnxruntime`, installs `requirements\onnx_directml.txt`, force-probes a compatible `onnxruntime-directml` package, and clears the missing-provider state.
+
+The `faster_whisper_pkg_resources_repair` runtime-matrix row is a non-destructive repair contract for the reproduced CTranslate2 import failure. It simulates `pkg_resources` missing during faster-whisper/CTranslate2 native load, routes through the product native-stack repair helper, verifies the first repair attempt force-reinstalls the bounded `requirements\faster_whisper.txt` stack, and verifies the faster-whisper native load probe is rerun before the row can pass.
 
 The `setup_repair_all_safe` runtime-matrix row preflights `app.doctor --repair-plan` and then runs `app.doctor --repair-all-safe` only when safe. If the plan would install dependencies, run it with `--install-deps` only on a machine where dependency repair is intentionally being exercised. The row writes `row.json`, `repair_plan.json`, and `repair_all_safe.json` with backend and accelerator probe summaries. Usable backend records also include `runtime_resolution_path` values pointing to `Logs\dependency_resolution_<group>.json`, which capture the persisted working backend/provider resolution and any requested-but-unverified accelerator state. The repair summary must include `previous_runtime_resolution_valid`, `previous_runtime_resolution_stale`, and `cached_runtime_resolutions` so release evidence shows whether saved resolutions still matched the current package/provider/config state before refresh and whether any valid saved resolutions were consumed.
 

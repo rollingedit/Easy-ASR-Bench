@@ -89,6 +89,15 @@ def test_release_verification_documents_directml_conflict_repair_row():
     assert "commands captured instead of executed" in text
 
 
+def test_release_verification_documents_faster_whisper_pkg_resources_repair_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row faster_whisper_pkg_resources_repair" in text
+    assert "pkg_resources" in text
+    assert "requirements\\faster_whisper.txt" in text
+    assert "native load probe is rerun" in text
+
+
 def test_release_verification_documents_model_layout_repair_runtime_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 
