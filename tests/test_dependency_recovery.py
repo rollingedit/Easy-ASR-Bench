@@ -5,7 +5,7 @@ from app.config import DEFAULT_CONFIG
 from app.dependency_manager import ACCELERATOR_OVERRIDES, CUDA_INSTALL_OVERRIDES, acceleration_install_decision, cuda_diagnostics, cuda_install_decision, dependency_status, huggingface_cache_status, install_group_for_config, llama_cpp_cuda_tag_for_driver, llama_cpp_gpu_capable, llama_mtmd_cli_status, media_tools_status, missing_modules_for_config, recovery_command, recovery_command_for_config, requirement_version_issues, resolve_llama_cpp_wheel, visual_cpp_redistributable_status
 from app.doctor import run_doctor, run_model_layout_repair_sweep, run_real_smoke_validation
 from app.main import _dependency_install_confirmation, ensure_dependencies, warn_runtime_dependency_fallbacks
-from app.repair_plan import backend_probe_for_group, build_repair_plan, execute_repair_plan
+from app.repair_plan import backend_probe_for_group, build_repair_plan, execute_repair_plan, reusable_saved_runtime_resolution
 from app.results_writer import dependency_resolution_environment, runtime_environment
 
 
@@ -797,6 +797,50 @@ def test_execute_repair_plan_reuses_valid_cached_runtime_resolution(monkeypatch,
     assert record["cached_runtime_resolution_check"]["status"] == "valid"
     assert plan["summary"]["cached_runtime_resolutions"] == 1
     assert plan["summary"]["backend_probes"] == 1
+
+
+def test_reusable_runtime_resolution_marks_inaccessible_native_path_stale(monkeypatch, tmp_path: Path):
+    runtime_path = tmp_path / "Cache" / "native_tools" / "llama_mtmd" / "package" / "llama-mtmd-cli.exe"
+    resolution_path = tmp_path / "Logs" / "dependency_resolution_llama_mtmd.json"
+    resolution_path.parent.mkdir(parents=True)
+    resolution_path.write_text(
+        __import__("json").dumps(
+            {
+                "schema": "easy_asr_bench.runtime_resolution.v1",
+                "dependency_group": "llama_mtmd",
+                "status": "backend_usable",
+                "backend_verified": True,
+                "backend_probe_kind": "llama_mtmd_runtime_probe",
+                "accelerator_requested": False,
+                "accelerator": "",
+                "accelerator_verified": False,
+                "versions": {},
+                "providers": [],
+                "runtime_path": str(runtime_path),
+                "config_runtime": {"provider": "cpu", "prefer_gpu": False, "fallback_to_cpu": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "app.repair_plan._runtime_path_access_check",
+        lambda _path: {"exists": False, "error_type": "PermissionError", "error": "[WinError 5] Access is denied"},
+    )
+    monkeypatch.setattr("app.repair_plan.missing_modules_for_config", lambda group, config: [])
+
+    check = reusable_saved_runtime_resolution(
+        "llama_mtmd",
+        {
+            "runtime": {"provider": "cpu", "prefer_gpu": False, "fallback_to_cpu": True},
+            "folders": {"cache": str(tmp_path / "Cache")},
+        },
+        tmp_path,
+    )
+
+    assert check["status"] == "stale"
+    assert "runtime_path_inaccessible" in check["mismatches"]
+    assert "runtime_path" in check["mismatches"]
+    assert check["runtime_path_access"]["error_type"] == "PermissionError"
 
 
 def test_execute_repair_plan_reprobes_stale_cached_runtime_resolution(monkeypatch, tmp_path: Path):

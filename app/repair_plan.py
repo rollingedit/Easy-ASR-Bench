@@ -219,6 +219,13 @@ def _probe_runtime_path(probe: dict) -> str:
     return str(runtime_status.get("path") or runtime_status.get("ffmpeg_path") or "")
 
 
+def _runtime_path_access_check(runtime_path: str) -> dict:
+    try:
+        return {"exists": Path(runtime_path).exists(), "error_type": "", "error": ""}
+    except OSError as exc:
+        return {"exists": False, "error_type": type(exc).__name__, "error": str(exc)}
+
+
 def _llama_mtmd_cached_runtime_path_mismatches(runtime_path: str, config: dict) -> list[str]:
     if not runtime_path:
         return []
@@ -462,9 +469,13 @@ def reusable_saved_runtime_resolution(group: str, config: dict, project_root: Pa
         mismatches.append("providers")
     runtime_path = str(saved.get("runtime_path") or "")
     runtime_path_missing = False
+    runtime_path_access = {"exists": False, "error_type": "", "error": ""}
     if runtime_path:
         if group == "llama_mtmd":
-            runtime_path_missing = not Path(runtime_path).exists()
+            runtime_path_access = _runtime_path_access_check(runtime_path)
+            runtime_path_missing = not runtime_path_access["exists"]
+            if runtime_path_access.get("error_type"):
+                mismatches.append("runtime_path_inaccessible")
             mismatches.extend(_llama_mtmd_cached_runtime_path_mismatches(runtime_path, config))
         else:
             runtime_path_missing = True
@@ -495,6 +506,7 @@ def reusable_saved_runtime_resolution(group: str, config: dict, project_root: Pa
         "version_mismatches": version_mismatches,
         "provider_mismatches": provider_mismatches,
         "runtime_path_missing": runtime_path_missing,
+        "runtime_path_access": runtime_path_access,
         "accelerator_cache_check": accelerator_cache_check,
         "resolution": saved,
     }
