@@ -42,6 +42,7 @@
       "rows": [
         "cpu_model_smoke",
         "faster_whisper_ctranslate2",
+        "faster_whisper_ctranslate2_candidate_fallback_repair",
         "real_tiny_faster_whisper_report_smoke",
         "faster_whisper_cpu",
         "real_public_media_faster_whisper_smollm_grading",

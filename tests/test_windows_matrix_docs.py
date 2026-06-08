@@ -116,6 +116,15 @@ def test_release_verification_documents_faster_whisper_pkg_resources_repair_row(
     assert "native load probe is rerun" in text
 
 
+def test_release_verification_documents_faster_whisper_candidate_fallback_repair_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row faster_whisper_ctranslate2_candidate_fallback_repair" in text
+    assert "discovers CTranslate2 versions dynamically" in text
+    assert "skips versions outside `requirements\\faster_whisper.txt`" in text
+    assert "not a hard-coded primary install" in text
+
+
 def test_release_verification_documents_model_layout_repair_runtime_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 
