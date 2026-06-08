@@ -173,6 +173,15 @@ def test_release_verification_documents_openai_whisper_pt_checksum_runtime_proof
     assert "SmolLM 135M GGUF grading" in text
 
 
+def test_release_verification_documents_real_public_openai_whisper_pt_smollm_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row real_public_media_openai_whisper_pt_smollm_grading" in text
+    assert "Wikimedia CC0 WAV" in text
+    assert "official OpenAI Whisper `tiny.pt`" in text
+    assert "unsafe pickle loading disabled" in text
+
+
 def test_release_verification_documents_generic_onnx_openvino_fallback_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 

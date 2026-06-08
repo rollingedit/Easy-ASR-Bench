@@ -1210,6 +1210,8 @@ def test_runtime_matrix_maps_real_media_download_cache_row():
     assert ROWS["real_public_media_faster_whisper_smollm_grading"].hardware == "network"
     assert ROWS["real_public_video_faster_whisper_smollm_grading"].module == "qa.runtime_matrix.rows.real_public_media_faster_whisper_smollm"
     assert ROWS["real_public_video_faster_whisper_smollm_grading"].hardware == "network"
+    assert ROWS["real_public_media_openai_whisper_pt_smollm_grading"].module == "qa.runtime_matrix.rows.real_public_media_faster_whisper_smollm"
+    assert ROWS["real_public_media_openai_whisper_pt_smollm_grading"].hardware == "network"
 
 
 def test_real_public_media_faster_whisper_smollm_row_blocks_without_network(tmp_path, monkeypatch):
@@ -1220,6 +1222,7 @@ def test_real_public_media_faster_whisper_smollm_row_blocks_without_network(tmp_
     monkeypatch.setattr(real_public_media_faster_whisper_smollm, "SMOLLM_PATH", smollm)
     monkeypatch.setattr(real_public_media_faster_whisper_smollm, "_repair_dependencies", lambda *_args: ([], {}, []))
     monkeypatch.setattr(real_public_media_faster_whisper_smollm, "execute_repair_plan", lambda *_args, **_kwargs: {"summary": {}})
+    monkeypatch.setattr(real_public_media_faster_whisper_smollm, "_find_cached_file", lambda *_args, **_kwargs: None)
 
     row = real_public_media_faster_whisper_smollm.run(
         "real_public_media_faster_whisper_smollm_grading",
@@ -1242,6 +1245,18 @@ def test_real_public_media_faster_whisper_smollm_row_blocks_without_network(tmp_
     assert video_row["status"] == "blocked"
     assert "--allow-downloads" in video_row["external_requirement"]
     assert video_row["details"]["fixture"]["expected_text"] == "You are at risk for HIV."
+
+    openai_pt_row = real_public_media_faster_whisper_smollm.run(
+        "real_public_media_openai_whisper_pt_smollm_grading",
+        tmp_path / "openai_pt",
+        False,
+        False,
+    )
+
+    assert openai_pt_row["status"] == "blocked"
+    assert "--allow-downloads" in openai_pt_row["external_requirement"]
+    assert openai_pt_row["details"]["backend"] == "openai_whisper_pt"
+    assert openai_pt_row["details"]["fixture"]["expected_text"] == "Kabul"
 
 
 def test_runtime_matrix_maps_same_media_multi_model_row():
@@ -1561,6 +1576,9 @@ def test_runtime_fixture_manifest_covers_core_runtime_formats():
     assert "hf_whisper_sharded_safetensors_smollm_grading_cpu" in fixtures["hf_tiny_random_whisper_sharded_safetensors"]["rows"]
     assert "llama_cpp_vulkan_smollm_smoke" in fixtures["smollm_135m_gguf"]["rows"]
     assert "real_public_media_faster_whisper_smollm_grading" in fixtures["wikimedia_cc0_word_wav"]["rows"]
+    assert "real_public_media_openai_whisper_pt_smollm_grading" in fixtures["wikimedia_cc0_word_wav"]["rows"]
+    assert "real_public_media_openai_whisper_pt_smollm_grading" in fixtures["openai_whisper_tiny_pt"]["rows"]
+    assert "real_public_media_openai_whisper_pt_smollm_grading" in fixtures["smollm_135m_gguf"]["rows"]
     assert "real_public_video_faster_whisper_smollm_grading" in fixtures["wikimedia_public_domain_spoken_words_webm"]["rows"]
     fixture_ids = set(fixtures)
     for fixture_id, fixture in fixtures.items():
