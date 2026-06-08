@@ -45,6 +45,7 @@
     "dependency_install_declined": "not_run",
     "dependency_install_accepted": "not_run",
     "hf_downloader_supported_outcome_taxonomy": "not_run",
+    "hf_downloader_package_variant_taxonomy": "not_run",
     "model_fixture_quality_claims": "not_run",
     "same_media_multi_model_smollm_benchmark": "not_run",
     "same_media_multi_model_smollm_benchmark_directml": "not_run",

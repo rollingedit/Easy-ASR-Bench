@@ -192,6 +192,15 @@ def test_release_verification_documents_model_fixture_quality_claims_row():
     assert "not quality-bearing" in text
 
 
+def test_release_verification_documents_hf_downloader_package_variant_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row hf_downloader_package_variant_taxonomy" in text
+    assert "sharded Safetensors indexes" in text
+    assert "ONNX precision/quant variants" in text
+    assert "split GGUF parts stay grouped" in text
+
+
 def test_release_verification_documents_validate_real_smoke_doctor_mode():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
     setup_text = Path("docs/what_setup_installs.md").read_text(encoding="utf-8")

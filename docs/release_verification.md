@@ -33,6 +33,7 @@ python qa\runtime_matrix\run_row.py --row setup_repair_model_layouts --workdir T
 python qa\runtime_matrix\run_row.py --row clean_vm_zero_dependency_bootstrap --workdir Temp\runtime_matrix_clean_vm_bootstrap
 python qa\runtime_matrix\run_row.py --row report_atomic_write_failure_cleanup --workdir Temp\runtime_matrix_report_atomic_write_failure_cleanup
 python qa\runtime_matrix\run_row.py --row model_fixture_quality_claims --workdir Temp\runtime_matrix_model_fixture_quality_claims
+python qa\runtime_matrix\run_row.py --row hf_downloader_package_variant_taxonomy --workdir Temp\runtime_matrix_hf_downloader_package_variant_taxonomy
 python -m app.doctor --config config.json --validate-real-smoke
 Remove-Item -LiteralPath dist\release-assets -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path dist\release-assets
@@ -78,6 +79,8 @@ The `clean_vm_zero_dependency_bootstrap` row is the final fresh-machine proof. O
 The `report_atomic_write_failure_cleanup` row forces simulated replace failures in report text and CSV atomic-write paths and verifies failed `.partial` files are removed while the previous complete artifact remains intact. This guards against partial report artifacts after disk, permission, antivirus, or interrupted-write failures.
 
 The `model_fixture_quality_claims` row validates `qa\runtime_matrix\model_fixtures.json` so structural tiny/random/generated fixtures are explicitly marked as not quality-bearing, same-media mixed rows disclose structural inclusions, and quality-bearing fixtures have WER/transcript-oriented runtime rows. This prevents structural smoke fixtures from being counted as accuracy evidence.
+
+The `hf_downloader_package_variant_taxonomy` row validates fixture-backed Hugging Face package selection for sharded Safetensors indexes, multi-variant ONNX folders, and split GGUF reference LLMs. It verifies sharded Safetensors indexes expand into shard downloads, ONNX precision/quant variants do not pull sibling variants, and split GGUF parts stay grouped as one reference/correction LLM choice.
 
 Public-asset Windows smoke should also capture machine-readable app state from the installed app:
 

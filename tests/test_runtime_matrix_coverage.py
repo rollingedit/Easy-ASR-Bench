@@ -861,6 +861,7 @@ def test_runtime_matrix_maps_asr_gguf_mmproj_rows():
     assert ROWS["hf_downloader_qwen3_asr_gguf_mmproj_public_real_download_to_asr"].module == "qa.runtime_matrix.rows.hf_downloader_layouts"
     assert ROWS["hf_downloader_qwen3_asr_gguf_mmproj_public_real_download_to_asr"].hardware == "network"
     assert ROWS["hf_downloader_supported_outcome_taxonomy"].module == "qa.runtime_matrix.rows.hf_downloader_layouts"
+    assert ROWS["hf_downloader_package_variant_taxonomy"].module == "qa.runtime_matrix.rows.hf_downloader_layouts"
     assert ROWS["audio_asr_gguf_mmproj"].module == "qa.runtime_matrix.rows.gguf_asr_mmproj"
     assert ROWS["gguf_asr_mmproj_pair"].module == "qa.runtime_matrix.rows.gguf_asr_mmproj"
     assert ROWS["incomplete_audio_asr_gguf_mmproj_rejected"].module == "qa.runtime_matrix.rows.gguf_asr_mmproj"
@@ -904,6 +905,19 @@ def test_hf_downloader_supported_outcome_taxonomy_row(tmp_path):
     assert "hf_model_layout_repair_plan.json" in artifact_names
     assert any(item["adapter_name"] == "gguf_llm_reference" for item in cases["gguf_reference_llm"]["unsupported"])
     assert cases["unsafe_or_unknown_inspection"]["runnable"] == []
+
+
+def test_hf_downloader_package_variant_taxonomy_row(tmp_path):
+    from qa.runtime_matrix.rows import hf_downloader_layouts
+
+    row = hf_downloader_layouts.run("hf_downloader_package_variant_taxonomy", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    cases = row["details"]["cases"]
+    assert cases["sharded_safetensors_index"]["downloaded_names"] == cases["sharded_safetensors_index"]["expected_downloaded_names"]
+    assert cases["onnx_variant_isolation"]["variants"] == ["default", "fp16", "q4"]
+    assert cases["split_gguf_reference_llm"]["choice"]["task_hint"] == "reference_llm"
+    assert row["details"]["failures"] == []
 
 
 def test_incomplete_asr_gguf_mmproj_row_reports_projector_requirement(tmp_path):
