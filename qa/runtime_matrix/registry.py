@@ -95,6 +95,7 @@ ROWS: dict[str, RowDefinition] = {
     "faster_whisper_ctranslate2": row("faster_whisper_ctranslate2", "qa.runtime_matrix.rows.ctranslate2_dynamic_resolver"),
     "faster_whisper_pkg_resources_repair": row("faster_whisper_pkg_resources_repair", "qa.runtime_matrix.rows.ctranslate2_dynamic_resolver"),
     "faster_whisper_ctranslate2_candidate_fallback_repair": row("faster_whisper_ctranslate2_candidate_fallback_repair", "qa.runtime_matrix.rows.ctranslate2_dynamic_resolver"),
+    "faster_whisper_vc_runtime_repair": row("faster_whisper_vc_runtime_repair", "qa.runtime_matrix.rows.ctranslate2_dynamic_resolver"),
     "real_tiny_faster_whisper_report_smoke": row("real_tiny_faster_whisper_report_smoke", "qa.runtime_matrix.rows.real_tiny_faster_whisper_report_smoke"),
     "faster_whisper_cpu": row("faster_whisper_cpu", "qa.runtime_matrix.rows.real_tiny_faster_whisper_report_smoke"),
     "real_tiny_faster_whisper_smollm_grading": row("real_tiny_faster_whisper_smollm_grading", "qa.runtime_matrix.rows.real_faster_whisper_smollm_grading"),

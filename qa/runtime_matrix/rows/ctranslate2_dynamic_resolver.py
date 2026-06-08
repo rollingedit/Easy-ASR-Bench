@@ -214,11 +214,99 @@ def _ctranslate2_candidate_fallback_contract(row_id: str, evidence_dir: Path) ->
     )
 
 
+def _vc_runtime_repair_contract(row_id: str, evidence_dir: Path) -> dict:
+    from app.adapters import faster_whisper_asr
+
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    candidate = _contract_candidate(evidence_dir, "faster_whisper_vc_runtime_contract")
+    config = {
+        "runtime": {"provider": "cpu", "prefer_gpu": False, "fallback_to_cpu": True},
+        "folders": {"logs": str(evidence_dir / "Logs")},
+    }
+    commands: list[list[str]] = []
+    probe_calls: list[dict] = []
+
+    original = {
+        "main_subprocess_run": app_main.subprocess.run,
+        "runtime_choices": faster_whisper_asr.faster_whisper_runtime_choices,
+        "probe": faster_whisper_asr.probe_faster_whisper_load,
+        "vc_status": dm.visual_cpp_redistributable_status,
+    }
+
+    def fake_subprocess_run(command, cwd=None, text=None, stdout=None, stderr=None, timeout=None):
+        command = [str(item) for item in command]
+        commands.append(command)
+        return __import__("subprocess").CompletedProcess(command, 0, "simulated Visual C++ Redistributable repair\n")
+
+    def fake_runtime_choices(candidate, runtime_config):
+        return None, "cpu", "int8", "int8", []
+
+    def fake_probe(path, device, compute_type) -> str:
+        probe_calls.append({"path": str(path), "device": device, "compute_type": compute_type, "result": "pass"})
+        return ""
+
+    try:
+        app_main.subprocess.run = fake_subprocess_run
+        faster_whisper_asr.faster_whisper_runtime_choices = fake_runtime_choices
+        faster_whisper_asr.probe_faster_whisper_load = fake_probe
+        dm.visual_cpp_redistributable_status = lambda: {
+            "installed": False,
+            "version": "",
+            "source": "fixture",
+            "repair_command": "winget install -e --id Microsoft.VCRedist.2015+.x64 --accept-package-agreements --accept-source-agreements",
+        }
+        repair_error = app_main._repair_faster_whisper_native_stack(
+            candidate,
+            config,
+            "ImportError: DLL load failed while importing ctranslate2: The specified module could not be found.",
+        )
+    finally:
+        app_main.subprocess.run = original["main_subprocess_run"]
+        faster_whisper_asr.faster_whisper_runtime_choices = original["runtime_choices"]
+        faster_whisper_asr.probe_faster_whisper_load = original["probe"]
+        dm.visual_cpp_redistributable_status = original["vc_status"]
+
+    log_paths = sorted((evidence_dir / "Logs").glob("dependency_install_faster_whisper_native_compatibility_*.log"))
+    repair_log = log_paths[-1] if log_paths else evidence_dir / "Logs" / "missing.log"
+    failures = []
+    expected_command = ["winget", "install", "-e", "--id", "Microsoft.VCRedist.2015+.x64", "--accept-package-agreements", "--accept-source-agreements"]
+    if repair_error:
+        failures.append(f"native repair returned an error: {repair_error}")
+    if commands != [expected_command]:
+        failures.append(f"Visual C++ repair command was not the only repair attempt: {commands}")
+    if not probe_calls:
+        failures.append("native load probe was not rerun after Visual C++ repair")
+    if any(any(part.startswith("ctranslate2==") for part in command) for command in commands):
+        failures.append("CTranslate2 candidate fallback ran before the Visual C++ repair probe")
+    return write_row(
+        row_id,
+        "pass" if not failures else "fail",
+        evidence_dir,
+        summary=(
+            "faster-whisper/CTranslate2 missing-DLL native failures try Visual C++ Redistributable repair before replacing CTranslate2 packages."
+            if not failures
+            else "faster-whisper Visual C++ runtime repair contract failed."
+        ),
+        details={
+            "simulated_initial_error": "ImportError: DLL load failed while importing ctranslate2: The specified module could not be found.",
+            "commands": commands,
+            "expected_command": expected_command,
+            "probe_calls": probe_calls,
+            "repair_error": repair_error,
+            "failures": failures,
+            "dependency_versions": package_versions(["faster-whisper", "ctranslate2", "setuptools"]),
+        },
+        artifacts=[repair_log],
+    )
+
+
 def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bool) -> dict:
     if row_id == "faster_whisper_pkg_resources_repair":
         return _pkg_resources_repair_contract(row_id, evidence_dir)
     if row_id == "faster_whisper_ctranslate2_candidate_fallback_repair":
         return _ctranslate2_candidate_fallback_contract(row_id, evidence_dir)
+    if row_id == "faster_whisper_vc_runtime_repair":
+        return _vc_runtime_repair_contract(row_id, evidence_dir)
     config = load_config(Path("config.json"))
     config["runtime"]["provider"] = "cpu"
     config["runtime"]["prefer_gpu"] = False
