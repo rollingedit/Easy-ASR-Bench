@@ -531,6 +531,96 @@ def _repair_all_safe_failure_isolation(row_id: str, evidence_dir: Path) -> dict:
     )
 
 
+def _repair_plan_issue_classification_contract(row_id: str, evidence_dir: Path) -> dict:
+    from app import repair_plan
+
+    config = {"runtime": {"provider": "cpu", "prefer_gpu": False}, "dependency_install": {}}
+    status = {
+        "python_packaging": {
+            "available": False,
+            "missing": ["pip install is corrupted and import crash prevents repair bootstrap"],
+            "install_kind": "pip",
+            "requirement_file": "requirements/python_packaging.txt",
+            "recovery_command": "python -m pip install -r requirements/python_packaging.txt",
+        },
+        "faster_whisper": {
+            "available": False,
+            "missing": ["ctranslate2 wheel ABI incompatible with this Python runtime; newer than supported"],
+            "install_kind": "pip",
+            "requirement_file": "requirements/faster_whisper.txt",
+            "recovery_command": "python -m pip install -r requirements/faster_whisper.txt",
+        },
+        "onnx": {
+            "available": False,
+            "missing": ["provider package conflict hides DmlExecutionProvider"],
+            "install_kind": "pip",
+            "requirement_file": "requirements/onnx_directml.txt",
+            "recovery_command": "python -m pip install -r requirements/onnx_directml.txt",
+        },
+        "transformers_cpu": {
+            "available": False,
+            "missing": ["torch is too old for the selected Transformers ASR path"],
+            "install_kind": "pip",
+            "requirement_file": "requirements/transformers_cpu.txt",
+            "recovery_command": "python -m pip install -r requirements/transformers_cpu.txt",
+        },
+        "llama_mtmd": {
+            "available": False,
+            "missing": ["native llama-mtmd-cli runtime missing"],
+            "install_kind": "native_tool",
+            "requirement_file": "",
+            "recovery_command": "winget install -e --id ggml.llamacpp",
+        },
+        "manual_blocker": {
+            "available": False,
+            "missing": ["external runtime requires manual hardware proof"],
+            "install_kind": "manual",
+            "requirement_file": "",
+            "recovery_command": "",
+        },
+    }
+    original_acceleration = repair_plan.acceleration_install_decision
+    try:
+        repair_plan.acceleration_install_decision = lambda _config, _group: {"use_accelerator": False, "accelerator": None}
+        plan = repair_plan.build_repair_plan(config, project_root=evidence_dir, status=status)
+    finally:
+        repair_plan.acceleration_install_decision = original_acceleration
+    plan_path = evidence_dir / "repair_plan_issue_classification.json"
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    plan_path.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8", newline="\n")
+    actions = {record["affected_dependency_group"]: record["repair_action"] for record in plan["records"]}
+    expected = {
+        "python_packaging": "repair_corrupt_install",
+        "faster_whisper": "replace_incompatible",
+        "onnx": "replace_conflicting",
+        "transformers_cpu": "upgrade_outdated",
+        "llama_mtmd": "install_missing",
+        "manual_blocker": "block_no_safe_repair",
+    }
+    failures = []
+    for group, action in expected.items():
+        if actions.get(group) != action:
+            failures.append(f"{group} classified as {actions.get(group)}, expected {action}")
+    if plan.get("summary", {}).get("needs_repair") != len(status):
+        failures.append("repair-plan summary did not count every synthetic issue")
+    if plan.get("summary", {}).get("can_auto_repair") != len(status) - 1:
+        failures.append("repair-plan summary did not count auto-repairable issues correctly")
+    if any(not record.get("repair_command") for record in plan["records"] if record["repair_action"] != "block_no_safe_repair"):
+        failures.append("one or more auto-repairable issue classes lost their repair command")
+    return write_row(
+        row_id,
+        "pass" if not failures else "fail",
+        evidence_dir,
+        summary=(
+            "Repair-plan issue classification distinguishes corrupt installs, incompatible packages, conflicts, outdated packages, missing native tools, and manual blockers."
+            if not failures
+            else "Repair-plan issue classification contract failed."
+        ),
+        details={"actions": actions, "expected": expected, "summary": plan.get("summary", {}), "failures": failures},
+        artifacts=[plan_path],
+    )
+
+
 def _write_model_layout_repair_fixture(evidence_dir: Path) -> tuple[Path, Path, Path]:
     config_path, folders = _write_isolated_config(evidence_dir)
     model_dir = Path(folders["models"]) / "owner__tiny-asr"
@@ -928,6 +1018,8 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
         return _setup_repair_all_safe(row_id, evidence_dir, _install_deps)
     if row_id == "repair_all_safe_failure_isolation":
         return _repair_all_safe_failure_isolation(row_id, evidence_dir)
+    if row_id == "repair_plan_issue_classification_contract":
+        return _repair_plan_issue_classification_contract(row_id, evidence_dir)
     if row_id == "setup_repair_model_layouts":
         return _setup_repair_model_layouts(row_id, evidence_dir)
     if row_id == "update_preserves_user_data":

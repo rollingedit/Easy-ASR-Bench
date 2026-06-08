@@ -143,6 +143,14 @@ def test_release_verification_documents_clean_vm_bootstrap_runtime_row():
     assert "same-media multi-model SmolLM benchmark" in text
 
 
+def test_release_verification_documents_repair_plan_issue_classification_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row repair_plan_issue_classification_contract" in text
+    assert "corrupt installs" in text
+    assert "incompatible package/runtime stacks" in text
+
+
 def test_release_verification_documents_report_atomic_write_cleanup_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 
