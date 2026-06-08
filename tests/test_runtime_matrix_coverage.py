@@ -1369,6 +1369,8 @@ def test_runtime_matrix_maps_real_media_download_cache_row():
     assert ROWS["real_public_video_faster_whisper_smollm_grading"].hardware == "network"
     assert ROWS["real_public_media_openai_whisper_pt_smollm_grading"].module == "qa.runtime_matrix.rows.real_public_media_faster_whisper_smollm"
     assert ROWS["real_public_media_openai_whisper_pt_smollm_grading"].hardware == "network"
+    assert ROWS["real_public_video_openai_whisper_pt_smollm_grading"].module == "qa.runtime_matrix.rows.real_public_media_faster_whisper_smollm"
+    assert ROWS["real_public_video_openai_whisper_pt_smollm_grading"].hardware == "network"
 
 
 def test_real_public_media_faster_whisper_smollm_row_blocks_without_network(tmp_path, monkeypatch):
@@ -1414,6 +1416,18 @@ def test_real_public_media_faster_whisper_smollm_row_blocks_without_network(tmp_
     assert "--allow-downloads" in openai_pt_row["external_requirement"]
     assert openai_pt_row["details"]["backend"] == "openai_whisper_pt"
     assert openai_pt_row["details"]["fixture"]["expected_text"] == "Kabul"
+
+    openai_pt_video_row = real_public_media_faster_whisper_smollm.run(
+        "real_public_video_openai_whisper_pt_smollm_grading",
+        tmp_path / "openai_pt_video",
+        False,
+        False,
+    )
+
+    assert openai_pt_video_row["status"] == "blocked"
+    assert "--allow-downloads" in openai_pt_video_row["external_requirement"]
+    assert openai_pt_video_row["details"]["backend"] == "openai_whisper_pt"
+    assert openai_pt_video_row["details"]["fixture"]["expected_text"] == "You are at risk for HIV."
 
 
 def test_runtime_matrix_maps_same_media_multi_model_row():
@@ -1739,16 +1753,19 @@ def test_runtime_fixture_manifest_covers_core_runtime_formats():
     assert "real_public_media_generic_onnx_ctc_smollm_grading_cpu" in fixtures["wikimedia_cc0_word_wav"]["rows"]
     assert "real_public_media_gguf_asr_mmproj_smollm_grading" in fixtures["wikimedia_cc0_word_wav"]["rows"]
     assert "real_public_media_openai_whisper_pt_smollm_grading" in fixtures["openai_whisper_tiny_pt"]["rows"]
+    assert "real_public_video_openai_whisper_pt_smollm_grading" in fixtures["openai_whisper_tiny_pt"]["rows"]
     assert "real_public_media_whisper_cpp_ggml_smollm_grading" in fixtures["whisper_cpp_tiny_en_q5"]["rows"]
     assert "real_public_media_hf_whisper_safetensors_smollm_grading_cpu" in fixtures["hf_whisper_tiny_safetensors"]["rows"]
     assert "real_public_media_generic_onnx_ctc_smollm_grading_cpu" in fixtures["generic_onnx_ctc_fixture"]["rows"]
     assert "real_public_media_openai_whisper_pt_smollm_grading" in fixtures["smollm_135m_gguf"]["rows"]
+    assert "real_public_video_openai_whisper_pt_smollm_grading" in fixtures["smollm_135m_gguf"]["rows"]
     assert "real_public_media_whisper_cpp_ggml_smollm_grading" in fixtures["smollm_135m_gguf"]["rows"]
     assert "real_public_media_hf_whisper_safetensors_smollm_grading_cpu" in fixtures["smollm_135m_gguf"]["rows"]
     assert "real_public_media_generic_onnx_ctc_smollm_grading_cpu" in fixtures["smollm_135m_gguf"]["rows"]
     assert "real_public_media_gguf_asr_mmproj_smollm_grading" in fixtures["smollm_135m_gguf"]["rows"]
     assert "real_public_media_gguf_asr_mmproj_smollm_grading" in fixtures["qwen3_asr_0_6b_gguf"]["rows"]
     assert "real_public_video_faster_whisper_smollm_grading" in fixtures["wikimedia_public_domain_spoken_words_webm"]["rows"]
+    assert "real_public_video_openai_whisper_pt_smollm_grading" in fixtures["wikimedia_public_domain_spoken_words_webm"]["rows"]
     fixture_ids = set(fixtures)
     for fixture_id, fixture in fixtures.items():
         for row_id in fixture.get("rows", []):

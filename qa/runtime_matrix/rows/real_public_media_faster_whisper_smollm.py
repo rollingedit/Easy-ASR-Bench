@@ -27,11 +27,13 @@ ROW_FIXTURES = {
     "real_public_media_faster_whisper_smollm_grading": "wikimedia_cc0_word_wav",
     "real_public_video_faster_whisper_smollm_grading": "wikimedia_public_domain_spoken_words_webm",
     "real_public_media_openai_whisper_pt_smollm_grading": "wikimedia_cc0_word_wav",
+    "real_public_video_openai_whisper_pt_smollm_grading": "wikimedia_public_domain_spoken_words_webm",
 }
 ROW_BACKENDS = {
     "real_public_media_faster_whisper_smollm_grading": "faster_whisper",
     "real_public_video_faster_whisper_smollm_grading": "faster_whisper",
     "real_public_media_openai_whisper_pt_smollm_grading": "openai_whisper_pt",
+    "real_public_video_openai_whisper_pt_smollm_grading": "openai_whisper_pt",
 }
 GROUPS_BY_BACKEND = {
     "faster_whisper": {"python_packaging", "media_tools", "faster_whisper", "llama_cpp"},

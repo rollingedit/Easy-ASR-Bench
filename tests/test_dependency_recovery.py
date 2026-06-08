@@ -1330,6 +1330,7 @@ def test_validate_real_smoke_full_profile_runs_format_rows(monkeypatch, tmp_path
     assert report["full_real_smoke"] is True
     assert "real_public_media_faster_whisper_smollm_grading" in row_ids
     assert "real_public_media_openai_whisper_pt_smollm_grading" in row_ids
+    assert "real_public_video_openai_whisper_pt_smollm_grading" in row_ids
     assert "real_public_media_whisper_cpp_ggml_smollm_grading" in row_ids
     assert "real_public_media_hf_whisper_safetensors_smollm_grading_cpu" in row_ids
     assert "real_public_media_generic_onnx_ctc_smollm_grading_cpu" in row_ids
