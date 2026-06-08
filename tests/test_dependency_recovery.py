@@ -153,9 +153,51 @@ def test_repair_plan_records_dependency_group_repair_command(monkeypatch, tmp_pa
     onnx = next(record for record in plan["records"] if record["affected_dependency_group"] == "onnx")
     assert onnx["status"] == "needs_repair"
     assert onnx["can_auto_repair"] is True
+    assert onnx["repair_action"] == "install_missing"
     assert "onnx_directml.txt" in onnx["repair_command"]
     assert onnx["log_path"].endswith("dependency_install_onnx.log")
     assert plan["summary"]["needs_repair"] == 1
+
+
+def test_repair_plan_classifies_update_and_conflict_actions(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(
+        "app.repair_plan.dependency_status",
+        lambda config: {
+            "core": {
+                "available": True,
+                "missing": [],
+                "install_kind": "pip",
+                "recovery_command": "python -m pip install -r requirements/core.txt",
+            },
+            "faster_whisper": {
+                "available": False,
+                "missing": ["ctranslate2 is outdated enough to fail native load"],
+                "install_kind": "pip",
+                "recovery_command": "python -m pip install -r requirements/faster_whisper.txt",
+            },
+            "onnx": {
+                "available": False,
+                "missing": ["provider package conflict hides DmlExecutionProvider"],
+                "install_kind": "pip",
+                "recovery_command": "python -m pip install -r requirements/onnx_directml.txt",
+            },
+            "manual": {
+                "available": False,
+                "missing": ["external hardware runtime missing"],
+                "install_kind": "manual",
+                "recovery_command": "",
+            },
+        },
+    )
+    monkeypatch.setattr("app.repair_plan.acceleration_install_decision", lambda config, group: {"use_accelerator": False, "accelerator": None})
+
+    plan = build_repair_plan({"runtime": {"provider": "auto"}}, project_root=tmp_path)
+    actions = {record["affected_dependency_group"]: record["repair_action"] for record in plan["records"]}
+
+    assert actions["core"] == "verify_cached"
+    assert actions["faster_whisper"] == "upgrade_outdated"
+    assert actions["onnx"] == "replace_conflicting"
+    assert actions["manual"] == "block_no_safe_repair"
 
 
 def test_bootstrap_repair_uses_structured_repair_all_safe(monkeypatch, tmp_path: Path):
@@ -203,9 +245,11 @@ def test_execute_repair_plan_repairs_group_and_records_after_state(monkeypatch, 
     assert plan["mode"] == "repair_all_safe"
     assert onnx["status"] == "repaired"
     assert onnx["attempts"][0]["status"] == "pass"
+    assert onnx["attempts"][0]["repair_action"] == "install_missing"
     assert onnx["attempts"][0]["install_decision"] == {"installed_group": "onnx"}
     assert onnx["after"]["available"] is True
     assert onnx["after"]["missing"] == []
+    assert onnx["after"]["repair_action"] == "install_missing"
     assert onnx["after"]["backend_probe"] == {"kind": "test_probe", "ok": True, "group": "onnx"}
     assert onnx["after"]["runtime_resolution"]["schema"] == "easy_asr_bench.runtime_resolution.v1"
     assert onnx["after"]["runtime_resolution"]["dependency_group"] == "onnx"
@@ -271,8 +315,10 @@ def test_execute_repair_plan_failure_isolation_keeps_next_group(monkeypatch, tmp
     by_group = {record["affected_dependency_group"]: record for record in plan["records"]}
     assert calls == ["onnx", "faster_whisper"]
     assert by_group["onnx"]["status"] == "repair_failed"
+    assert by_group["onnx"]["after"]["repair_action"] == "install_missing"
     assert by_group["onnx"]["attempts"][0]["message"] == "pip failed"
     assert by_group["faster_whisper"]["status"] == "repaired"
+    assert by_group["faster_whisper"]["attempts"][0]["repair_action"] == "install_missing"
     assert by_group["faster_whisper"]["after"]["backend_probe"]["group"] == "faster_whisper"
     assert by_group["faster_whisper"]["after"]["runtime_resolution"]["dependency_group"] == "faster_whisper"
     assert "runtime_resolution_path" not in by_group["onnx"]["after"]
@@ -1760,6 +1806,7 @@ def test_dependency_resolution_environment_summarizes_saved_runtime_evidence(tmp
                     {
                         "affected_dependency_group": "llama_cpp",
                         "status": "ok",
+                        "repair_action": "verify_cached",
                         "cached_runtime_resolution_check": {"status": "valid"},
                         "after": {
                             "repair_result": "already_ok_cached_resolution",
@@ -1784,6 +1831,7 @@ def test_dependency_resolution_environment_summarizes_saved_runtime_evidence(tmp
     assert environment["resolutions"][0]["dependency_group"] == "llama_cpp"
     assert environment["last_repair_all_safe"]["summary"]["cached_runtime_resolutions"] == 1
     assert environment["last_repair_all_safe"]["records"][0]["cached_runtime_resolution_status"] == "valid"
+    assert environment["last_repair_all_safe"]["records"][0]["repair_action"] == "verify_cached"
     assert environment["last_repair_all_safe"]["records"][0]["repair_result"] == "already_ok_cached_resolution"
 
 
