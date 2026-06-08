@@ -30,6 +30,9 @@ python qa\runtime_matrix\run_row.py --row faster_whisper_vc_runtime_repair --wor
 python qa\runtime_matrix\run_row.py --row transformers_cuda_unavailable_cpu_fallback --workdir Temp\runtime_matrix_transformers_cuda_unavailable_cpu_fallback
 python qa\runtime_matrix\run_row.py --row openai_whisper_cuda_unavailable_cpu_fallback --workdir Temp\runtime_matrix_openai_whisper_cuda_unavailable_cpu_fallback
 python qa\runtime_matrix\run_row.py --row whisper_cpp_ggml_speech_smollm_grading --workdir Temp\runtime_matrix_whisper_cpp_speech_smollm_grading --allow-downloads
+python qa\runtime_matrix\run_row.py --row hf_whisper_safetensors_quality_smollm_grading_cpu --workdir Temp\runtime_matrix_hf_whisper_safetensors_quality_smollm --allow-downloads
+python qa\runtime_matrix\run_row.py --row hf_safetensors_asr_quality_smollm_grading_cpu --workdir Temp\runtime_matrix_hf_safetensors_ctc_quality_smollm --allow-downloads
+python qa\runtime_matrix\run_row.py --row hf_whisper_sharded_safetensors_smollm_grading_cpu --workdir Temp\runtime_matrix_hf_whisper_sharded_safetensors_smollm --allow-downloads
 python qa\runtime_matrix\run_row.py --row setup_repair_all_safe --workdir Temp\runtime_matrix_setup_repair_all_safe
 python qa\runtime_matrix\run_row.py --row setup_dry_run_json --workdir Temp\runtime_matrix_setup_dry_run_json
 python qa\runtime_matrix\run_row.py --row repair_all_safe_failure_isolation --workdir Temp\runtime_matrix_repair_all_safe_failure_isolation
@@ -108,6 +111,8 @@ The `generic_onnx_openvino_unavailable_cpu_fallback` row requests OpenVINO for t
 The `generic_onnx_cuda_unavailable_cpu_fallback` row requests CUDA for the tiny Generic ONNX CTC fixture and validates provider fallback metadata. It passes when CUDA is active on a CUDA machine, or when CUDA is unavailable and the adapter records `requested_runtime_provider=cuda`, `cuda_requested=true`, `provider_fallback=true`, active CPU providers, and the expected transcript. This is separate from NVIDIA hardware rows because it proves the normal Generic ONNX adapter does not silently hide a CUDA-to-CPU fallback on non-CUDA machines.
 
 The `whisper_cpp_ggml_speech_smollm_grading` row is the required quality-bearing whisper.cpp release proof. It uses the `ggerganov/whisper.cpp` `ggml-tiny.en-q5_1.bin` fixture, generated Windows SAPI speech, the normal app report pipeline, a non-empty transcript and WER threshold, then SmolLM 135M GGUF scoring/report validation. The packaged `pywhispercpp` path is CPU-only by design; GPU/offload validation belongs to llama.cpp GGUF rows, not whisper.cpp ASR.
+
+The required Safetensors rows split quality and structure deliberately. `hf_whisper_safetensors_quality_smollm_grading_cpu` runs `openai/whisper-tiny` Safetensors on generated Windows SAPI speech with a non-empty transcript and WER threshold, then runs SmolLM 135M GGUF scoring/report validation. `hf_safetensors_asr_quality_smollm_grading_cpu` runs `facebook/wav2vec2-base-960h` as the non-Whisper CTC Safetensors quality proof with the same reporting and SmolLM scoring checks. `hf_whisper_sharded_safetensors_smollm_grading_cpu` materializes a complete sharded Safetensors folder plus index from the tiny random Whisper fixture and validates the app/report/SmolLM path as structural sharded-loading evidence, not transcript-quality evidence.
 
 Public-asset Windows smoke should also capture machine-readable app state from the installed app:
 
