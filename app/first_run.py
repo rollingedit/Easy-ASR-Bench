@@ -99,6 +99,7 @@ def build_first_run_smoke_report(config: dict) -> dict:
     runnable_asr = [candidate for candidate in runnable if candidate.category == "asr"]
     incomplete = [candidate for candidate in unsupported if model_status_label(candidate) == "Recognized incomplete"]
     reference_llms = [candidate for candidate in unsupported if candidate.category == "reference_llm"]
+    model_layout_repair_plans = sorted(models_root.rglob("hf_model_layout_repair_plan.json")) if models_root.exists() else []
     repair_plan = build_repair_plan(config)
     return {
         "schema": "easy_asr_bench.first_run_smoke.v1",
@@ -110,10 +111,12 @@ def build_first_run_smoke_report(config: dict) -> dict:
         "runnable_asr_count": len(runnable_asr),
         "incomplete_model_count": len(incomplete),
         "reference_llm_count": len(reference_llms),
+        "model_layout_repair_plan_count": len(model_layout_repair_plans),
         "network_used": False,
         "repair_plan_schema": repair_plan["schema"],
         "repair_plan_summary": repair_plan["summary"],
         "repair_command": "setup.bat --doctor --repair-all-safe",
+        "model_layout_repair_command": "setup.bat --doctor --repair-model-layouts --allow-downloads",
         "doctor_command": "setup.bat --doctor --repair-plan",
         "real_smoke_command": "setup.bat --doctor --validate-real-smoke",
         "available_actions": ["run_now", "download_recommended_baseline", "paste_hugging_face_link", "open_models_folder", "open_input_folder", "quit"],

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .config import load_config
 from .dependency_manager import acceleration_install_decision, cuda_diagnostics, dependency_status
+from .hf_model_downloader import execute_persisted_missing_file_repair_plan
 from .repair_plan import build_repair_plan, execute_repair_plan
 from .version import RELEASE_CHANNEL, RELEASE_COMMIT, TAG
 
@@ -113,6 +114,40 @@ def run_real_smoke_validation(
     }
 
 
+def run_model_layout_repair_sweep(config_path: Path, *, allow_downloads: bool = False, no_network: bool = False) -> dict:
+    config = load_config(config_path)
+    models_root = Path(config.get("folders", {}).get("models", "Models"))
+    if not models_root.is_absolute():
+        models_root = Path.cwd() / models_root
+    effective_allow_downloads = allow_downloads and not no_network
+    plan_paths = sorted(models_root.rglob("hf_model_layout_repair_plan.json")) if models_root.exists() else []
+    executions = [
+        execute_persisted_missing_file_repair_plan(path, allow_downloads=effective_allow_downloads, print_func=lambda _text: None)
+        for path in plan_paths
+    ]
+    return {
+        "schema": "easy_asr_bench.model_layout_repair_sweep.v1",
+        "mode": "repair_model_layouts",
+        "version": TAG,
+        "release_commit": RELEASE_COMMIT,
+        "config": str(config_path),
+        "models_root": str(models_root),
+        "allow_downloads": effective_allow_downloads,
+        "requested_allow_downloads": allow_downloads,
+        "no_network": no_network,
+        "plan_count": len(plan_paths),
+        "plan_paths": [str(path) for path in plan_paths],
+        "executions": executions,
+        "summary": {
+            "plan_count": len(plan_paths),
+            "repaired": sum(item.get("summary", {}).get("repaired", 0) for item in executions),
+            "blocked": sum(item.get("summary", {}).get("blocked", 0) for item in executions),
+            "failed": sum(item.get("summary", {}).get("failed", 0) for item in executions),
+            "downloaded_files": sum(item.get("summary", {}).get("downloaded_files", 0) for item in executions),
+        },
+    }
+
+
 def run_doctor(
     config_path: Path,
     strict: bool = False,
@@ -120,6 +155,7 @@ def run_doctor(
     repair_plan_output: bool = False,
     repair_all_safe: bool = False,
     validate_real_smoke: bool = False,
+    repair_model_layouts: bool = False,
     install_deps: bool = False,
     allow_downloads: bool = False,
     no_network: bool = False,
@@ -132,6 +168,12 @@ def run_doctor(
         return 0 if (status["core"]["available"] or not strict) else 1
     if validate_real_smoke:
         report = run_real_smoke_validation(config_path, install_deps=install_deps, allow_downloads=allow_downloads, no_network=no_network)
+        print(json.dumps(report, indent=2))
+        if strict and report["summary"]["failed"]:
+            return 1
+        return 0 if (status["core"]["available"] or not strict) else 1
+    if repair_model_layouts:
+        report = run_model_layout_repair_sweep(config_path, allow_downloads=allow_downloads, no_network=no_network)
         print(json.dumps(report, indent=2))
         if strict and report["summary"]["failed"]:
             return 1
@@ -214,6 +256,7 @@ def main() -> None:
     parser.add_argument("--repair-plan", action="store_true")
     parser.add_argument("--repair-all-safe", action="store_true")
     parser.add_argument("--validate-real-smoke", action="store_true")
+    parser.add_argument("--repair-model-layouts", action="store_true")
     parser.add_argument("--install-deps", action="store_true")
     parser.add_argument("--allow-downloads", action="store_true")
     parser.add_argument("--no-network", action="store_true")
@@ -226,6 +269,7 @@ def main() -> None:
             repair_plan_output=args.repair_plan,
             repair_all_safe=args.repair_all_safe,
             validate_real_smoke=args.validate_real_smoke,
+            repair_model_layouts=args.repair_model_layouts,
             install_deps=args.install_deps,
             allow_downloads=args.allow_downloads,
             no_network=args.no_network,

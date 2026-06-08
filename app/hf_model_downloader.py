@@ -798,6 +798,106 @@ def execute_missing_file_repair_plan(
     }
 
 
+def _choice_from_repair_plan(plan: dict) -> DownloadChoice:
+    selected = plan.get("selected_choice", {})
+    return DownloadChoice(
+        label=str(selected.get("label") or "Hugging Face model package"),
+        kind=str(selected.get("kind") or "folder"),
+        primary_files=tuple(str(item) for item in selected.get("primary_files", []) if item),
+        files=tuple(str(item) for item in selected.get("downloaded_files", []) if item),
+        task_hint=str(selected.get("task_hint") or "unknown"),
+    )
+
+
+def execute_persisted_missing_file_repair_plan(
+    plan_path: Path,
+    *,
+    allow_downloads: bool,
+    print_func=print,
+) -> dict:
+    try:
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {
+            "schema": "easy_asr_bench.model_layout_repair_execution.v1",
+            "status": "invalid_plan",
+            "plan_path": str(plan_path),
+            "allow_downloads": allow_downloads,
+            "records": [],
+            "summary": {"total": 0, "repaired": 0, "blocked": 0, "failed": 1, "downloaded_files": 0},
+            "error_type": type(exc).__name__,
+            "message": str(exc) or type(exc).__name__,
+        }
+    if plan.get("schema") != "easy_asr_bench.model_layout_repair_plan.v1":
+        return {
+            "schema": "easy_asr_bench.model_layout_repair_execution.v1",
+            "status": "invalid_plan",
+            "plan_path": str(plan_path),
+            "allow_downloads": allow_downloads,
+            "records": [],
+            "summary": {"total": 0, "repaired": 0, "blocked": 0, "failed": 1, "downloaded_files": 0},
+            "error_type": "InvalidSchema",
+            "message": "Plan file does not use easy_asr_bench.model_layout_repair_plan.v1.",
+        }
+    ref = HFModelRef(str(plan.get("repo_id") or ""), plan.get("revision") or None)
+    choice = _choice_from_repair_plan(plan)
+    destination = Path(plan.get("destination") or plan_path.parent)
+    repo_files = sorted(
+        {
+            *choice.files,
+            *[
+                str(filename)
+                for record in plan.get("records", [])
+                for filename in record.get("safe_download_files", [])
+                if filename
+            ],
+        }
+    )
+    if allow_downloads:
+        try:
+            repo_files = list_repo_files(ref)
+        except Exception as exc:
+            execution = {
+                "schema": "easy_asr_bench.model_layout_repair_execution.v1",
+                "repo_id": ref.repo_id,
+                "revision": ref.revision,
+                "destination": str(destination),
+                "plan_path": str(plan_path),
+                "allow_downloads": allow_downloads,
+                "records": [
+                    {
+                        "issue_id": "model_layout:repo_listing",
+                        "repair_action": "download_missing_model_sidecars",
+                        "status": "failed",
+                        "requested_files": [],
+                        "downloaded_files": [],
+                        "downloaded_paths": [],
+                        "block_reason": "",
+                        "error_type": type(exc).__name__,
+                        "message": str(exc) or type(exc).__name__,
+                    }
+                ],
+                "summary": {"total": 1, "repaired": 0, "blocked": 0, "failed": 1, "downloaded_files": 0},
+                "downloaded_paths": [],
+            }
+            plan["last_execution"] = execution
+            write_missing_file_repair_plan(plan_path.parent, plan)
+            return execution
+    execution = execute_missing_file_repair_plan(
+        ref,
+        choice,
+        repo_files,
+        destination,
+        plan,
+        allow_downloads=allow_downloads,
+        print_func=print_func,
+    )
+    execution["plan_path"] = str(plan_path)
+    plan["last_execution"] = execution
+    write_missing_file_repair_plan(plan_path.parent, plan)
+    return execution
+
+
 def _parse_llm_recommendation(raw: str, repo_files: list[str], already_selected: set[str]) -> tuple[list[str], str | None]:
     text = raw.strip()
     if not text:
