@@ -139,6 +139,44 @@ def test_merge_release_evidence_updates_matrix_and_preserves_blocked_rows(tmp_pa
     ]
 
 
+def test_merge_release_evidence_prefers_external_pass_but_keeps_local_blocked_variant(tmp_path: Path):
+    local_dir = tmp_path / "evidence" / "local" / "torch_cuda_tensor_smoke"
+    external_dir = tmp_path / "evidence" / "external_cuda" / "torch_cuda_tensor_smoke"
+    local_dir.mkdir(parents=True)
+    external_dir.mkdir(parents=True)
+    local_blocked = {
+        "id": "torch_cuda_tensor_smoke",
+        "status": "blocked",
+        "block_reason": "missing NVIDIA CUDA-capable GPU",
+        "external_requirement": "NVIDIA CUDA machine with a CUDA-enabled Torch wheel",
+        "environment": {"machine": "local-non-nvidia"},
+    }
+    external_pass = {
+        "id": "torch_cuda_tensor_smoke",
+        "status": "pass",
+        "environment": {"machine": "external-cuda"},
+        "details": {"tensor_device": "cuda:0"},
+    }
+    (local_dir / "row.json").write_text(json.dumps(local_blocked), encoding="utf-8")
+    (external_dir / "row.json").write_text(json.dumps(external_pass), encoding="utf-8")
+
+    merged = merge_manual_rows(
+        {
+            "schema": "easy_asr_bench.release_smoke.v2",
+            "manual_matrix": {"provider_smoke": {"torch_cuda_tensor_smoke": "not_run"}},
+            "manual_rows": [{"id": "torch_cuda_tensor_smoke", "status": "not_run"}],
+        },
+        evidence_rows(tmp_path / "evidence"),
+    )
+
+    row = merged["manual_rows"][0]
+    assert row["status"] == "pass"
+    assert row["details"]["tensor_device"] == "cuda:0"
+    assert merged["manual_matrix"]["provider_smoke"]["torch_cuda_tensor_smoke"] == "pass"
+    assert {variant["status"] for variant in row["merged_evidence_variants"]} == {"blocked", "pass"}
+    assert any(variant.get("block_reason") == "missing NVIDIA CUDA-capable GPU" for variant in row["merged_evidence_variants"])
+
+
 def test_merge_release_evidence_reads_powershell_utf8_bom(tmp_path: Path):
     evidence = tmp_path / "evidence" / "row1"
     evidence.mkdir(parents=True)
