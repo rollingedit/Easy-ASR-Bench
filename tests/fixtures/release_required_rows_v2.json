@@ -39,6 +39,7 @@
     "generic_onnx_manifest_cpu",
     "generic_onnx_cuda_unavailable_cpu_fallback",
     "generic_onnx_openvino_unavailable_cpu_fallback",
+    "real_public_video_generic_onnx_ctc_smollm_grading_cpu",
     "generic_onnx_without_manifest_rejected",
     "openai_whisper_cuda_unavailable_cpu_fallback",
     "openai_whisper_pt_checksum_verified",

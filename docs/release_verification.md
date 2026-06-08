@@ -38,6 +38,7 @@ python qa\runtime_matrix\run_row.py --row real_public_video_whisper_cpp_ggml_smo
 python qa\runtime_matrix\run_row.py --row hf_whisper_safetensors_quality_smollm_grading_cpu --workdir Temp\runtime_matrix_hf_whisper_safetensors_quality_smollm --allow-downloads
 python qa\runtime_matrix\run_row.py --row real_public_media_hf_whisper_safetensors_smollm_grading_cpu --workdir Temp\runtime_matrix_real_public_media_hf_whisper_safetensors --allow-downloads
 python qa\runtime_matrix\run_row.py --row real_public_media_generic_onnx_ctc_smollm_grading_cpu --workdir Temp\runtime_matrix_real_public_media_generic_onnx_ctc --allow-downloads
+python qa\runtime_matrix\run_row.py --row real_public_video_generic_onnx_ctc_smollm_grading_cpu --workdir Temp\runtime_matrix_real_public_video_generic_onnx_ctc --allow-downloads
 python qa\runtime_matrix\run_row.py --row real_public_media_gguf_asr_mmproj_smollm_grading --workdir Temp\runtime_matrix_real_public_media_gguf_asr_mmproj --allow-downloads
 python qa\runtime_matrix\run_row.py --row hf_safetensors_asr_quality_smollm_grading_cpu --workdir Temp\runtime_matrix_hf_safetensors_ctc_quality_smollm --allow-downloads
 python qa\runtime_matrix\run_row.py --row hf_whisper_sharded_safetensors_smollm_grading_cpu --workdir Temp\runtime_matrix_hf_whisper_sharded_safetensors_smollm --allow-downloads

@@ -1335,6 +1335,7 @@ def test_validate_real_smoke_full_profile_runs_format_rows(monkeypatch, tmp_path
     assert "real_public_video_whisper_cpp_ggml_smollm_grading" in row_ids
     assert "real_public_media_hf_whisper_safetensors_smollm_grading_cpu" in row_ids
     assert "real_public_media_generic_onnx_ctc_smollm_grading_cpu" in row_ids
+    assert "real_public_video_generic_onnx_ctc_smollm_grading_cpu" in row_ids
     assert "real_public_media_gguf_asr_mmproj_smollm_grading" in row_ids
     assert "same_media_multi_model_smollm_benchmark_directml" in row_ids
     assert all("--install-deps" in command and "--allow-downloads" in command for command in calls)

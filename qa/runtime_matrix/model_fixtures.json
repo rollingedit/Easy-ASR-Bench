@@ -72,9 +72,10 @@
         "real_media_download_cache",
         "real_public_video_faster_whisper_smollm_grading",
         "real_public_video_openai_whisper_pt_smollm_grading",
-        "real_public_video_whisper_cpp_ggml_smollm_grading"
+        "real_public_video_whisper_cpp_ggml_smollm_grading",
+        "real_public_video_generic_onnx_ctc_smollm_grading_cpu"
       ],
-      "notes": "Small CDC public-domain spoken-word WebM from Wikimedia Commons. Used for real video-to-ASR normalization and faster-whisper/OpenAI Whisper .pt/whisper.cpp GGML plus SmolLM scored-report validation; WER is recorded but not release-gated because this is a short public-media smoke fixture."
+      "notes": "Small CDC public-domain spoken-word WebM from Wikimedia Commons. Used for real video-to-ASR normalization and faster-whisper/OpenAI Whisper .pt/whisper.cpp GGML/Generic ONNX CTC plus SmolLM scored-report validation; WER is recorded but not release-gated because this is a short public-media smoke fixture."
     },
     "smollm_135m_gguf": {
       "repo": "HuggingFaceTB/SmolLM-135M-GGUF",
@@ -93,6 +94,7 @@
         "real_public_video_faster_whisper_smollm_grading",
         "real_public_video_openai_whisper_pt_smollm_grading",
         "real_public_video_whisper_cpp_ggml_smollm_grading",
+        "real_public_video_generic_onnx_ctc_smollm_grading_cpu",
         "llama_cpp_cuda_smollm_smoke",
         "llama_cpp_vulkan_smollm_smoke"
       ]
@@ -179,9 +181,10 @@
         "generic_onnx_manifest_cpu",
         "generic_onnx_ctc_quality_smollm_grading_cpu",
         "real_public_media_generic_onnx_ctc_smollm_grading_cpu",
+        "real_public_video_generic_onnx_ctc_smollm_grading_cpu",
         "generic_onnx_without_manifest_rejected"
       ],
-      "notes": "Public int8 Wav2Vec2 CTC ONNX package with vocab.json. The smaller q4f16 graph was probed first but failed ONNX Runtime CPU preflight during graph initialization, so int8 is the smallest probed public CTC quality fixture that completed the app pipeline. The real public-media row records single-word WER without using it as a release gate."
+      "notes": "Public int8 Wav2Vec2 CTC ONNX package with vocab.json. The smaller q4f16 graph was probed first but failed ONNX Runtime CPU preflight during graph initialization, so int8 is the smallest probed public CTC quality fixture that completed the app pipeline. The real public-media rows record short-fixture WER without using it as a release gate."
     },
     "generated_tiny_onnx_ctc_manifest": {
       "kind": "generic_onnx_ctc_manifest_generated",
