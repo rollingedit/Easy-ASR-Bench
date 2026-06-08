@@ -27,6 +27,14 @@
       "notes": "Small CDC public-domain spoken-word WebM fixture with audio. Use for real video-to-ASR smoke and media normalization coverage.",
       "expected_text": "You are at risk for HIV."
     },
+    "wikimedia_public_domain_roundhay_webm_no_audio": {
+      "kind": "real_video_webm_no_audio",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Roundhay_Garden_Scene_(1888).webm",
+      "download_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Roundhay%20Garden%20Scene%20(1888).webm",
+      "license": "Public Domain Mark 1.0 as reported by Wikimedia Commons file page",
+      "expected_sha256_prefix": "c66a1401c753",
+      "notes": "Small public-domain video-only WebM fixture. Use as a clearer-license no-audio real-video supplement so no-audio behavior is not dependent on SampleFile terms."
+    },
     "samplefile_h264_aac_mp4": {
       "kind": "real_video_mp4_with_audio",
       "source_page": "https://samplefile.com/samples/video/mp4/",

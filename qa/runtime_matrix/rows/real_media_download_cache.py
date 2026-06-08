@@ -127,7 +127,8 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, allow_downloads: b
                     details={**details, "downloaded": downloaded},
                     artifacts=artifacts,
                 )
-        if fixture.get("kind") in {"real_video_mp4_with_audio", "real_video_webm_with_audio"}:
+        kind = str(fixture.get("kind", ""))
+        if kind in {"real_video_mp4_with_audio", "real_video_webm_with_audio"}:
             wav_path, samples, chunks = prepare_audio(target, evidence_dir / "normalized" / name, _config())
             artifacts.append(wav_path)
             downloaded[name]["normalized_wav"] = str(wav_path)
@@ -142,7 +143,7 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, allow_downloads: b
                     details={**details, "downloaded": downloaded},
                     artifacts=artifacts,
                 )
-        if fixture.get("kind") == "real_video_mp4_no_audio":
+        if kind.startswith("real_video_") and kind.endswith("_no_audio"):
             try:
                 prepare_audio(target, evidence_dir / "normalized" / name, _config())
             except Exception as exc:
