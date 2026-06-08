@@ -76,6 +76,7 @@
       "faster_whisper_ctranslate2": "not_run",
       "faster_whisper_pkg_resources_repair": "not_run",
       "faster_whisper_ctranslate2_candidate_fallback_repair": "not_run",
+      "faster_whisper_vc_runtime_repair": "not_run",
       "real_tiny_faster_whisper_report_smoke": "not_run",
       "faster_whisper_cpu": "not_run",
       "real_tiny_faster_whisper_smollm_grading": "not_run",

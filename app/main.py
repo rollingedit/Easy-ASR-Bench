@@ -250,6 +250,35 @@ def recovery_command_for_faster_whisper_compatibility(config: dict) -> str:
     return f'"{sys.executable}" -m pip install --upgrade --force-reinstall -r "{requirement_file}"'
 
 
+def _looks_like_missing_visual_cpp_runtime(error: str) -> bool:
+    message = str(error or "").lower()
+    return any(
+        marker in message
+        for marker in [
+            "vcruntime",
+            "msvcp",
+            "api-ms-win-crt",
+            "dll load failed",
+            "dynamic link library",
+            "the specified module could not be found",
+        ]
+    )
+
+
+def _visual_cpp_repair_command() -> list[str]:
+    from .dependency_manager import VC_REDIST_PACKAGE_ID
+
+    return [
+        "winget",
+        "install",
+        "-e",
+        "--id",
+        VC_REDIST_PACKAGE_ID,
+        "--accept-package-agreements",
+        "--accept-source-agreements",
+    ]
+
+
 def _faster_whisper_ctranslate2_spec(project_root: Path) -> str:
     try:
         from packaging.requirements import Requirement
@@ -323,6 +352,7 @@ def _discover_ctranslate2_candidate_versions(config: dict, project_root: Path, l
 
 def _repair_faster_whisper_native_stack(candidate: ModelCandidate, config: dict, initial_error: str) -> str:
     from .adapters.faster_whisper_asr import probe_faster_whisper_load, faster_whisper_runtime_choices
+    from .dependency_manager import visual_cpp_redistributable_status
 
     project_root = Path(__file__).resolve().parent.parent
     _plan, device, _compute_type, effective_compute_type, _warnings = faster_whisper_runtime_choices(candidate, runtime_config_for_candidate(config))
@@ -331,6 +361,28 @@ def _repair_faster_whisper_native_stack(candidate: ModelCandidate, config: dict,
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("a", encoding="utf-8", newline="\n") as log:
         log.write(f"Initial faster-whisper native preflight error: {initial_error}\n")
+        vc_status = visual_cpp_redistributable_status()
+        if _looks_like_missing_visual_cpp_runtime(initial_error) and not vc_status.get("installed", False):
+            vc_command = _visual_cpp_repair_command()
+            log.write("Visual C++ Redistributable was not detected and the native error looks like a missing DLL/runtime.\n")
+            log.write(f"\n> {' '.join(vc_command)}\n")
+            print("Trying Microsoft Visual C++ Redistributable repair before replacing CTranslate2 packages...")
+            try:
+                completed = subprocess.run(vc_command, cwd=str(project_root), text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180)
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                log.write(f"Visual C++ Redistributable repair command failed to launch: {exc}\n")
+                last_error = f"Visual C++ Redistributable repair command failed to launch: {exc}; initial error: {initial_error}"
+            else:
+                log.write(completed.stdout or "")
+                if completed.returncode == 0:
+                    probe_error = probe_faster_whisper_load(candidate.path, device, effective_compute_type)
+                    log.write(f"probe after Visual C++ Redistributable repair: {'pass' if not probe_error else probe_error}\n")
+                    if not probe_error:
+                        print("Visual C++ Redistributable repair made faster-whisper native load pass.")
+                        return ""
+                    last_error = probe_error
+                else:
+                    last_error = f"Visual C++ Redistributable repair failed; see {log_path}"
         broad_command = [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", "-r", str(project_root / "requirements" / "faster_whisper.txt")]
         log.write(f"\n> {' '.join(broad_command)}\n")
         print("Trying the latest package set allowed by requirements/faster_whisper.txt...")

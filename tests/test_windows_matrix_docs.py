@@ -134,6 +134,14 @@ def test_release_verification_documents_faster_whisper_candidate_fallback_repair
     assert "not a hard-coded primary install" in text
 
 
+def test_release_verification_documents_faster_whisper_vc_runtime_repair_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row faster_whisper_vc_runtime_repair" in text
+    assert "CTranslate2 missing-DLL native-load failures" in text
+    assert "before replacing CTranslate2 packages" in text
+
+
 def test_release_verification_documents_model_layout_repair_runtime_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 

@@ -794,6 +794,7 @@ def test_runtime_matrix_maps_whisper_cpp_ggml_row():
 def test_runtime_matrix_maps_real_faster_whisper_smollm_grading_row():
     assert ROWS["faster_whisper_pkg_resources_repair"].module == "qa.runtime_matrix.rows.ctranslate2_dynamic_resolver"
     assert ROWS["faster_whisper_ctranslate2_candidate_fallback_repair"].module == "qa.runtime_matrix.rows.ctranslate2_dynamic_resolver"
+    assert ROWS["faster_whisper_vc_runtime_repair"].module == "qa.runtime_matrix.rows.ctranslate2_dynamic_resolver"
     assert ROWS["real_tiny_faster_whisper_smollm_grading"].module == "qa.runtime_matrix.rows.real_faster_whisper_smollm_grading"
 
 
@@ -822,6 +823,18 @@ def test_faster_whisper_ctranslate2_candidate_fallback_row_records_dynamic_repai
     assert row["details"]["candidate_install_specs"] == ["ctranslate2==4.8.0", "ctranslate2==4.7.2"]
     assert row["details"]["ignored_out_of_range_versions"] == ["4.10.0", "4.9.0", "4.3.1"]
     assert row["details"]["probe_calls"][-1]["result"] == "pass"
+
+
+def test_faster_whisper_vc_runtime_repair_row_runs_before_ctranslate2_fallback(tmp_path):
+    from qa.runtime_matrix.rows import ctranslate2_dynamic_resolver
+
+    row = ctranslate2_dynamic_resolver.run("faster_whisper_vc_runtime_repair", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    assert row["details"]["commands"] == [row["details"]["expected_command"]]
+    assert row["details"]["expected_command"][:5] == ["winget", "install", "-e", "--id", "Microsoft.VCRedist.2015+.x64"]
+    assert row["details"]["probe_calls"][0]["result"] == "pass"
+    assert row["details"]["repair_error"] == ""
 
 
 def test_real_faster_whisper_smollm_grading_row_blocks_without_smollm_fixture(tmp_path, monkeypatch):
