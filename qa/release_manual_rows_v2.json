@@ -55,6 +55,7 @@
       "hf_whisper_safetensors": "not_run",
       "hf_whisper_safetensors_cpu": "not_run",
       "hf_whisper_safetensors_smollm_grading_cpu": "not_run",
+      "hf_whisper_sharded_safetensors_smollm_grading_cpu": "not_run",
       "hf_whisper_safetensors_quality_smollm_grading_cpu": "not_run",
       "hf_safetensors_asr_smollm_grading_cpu": "not_run",
       "hf_safetensors_asr_quality_smollm_grading_cpu": "not_run",

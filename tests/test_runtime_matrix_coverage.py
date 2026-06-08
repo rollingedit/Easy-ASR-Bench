@@ -554,6 +554,17 @@ def test_hf_whisper_quality_smollm_grading_row_blocks_without_smollm_fixture(tmp
     assert "SmolLM 135M GGUF fixture is not present" in row["summary"]
 
 
+def test_hf_whisper_sharded_safetensors_smollm_grading_row_blocks_without_smollm_fixture(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import hf_safetensors_smollm_grading
+
+    monkeypatch.setattr(hf_safetensors_smollm_grading, "SMOLLM_PATH", tmp_path / "missing-smollm.gguf")
+
+    row = hf_safetensors_smollm_grading.run("hf_whisper_sharded_safetensors_smollm_grading_cpu", tmp_path, False, False)
+
+    assert row["status"] == "blocked"
+    assert "SmolLM 135M GGUF fixture is not present" in row["summary"]
+
+
 def test_hf_safetensors_ctc_quality_smollm_grading_row_blocks_without_smollm_fixture(tmp_path, monkeypatch):
     from qa.runtime_matrix.rows import hf_safetensors_smollm_grading
 
@@ -590,6 +601,7 @@ def test_runtime_matrix_maps_safetensors_classification_rows():
     assert ROWS["standalone_safetensors_incomplete"].module == "qa.runtime_matrix.rows.safetensors_classification"
     assert ROWS["hf_text_llm_safetensors_unsupported"].module == "qa.runtime_matrix.rows.safetensors_classification"
     assert ROWS["sharded_safetensors_index"].module == "qa.runtime_matrix.rows.safetensors_classification"
+    assert ROWS["hf_whisper_sharded_safetensors_smollm_grading_cpu"].module == "qa.runtime_matrix.rows.hf_safetensors_smollm_grading"
 
 
 def test_runtime_matrix_maps_openai_whisper_pt_safety_rows():
@@ -998,6 +1010,7 @@ def test_runtime_fixture_manifest_covers_core_runtime_formats():
     assert "faster_whisper_ctranslate2" in kinds
     assert "gguf_reference_llm" in kinds
     assert "hf_whisper_safetensors" in kinds
+    assert "hf_whisper_sharded_safetensors_structural" in kinds
     assert "generic_onnx_ctc_manifest" in kinds
     assert "whisper_cpp_ggml" in kinds
     assert "openai_whisper_pt" in kinds
@@ -1007,3 +1020,4 @@ def test_runtime_fixture_manifest_covers_core_runtime_formats():
     assert "generic_onnx_ctc_fixture" in data["fixtures"]["same_media_multi_model_directml_set"]["includes"]
     assert "qwen3_asr_0_6b_gguf" in data["fixtures"]["same_media_multi_model_cpu_set"]["includes"]
     assert "qwen3_asr_0_6b_gguf" in data["fixtures"]["same_media_multi_model_directml_set"]["includes"]
+    assert "hf_whisper_sharded_safetensors_smollm_grading_cpu" in data["fixtures"]["hf_tiny_random_whisper_sharded_safetensors"]["rows"]

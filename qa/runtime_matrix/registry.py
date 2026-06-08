@@ -73,6 +73,7 @@ ROWS: dict[str, RowDefinition] = {
     "hf_whisper_safetensors": row("hf_whisper_safetensors", "qa.runtime_matrix.rows.hf_safetensors_tiny"),
     "hf_whisper_safetensors_cpu": row("hf_whisper_safetensors_cpu", "qa.runtime_matrix.rows.hf_safetensors_tiny"),
     "hf_whisper_safetensors_smollm_grading_cpu": row("hf_whisper_safetensors_smollm_grading_cpu", "qa.runtime_matrix.rows.hf_safetensors_smollm_grading"),
+    "hf_whisper_sharded_safetensors_smollm_grading_cpu": row("hf_whisper_sharded_safetensors_smollm_grading_cpu", "qa.runtime_matrix.rows.hf_safetensors_smollm_grading"),
     "hf_whisper_safetensors_quality_smollm_grading_cpu": row("hf_whisper_safetensors_quality_smollm_grading_cpu", "qa.runtime_matrix.rows.hf_safetensors_smollm_grading"),
     "hf_safetensors_asr_smollm_grading_cpu": row("hf_safetensors_asr_smollm_grading_cpu", "qa.runtime_matrix.rows.hf_safetensors_smollm_grading"),
     "hf_safetensors_asr_quality_smollm_grading_cpu": row("hf_safetensors_asr_quality_smollm_grading_cpu", "qa.runtime_matrix.rows.hf_safetensors_smollm_grading"),
