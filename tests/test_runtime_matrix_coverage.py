@@ -97,6 +97,7 @@ def test_runtime_matrix_rows_point_to_importable_modules():
 
 def test_runtime_matrix_includes_native_runtime_prerequisite_rows():
     assert ROWS["windows_vc_runtime"].module == "qa.runtime_matrix.rows.windows_vc_runtime"
+    assert ROWS["windows_vc_runtime_repair_contract"].module == "qa.runtime_matrix.rows.windows_vc_runtime"
     assert ROWS["windows_directml_provider"].module == "qa.runtime_matrix.rows.windows_directml_provider"
     assert ROWS["directml_provider_conflict_repair"].module == "qa.runtime_matrix.rows.windows_directml_provider"
     assert ROWS["windows_vulkan_runtime"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
@@ -111,6 +112,20 @@ def test_runtime_matrix_includes_native_runtime_prerequisite_rows():
     assert ROWS["llama_cpp_vulkan_smollm_smoke"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
     assert ROWS["faster_whisper_cuda_unavailable_cpu_fallback"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
     assert ROWS["vulkan_runtime_no_sdk"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
+
+
+def test_windows_vc_runtime_repair_contract_row_records_winget_command(tmp_path):
+    from qa.runtime_matrix.rows import windows_vc_runtime
+
+    row = windows_vc_runtime.run("windows_vc_runtime_repair_contract", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    command = row["details"]["commands"][0]
+    assert command == row["details"]["expected_command"]
+    assert command[:5] == ["winget", "install", "-e", "--id", "Microsoft.VCRedist.2015+.x64"]
+    assert "--accept-package-agreements" in command
+    assert "--accept-source-agreements" in command
+    assert row["details"]["visual_cpp_redistributable"]["installed"] is True
 
 
 def test_directml_provider_conflict_repair_row_records_safe_repair_contract(tmp_path):
