@@ -1026,6 +1026,7 @@ def test_runtime_matrix_real_media_manifest_has_required_fixture_kinds():
 
     assert "real_audio_wav" in kinds
     assert "real_video_webm_with_audio" in kinds
+    assert "real_video_webm_no_audio" in kinds
     assert "real_video_mp4_with_audio" in kinds
     assert "real_video_mp4_no_audio" in kinds
 
@@ -1301,11 +1302,52 @@ def test_real_media_download_cache_blocks_without_network_permission(tmp_path):
     assert isinstance(row["details"]["source_only_fixtures"], dict)
 
 
+def test_real_media_download_cache_accepts_public_domain_webm_no_audio_fixture(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import real_media_download_cache
+
+    def fake_download(_url: str, destination: Path) -> None:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"fixture public-domain webm bytes")
+
+    def fake_prepare_audio(source: Path, _temp_dir: Path, _config: dict):
+        assert source.name == "wikimedia_public_domain_roundhay_webm_no_audio.webm"
+        raise RuntimeError(f"No audio stream found in video: {source}")
+
+    monkeypatch.setattr(
+        real_media_download_cache,
+        "_load_manifest",
+        lambda: {
+            "fixtures": {
+                "wikimedia_public_domain_roundhay_webm_no_audio": {
+                    "kind": "real_video_webm_no_audio",
+                    "source_page": "https://commons.wikimedia.org/wiki/File:Roundhay_Garden_Scene_(1888).webm",
+                    "download_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Roundhay%20Garden%20Scene%20(1888).webm",
+                    "license": "Public Domain Mark 1.0 as reported by Wikimedia Commons file page",
+                }
+            }
+        },
+    )
+    monkeypatch.setattr(real_media_download_cache, "_download", fake_download)
+    monkeypatch.setattr(real_media_download_cache, "prepare_audio", fake_prepare_audio)
+
+    row = real_media_download_cache.run("real_media_download_cache", tmp_path, False, True)
+
+    assert row["status"] == "pass"
+    downloaded = row["details"]["downloaded"]["wikimedia_public_domain_roundhay_webm_no_audio"]
+    assert downloaded["kind"] == "real_video_webm_no_audio"
+    assert "No audio stream found in video" in downloaded["no_audio_error"]
+
+
 def test_real_media_manifest_has_downloadable_wikimedia_audio_fixtures():
     data = json.loads((ROOT / "qa" / "runtime_matrix" / "real_media_fixtures.json").read_text(encoding="utf-8"))
 
     assert data["fixtures"]["wikimedia_cc0_word_wav"]["download_url"].startswith("https://commons.wikimedia.org/wiki/Special:FilePath/")
     assert data["fixtures"]["wikimedia_public_domain_speech_ogg"]["download_url"].startswith("https://commons.wikimedia.org/wiki/Special:FilePath/")
+    roundhay = data["fixtures"]["wikimedia_public_domain_roundhay_webm_no_audio"]
+    assert roundhay["kind"] == "real_video_webm_no_audio"
+    assert roundhay["download_url"].startswith("https://commons.wikimedia.org/wiki/Special:FilePath/")
+    assert "Public Domain" in roundhay["license"]
+    assert "no-audio real-video supplement" in roundhay["notes"]
 
 
 def test_runtime_fixture_manifest_covers_core_runtime_formats():
