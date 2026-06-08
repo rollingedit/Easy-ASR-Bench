@@ -70,9 +70,10 @@
       "expected_text": "You are at risk for HIV.",
       "rows": [
         "real_media_download_cache",
-        "real_public_video_faster_whisper_smollm_grading"
+        "real_public_video_faster_whisper_smollm_grading",
+        "real_public_video_openai_whisper_pt_smollm_grading"
       ],
-      "notes": "Small CDC public-domain spoken-word WebM from Wikimedia Commons. Used for real video-to-ASR normalization and faster-whisper plus SmolLM scored-report validation; WER is recorded but not release-gated because this is a short public-media smoke fixture."
+      "notes": "Small CDC public-domain spoken-word WebM from Wikimedia Commons. Used for real video-to-ASR normalization and faster-whisper/OpenAI Whisper .pt plus SmolLM scored-report validation; WER is recorded but not release-gated because this is a short public-media smoke fixture."
     },
     "smollm_135m_gguf": {
       "repo": "HuggingFaceTB/SmolLM-135M-GGUF",
@@ -89,6 +90,7 @@
         "real_public_media_generic_onnx_ctc_smollm_grading_cpu",
         "real_public_media_gguf_asr_mmproj_smollm_grading",
         "real_public_video_faster_whisper_smollm_grading",
+        "real_public_video_openai_whisper_pt_smollm_grading",
         "llama_cpp_cuda_smollm_smoke",
         "llama_cpp_vulkan_smollm_smoke"
       ]
@@ -214,6 +216,7 @@
       "rows": [
         "openai_whisper_pt_checksum_verified",
         "real_public_media_openai_whisper_pt_smollm_grading",
+        "real_public_video_openai_whisper_pt_smollm_grading",
         "openai_whisper_pt_unknown_blocked",
         "openai_pt_unverified_blocked"
       ]
