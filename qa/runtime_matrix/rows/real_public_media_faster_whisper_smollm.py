@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
+from app.adapters.openai_whisper_pt import is_verified_official_checkpoint
 from app.adapters.gguf_llm_reference import GGUFLLMReferenceAdapter
 from app.dependency_manager import install_group_for_config, missing_modules_for_config, recovery_command_for_config
 from app.hf_model_downloader import RECOMMENDED_BASELINE_REPO, download_hf_model_from_ref
@@ -15,6 +17,7 @@ from app.results_writer import render_text_report, write_benchmark_csv
 from app.scoring import wer
 from qa.runtime_matrix.common import dependency_resolution_report_failures, package_versions, sha256, write_row
 from qa.runtime_matrix.rows.real_media_download_cache import MANIFEST, _download, _extension_for_fixture, _load_manifest
+from qa.runtime_matrix.rows.openai_whisper_pt_safety import TINY_PT, TINY_PT_SHA256, _download_official_checkpoint
 from qa.runtime_matrix.rows.report_reference_validation import _assert_report_files
 from qa.runtime_matrix.rows.smollm_reference_grading_report import SMOLLM_PATH, _smollm_candidate
 from qa.run_real_tiny_model_smoke import smoke_config
@@ -23,8 +26,23 @@ from qa.run_real_tiny_model_smoke import smoke_config
 ROW_FIXTURES = {
     "real_public_media_faster_whisper_smollm_grading": "wikimedia_cc0_word_wav",
     "real_public_video_faster_whisper_smollm_grading": "wikimedia_public_domain_spoken_words_webm",
+    "real_public_media_openai_whisper_pt_smollm_grading": "wikimedia_cc0_word_wav",
 }
-GROUPS = {"python_packaging", "media_tools", "faster_whisper", "llama_cpp"}
+ROW_BACKENDS = {
+    "real_public_media_faster_whisper_smollm_grading": "faster_whisper",
+    "real_public_video_faster_whisper_smollm_grading": "faster_whisper",
+    "real_public_media_openai_whisper_pt_smollm_grading": "openai_whisper_pt",
+}
+GROUPS_BY_BACKEND = {
+    "faster_whisper": {"python_packaging", "media_tools", "faster_whisper", "llama_cpp"},
+    "openai_whisper_pt": {"python_packaging", "media_tools", "openai_whisper", "llama_cpp"},
+}
+PACKAGE_NAMES_BY_BACKEND = {
+    "faster_whisper": ["pip", "setuptools", "faster-whisper", "ctranslate2", "llama-cpp-python"],
+    "openai_whisper_pt": ["pip", "setuptools", "openai-whisper", "torch", "llama-cpp-python"],
+}
+LOCAL_FIXTURE_SEARCH_ROOTS = ("Temp", "Input", "Cache")
+LOCAL_OPENAI_PT_SEARCH_ROOTS = ("Temp", "Models", "Cache")
 
 
 def _ensure_faster_whisper(models_root: Path, allow_downloads: bool) -> tuple[Path | None, str | None]:
@@ -45,6 +63,55 @@ def _ensure_faster_whisper(models_root: Path, allow_downloads: bool) -> tuple[Pa
     return destination, None
 
 
+def _find_cached_file(filename: str, expected_sha_prefix: str, roots: tuple[str, ...], exclude_parent: Path | None = None) -> Path | None:
+    expected = str(expected_sha_prefix).lower()
+    excluded = exclude_parent.resolve() if exclude_parent is not None else None
+    for root_name in roots:
+        root = Path.cwd() / root_name
+        if not root.exists():
+            continue
+        for candidate in root.rglob(filename):
+            if not candidate.is_file():
+                continue
+            try:
+                if excluded is not None and candidate.parent.resolve() == excluded:
+                    continue
+            except OSError:
+                continue
+            digest = sha256(candidate).removeprefix("sha256:").lower()
+            if digest.startswith(expected):
+                return candidate
+    return None
+
+
+def _ensure_openai_whisper_pt(models_root: Path, allow_downloads: bool) -> tuple[Path | None, str | None]:
+    checkpoint = models_root / "openai_whisper" / TINY_PT
+    if checkpoint.exists() and is_verified_official_checkpoint(checkpoint):
+        return checkpoint, None
+    cached = _find_cached_file(TINY_PT, TINY_PT_SHA256, LOCAL_OPENAI_PT_SEARCH_ROOTS, exclude_parent=checkpoint.parent)
+    if cached is not None:
+        checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(cached, checkpoint)
+        return checkpoint, None
+    if not allow_downloads:
+        return None, f"missing official allowlisted {TINY_PT}; rerun with --allow-downloads"
+    try:
+        _download_official_checkpoint(checkpoint)
+    except Exception as exc:
+        return None, f"could not download official {TINY_PT}: {type(exc).__name__}: {exc}"
+    if not is_verified_official_checkpoint(checkpoint):
+        return None, f"downloaded {TINY_PT} did not match the official SHA256 allowlist"
+    return checkpoint, None
+
+
+def _ensure_backend_model(backend: str, models_root: Path, allow_downloads: bool) -> tuple[Path | None, str | None]:
+    if backend == "faster_whisper":
+        return _ensure_faster_whisper(models_root, allow_downloads)
+    if backend == "openai_whisper_pt":
+        return _ensure_openai_whisper_pt(models_root, allow_downloads)
+    return None, f"unsupported real public media backend {backend}"
+
+
 def _download_fixture(fixture_id: str, evidence_dir: Path, allow_downloads: bool) -> tuple[Path | None, dict, str | None]:
     manifest = _load_manifest()
     fixture = manifest["fixtures"][fixture_id]
@@ -59,15 +126,30 @@ def _download_fixture(fixture_id: str, evidence_dir: Path, allow_downloads: bool
             "expected_text": fixture.get("expected_text"),
         },
     }
+    target = evidence_dir / "real_media" / f"{fixture_id}{_extension_for_fixture(fixture_id, fixture)}"
+    expected_prefix = fixture.get("expected_sha256_prefix")
+    if target.exists():
+        digest = sha256(target)
+        if not expected_prefix or digest.removeprefix("sha256:").startswith(str(expected_prefix)):
+            details["fixture"]["sha256"] = digest
+            details["fixture"]["bytes"] = target.stat().st_size
+            return target, details, None
+    if expected_prefix:
+        cached = _find_cached_file(target.name, str(expected_prefix), LOCAL_FIXTURE_SEARCH_ROOTS, exclude_parent=target.parent)
+        if cached is not None:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(cached, target)
+            details["fixture"]["sha256"] = sha256(target)
+            details["fixture"]["bytes"] = target.stat().st_size
+            details["fixture"]["byte_source"] = "local_cache"
+            return target, details, None
     if not allow_downloads:
         return None, details, "real public media fixture downloads require --allow-downloads"
-    target = evidence_dir / "real_media" / f"{fixture_id}{_extension_for_fixture(fixture_id, fixture)}"
     try:
         _download(str(fixture["download_url"]), target)
     except Exception as exc:
         return None, {**details, "error_type": type(exc).__name__, "message": str(exc)}, f"could not download {fixture_id}"
     digest = sha256(target)
-    expected_prefix = fixture.get("expected_sha256_prefix")
     if expected_prefix and not digest.removeprefix("sha256:").startswith(str(expected_prefix)):
         return None, {**details, "actual_sha256": digest}, f"{fixture_id} hash did not match expected prefix"
     details["fixture"]["sha256"] = digest
@@ -82,11 +164,11 @@ def _rewrite_base_reports(output_dir: Path, results: dict) -> None:
     write_benchmark_csv(output_dir / "benchmark.csv", results)
 
 
-def _repair_dependencies(config: dict, evidence_dir: Path, install_deps: bool) -> tuple[list[str], dict, list[Path]]:
+def _repair_dependencies(config: dict, evidence_dir: Path, install_deps: bool, groups: set[str]) -> tuple[list[str], dict, list[Path]]:
     blockers: list[str] = []
     details: dict = {}
     artifacts: list[Path] = []
-    for group in sorted(GROUPS):
+    for group in sorted(groups):
         missing = missing_modules_for_config(group, config)
         repair_log = evidence_dir / f"{group}_repair.log"
         details[f"{group}_missing_before"] = missing
@@ -129,6 +211,9 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
     if row_id not in ROW_FIXTURES:
         return write_row(row_id, "fail", evidence_dir, summary=f"Unsupported real public media row id: {row_id}")
     fixture_id = ROW_FIXTURES[row_id]
+    backend = ROW_BACKENDS[row_id]
+    groups = GROUPS_BY_BACKEND[backend]
+    package_names = PACKAGE_NAMES_BY_BACKEND[backend]
     if not SMOLLM_PATH.exists():
         return write_row(
             row_id,
@@ -143,7 +228,9 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
     config["runtime"]["llm_context_tokens"] = 512
     config["runtime"]["llm_reference_max_tokens"] = 64
     config["runtime"]["llm_reference_temperature"] = 0.0
-    blockers, dependency_details, dependency_artifacts = _repair_dependencies(config, evidence_dir, install_deps)
+    config["security"] = dict(config.get("security", {}))
+    config["security"]["allow_pickle_or_pt_files"] = False
+    blockers, dependency_details, dependency_artifacts = _repair_dependencies(config, evidence_dir, install_deps, groups)
     if blockers:
         return write_row(
             row_id,
@@ -152,7 +239,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
             summary="One or more dependency groups are not runnable, so the real public media ASR+SmolLM row cannot run.",
             block_reason="; ".join(blockers),
             external_requirement="rerun with --install-deps or repair the listed dependency groups through setup.bat",
-            details={**dependency_details, "dependency_versions": package_versions(["pip", "setuptools", "faster-whisper", "ctranslate2", "llama-cpp-python"])},
+            details={**dependency_details, "backend": backend, "dependency_versions": package_versions(package_names)},
             artifacts=[*dependency_artifacts, SMOLLM_PATH],
         )
     repair_evidence = execute_repair_plan(config, project_root=evidence_dir)
@@ -170,32 +257,32 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
             summary="Real public media fixture is not available for ASR+SmolLM validation.",
             block_reason=fixture_error if not allow_downloads else None,
             external_requirement="rerun with --allow-downloads after source/license review" if not allow_downloads else None,
-            details={**dependency_details, **fixture_details},
+            details={**dependency_details, **fixture_details, "backend": backend},
             artifacts=[*dependency_artifacts, SMOLLM_PATH],
         )
 
-    model_dir, model_error = _ensure_faster_whisper(Path(config["folders"]["models"]), allow_downloads)
+    model_dir, model_error = _ensure_backend_model(backend, Path(config["folders"]["models"]), allow_downloads)
     if model_error or model_dir is None:
         return write_row(
             row_id,
             "blocked" if not allow_downloads else "fail",
             evidence_dir,
-            summary="faster-whisper fixture is not staged for real public media ASR+SmolLM validation.",
+            summary=f"{backend} fixture is not staged for real public media ASR+SmolLM validation.",
             block_reason=model_error if not allow_downloads else None,
             external_requirement="rerun with --allow-downloads or stage the listed fixture" if not allow_downloads else None,
-            details={**dependency_details, **fixture_details},
+            details={**dependency_details, **fixture_details, "backend": backend},
             artifacts=[*dependency_artifacts, SMOLLM_PATH, source],
         )
 
     runnable, unsupported = scan_models(Path(config["folders"]["models"]))
-    selected = [candidate for candidate in runnable if candidate.adapter_name == "faster_whisper"]
+    selected = [candidate for candidate in runnable if candidate.adapter_name == backend]
     if not selected:
         return write_row(
             row_id,
             "fail",
             evidence_dir,
-            summary="Downloaded faster-whisper model was not discovered as a runnable candidate.",
-            details={**dependency_details, **fixture_details, "unsupported": [candidate.candidate_id for candidate in unsupported]},
+            summary=f"Staged {backend} model was not discovered as a runnable candidate.",
+            details={**dependency_details, **fixture_details, "backend": backend, "unsupported": [candidate.candidate_id for candidate in unsupported]},
             artifacts=[*dependency_artifacts, SMOLLM_PATH, source, model_dir],
         )
     llm_candidate, scan_details = _smollm_candidate()
@@ -205,7 +292,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
             "fail",
             evidence_dir,
             summary="SmolLM GGUF was not classified as a reference/correction LLM candidate.",
-            details={**dependency_details, **fixture_details, **scan_details},
+            details={**dependency_details, **fixture_details, **scan_details, "backend": backend},
             artifacts=[*dependency_artifacts, SMOLLM_PATH, source, model_dir],
         )
 
@@ -216,7 +303,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
             "fail",
             evidence_dir,
             summary="Real public media ASR+SmolLM row did not produce a report directory.",
-            details={**dependency_details, **fixture_details, **scan_details},
+            details={**dependency_details, **fixture_details, **scan_details, "backend": backend},
             artifacts=[*dependency_artifacts, SMOLLM_PATH, source, model_dir],
         )
     results_path = output_dir / "results.json"
@@ -257,7 +344,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
         for failure in _assert_report_files(output_dir, large=False)
         if failure != "compare_scored.html missing marker fixture_windows_gpu_adapter_memory"
     ]
-    dependency_failures, dependency_report_details = dependency_resolution_report_failures(results, expected_groups=GROUPS)
+    dependency_failures, dependency_report_details = dependency_resolution_report_failures(results, expected_groups=groups)
     failures.extend(dependency_failures)
     if not transcript:
         failures.append("real public media ASR transcript was empty")
@@ -273,7 +360,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
         "pass" if not failures else "fail",
         evidence_dir,
         summary=(
-            "Real public Wikimedia media ran through faster-whisper ASR, then SmolLM scoring/report validation completed."
+            f"Real public Wikimedia media ran through {backend} ASR, then SmolLM scoring/report validation completed."
             if not failures
             else "Real public media ASR+SmolLM validation failed."
         ),
@@ -281,6 +368,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
             **dependency_details,
             **fixture_details,
             **scan_details,
+            "backend": backend,
             "model_dir": str(model_dir),
             "output_dir": str(output_dir),
             "transcript": transcript,
@@ -288,7 +376,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
             "normalized_wer": normalized_wer,
             "score_status": scored.get("status"),
             "generated_text": generated_text,
-            "dependency_versions": package_versions(["pip", "setuptools", "faster-whisper", "ctranslate2", "llama-cpp-python"]),
+            "dependency_versions": package_versions(package_names),
             "failures": failures,
             **dependency_report_details,
         },
