@@ -29,6 +29,7 @@
     "faster_whisper_ctranslate2_candidate_fallback_repair",
     "faster_whisper_vc_runtime_repair",
     "faster_whisper_cuda_unavailable_cpu_fallback",
+    "transformers_cuda_unavailable_cpu_fallback",
     "generic_onnx_manifest_cpu",
     "generic_onnx_without_manifest_rejected",
     "openai_pt_unverified_blocked",

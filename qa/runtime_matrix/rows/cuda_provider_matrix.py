@@ -337,6 +337,59 @@ def _faster_whisper_cuda_fallback(row_id: str, evidence_dir: Path) -> dict:
     )
 
 
+def _transformers_cuda_fallback(row_id: str, evidence_dir: Path) -> dict:
+    hardware = hardware_from_dependency_manager()
+    plan = resolve_runtime_plan(
+        "transformers_asr",
+        {"runtime": {"provider": "cuda", "prefer_gpu": True, "fallback_to_cpu": True}},
+        hardware,
+    )
+    details = {
+        "plan": {
+            "model_family": plan.model_family,
+            "requested_provider": plan.requested_provider,
+            "actual_provider": plan.actual_provider,
+            "device": plan.device,
+            "backend_verified": plan.backend_verified,
+            "fallback_allowed": plan.fallback_allowed,
+            "reason": plan.reason,
+            "fallback_reason": plan.fallback_reason,
+        },
+        "hardware": {
+            "nvidia": hardware.nvidia,
+            "torch_cuda_available": hardware.torch_cuda_available,
+            "onnx_providers": list(hardware.onnx_providers),
+        },
+        "cuda_provider_checks": cuda_diagnostics(),
+        "dependency_versions": package_versions(["torch", "transformers", "safetensors", "sentencepiece", "protobuf", "torchaudio"]),
+        "repair_command": _repair_commands()["torch_transformers"],
+        "explicit_cuda_requirement_commands": _explicit_cuda_requirement_commands().get("transformers_cpu", []),
+    }
+    if plan.actual_provider == "cpu" and plan.fallback_reason and plan.fallback_allowed and not plan.backend_verified:
+        return write_row(
+            row_id,
+            "pass",
+            evidence_dir,
+            summary="Transformers ASR CUDA request resolves to explicit CPU fallback when Torch CUDA is not verified.",
+            details=details,
+        )
+    if plan.actual_provider == "cuda" and plan.backend_verified:
+        return write_row(
+            row_id,
+            "pass",
+            evidence_dir,
+            summary="Transformers ASR CUDA request resolves to verified Torch CUDA on this machine.",
+            details=details,
+        )
+    return write_row(
+        row_id,
+        "fail",
+        evidence_dir,
+        summary="Transformers ASR CUDA fallback plan was not explicit enough.",
+        details=details,
+    )
+
+
 def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: bool) -> dict:
     if row_id == "nvidia_cuda_torch_onnx_faster_whisper_llama":
         return _nvidia_cuda_combo(row_id, evidence_dir)
@@ -352,4 +405,6 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
         return _llama_cpp_cuda_smoke(row_id, evidence_dir)
     if row_id == "faster_whisper_cuda_unavailable_cpu_fallback":
         return _faster_whisper_cuda_fallback(row_id, evidence_dir)
+    if row_id == "transformers_cuda_unavailable_cpu_fallback":
+        return _transformers_cuda_fallback(row_id, evidence_dir)
     return write_row(row_id, "fail", evidence_dir, summary=f"Unsupported CUDA provider row: {row_id}")

@@ -145,6 +145,16 @@ def test_release_verification_documents_directml_conflict_repair_row():
     assert "commands captured instead of executed" in text
 
 
+def test_release_verification_documents_transformers_cuda_fallback_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row transformers_cuda_unavailable_cpu_fallback" in text
+    assert "requirements\\torch_cuda_cu128.txt" in text
+    assert "requirements\\transformers_cpu.txt" in text
+    assert "conservative safe recovery command" in text
+    assert "explicit CPU fallback" in text
+
+
 def test_release_verification_documents_faster_whisper_pkg_resources_repair_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 
