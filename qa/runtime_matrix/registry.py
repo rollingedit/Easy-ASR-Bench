@@ -128,6 +128,7 @@ ROWS: dict[str, RowDefinition] = {
     "multi_file_onnx_ar_nar": row("multi_file_onnx_ar_nar", "qa.runtime_matrix.rows.multi_file_onnx_ar_nar"),
     "audio_asr_gguf_mmproj": row("audio_asr_gguf_mmproj", "qa.runtime_matrix.rows.gguf_asr_mmproj", hardware="asr_gguf_mmproj_fixture"),
     "gguf_asr_mmproj_pair": row("gguf_asr_mmproj_pair", "qa.runtime_matrix.rows.gguf_asr_mmproj", hardware="asr_gguf_mmproj_fixture"),
+    "real_public_media_gguf_asr_mmproj_smollm_grading": row("real_public_media_gguf_asr_mmproj_smollm_grading", "qa.runtime_matrix.rows.gguf_asr_mmproj", hardware="network"),
     "incomplete_audio_asr_gguf_mmproj_rejected": row("incomplete_audio_asr_gguf_mmproj_rejected", "qa.runtime_matrix.rows.gguf_asr_mmproj"),
     "mismatched_audio_asr_gguf_mmproj_rejected": row("mismatched_audio_asr_gguf_mmproj_rejected", "qa.runtime_matrix.rows.gguf_asr_mmproj"),
     "gguf_reference_llm": row("gguf_reference_llm", "qa.runtime_matrix.rows.gguf_reference_llm_smollm135"),

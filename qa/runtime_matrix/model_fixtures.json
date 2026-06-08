@@ -59,9 +59,10 @@
         "real_public_media_openai_whisper_pt_smollm_grading",
         "real_public_media_whisper_cpp_ggml_smollm_grading",
         "real_public_media_hf_whisper_safetensors_smollm_grading_cpu",
-        "real_public_media_generic_onnx_ctc_smollm_grading_cpu"
+        "real_public_media_generic_onnx_ctc_smollm_grading_cpu",
+        "real_public_media_gguf_asr_mmproj_smollm_grading"
       ],
-      "notes": "CC0/public-domain-dedicated spoken-word WAV from Wikimedia Commons. Used for real web-media normalization and faster-whisper/OpenAI Whisper .pt/whisper.cpp/HF Whisper Safetensors/Generic ONNX CTC plus SmolLM scored-report validation; WER is recorded but not release-gated because this is a single-word public-media smoke fixture."
+      "notes": "CC0/public-domain-dedicated spoken-word WAV from Wikimedia Commons. Used for real web-media normalization and faster-whisper/OpenAI Whisper .pt/whisper.cpp/HF Whisper Safetensors/Generic ONNX CTC/ASR GGUF+mmproj plus SmolLM scored-report validation; WER is recorded but not release-gated because this is a single-word public-media smoke fixture."
     },
     "wikimedia_public_domain_spoken_words_webm": {
       "source_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Spoken%20Words.webm",
@@ -86,6 +87,7 @@
         "real_public_media_whisper_cpp_ggml_smollm_grading",
         "real_public_media_hf_whisper_safetensors_smollm_grading_cpu",
         "real_public_media_generic_onnx_ctc_smollm_grading_cpu",
+        "real_public_media_gguf_asr_mmproj_smollm_grading",
         "real_public_video_faster_whisper_smollm_grading",
         "llama_cpp_cuda_smollm_smoke",
         "llama_cpp_vulkan_smollm_smoke"
@@ -233,9 +235,10 @@
         "hf_downloader_qwen3_asr_gguf_mmproj_public_real_download_to_asr",
         "audio_asr_gguf_mmproj",
         "gguf_asr_mmproj_pair",
+        "real_public_media_gguf_asr_mmproj_smollm_grading",
         "incomplete_audio_asr_gguf_mmproj_rejected"
       ],
-      "notes": "Quality-bearing public ASR GGUF+mmproj fixture. Q2_K is smaller but generated unusable text on llama-mtmd-cli 9544; Q4_K_M plus the Q8_0 projector produced the generated SAPI smoke phrase with WER 0.0 after Qwen ASR wrapper cleanup. The downloader-layout row verifies the real infix mmproj filename is selected and materialized with model_package.json; the public-listing row verifies the current live Hugging Face repo listing still maps to that ASR choice without downloading large model bytes; the cached-materialization row copies previously downloaded real GGUF bytes through the downloader path and verifies the exact manifest/scanner result; the noninteractive-flow row calls the product HF downloader entrypoint with a live-like multi-projector file list; the public-noninteractive-flow row uses the product HF downloader entrypoint with the live Hugging Face listing while copying only the selected cached real bytes; the public-download-to-ASR row runs the HF-downloaded folder through Qwen ASR inference and SmolLM scoring; the public-real-download-to-ASR row removes cached-byte redirection and uses product download bytes before inference."
+      "notes": "Quality-bearing public ASR GGUF+mmproj fixture. Q2_K is smaller but generated unusable text on llama-mtmd-cli 9544; Q4_K_M plus the Q8_0 projector produced the generated SAPI smoke phrase with WER 0.0 after Qwen ASR wrapper cleanup. The downloader-layout row verifies the real infix mmproj filename is selected and materialized with model_package.json; the public-listing row verifies the current live Hugging Face repo listing still maps to that ASR choice without downloading large model bytes; the cached-materialization row copies previously downloaded real GGUF bytes through the downloader path and verifies the exact manifest/scanner result; the noninteractive-flow row calls the product HF downloader entrypoint with a live-like multi-projector file list; the public-noninteractive-flow row uses the product HF downloader entrypoint with the live Hugging Face listing while copying only the selected cached real bytes; the public-download-to-ASR row runs the HF-downloaded folder through Qwen ASR inference and SmolLM scoring; the public-real-download-to-ASR row removes cached-byte redirection and uses product download bytes before inference; the real public-media row records single-word WER without using it as a release gate."
     }
   }
 }
