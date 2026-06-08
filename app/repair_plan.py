@@ -531,6 +531,8 @@ def classify_repair_action(missing: list[str], can_auto_repair: bool) -> str:
         return "replace_incompatible"
     if any(marker in text for marker in ["outdated", "too old", "stale", "version outside", "wrong version", "upgrade"]):
         return "upgrade_outdated"
+    if "(installed" in text or any(marker in text for marker in [">=", "<=", "==", "~=", "!="]):
+        return "upgrade_outdated"
     if any(marker in text for marker in ["conflict", "conflicting", "cpu-only", "wrong provider", "provider hidden", "replace"]):
         return "replace_conflicting"
     return "install_missing"

@@ -14,6 +14,7 @@ ROWS: dict[str, RowDefinition] = {
     "windows_vc_runtime": row("windows_vc_runtime", "qa.runtime_matrix.rows.windows_vc_runtime"),
     "windows_vc_runtime_repair_contract": row("windows_vc_runtime_repair_contract", "qa.runtime_matrix.rows.windows_vc_runtime"),
     "python_packaging_tools_repair_contract": row("python_packaging_tools_repair_contract", "qa.runtime_matrix.rows.python_packaging_repair"),
+    "transformers_cpu_dependency_repair_contract": row("transformers_cpu_dependency_repair_contract", "qa.runtime_matrix.rows.transformers_dependency_repair"),
     "windows_directml_provider": row("windows_directml_provider", "qa.runtime_matrix.rows.windows_directml_provider"),
     "directml_provider_conflict_repair": row("directml_provider_conflict_repair", "qa.runtime_matrix.rows.windows_directml_provider"),
     "windows_vulkan_runtime": row("windows_vulkan_runtime", "qa.runtime_matrix.rows.windows_vulkan_runtime"),

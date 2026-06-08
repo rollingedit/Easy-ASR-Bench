@@ -105,6 +105,7 @@ def test_runtime_matrix_includes_native_runtime_prerequisite_rows():
     assert ROWS["windows_vc_runtime"].module == "qa.runtime_matrix.rows.windows_vc_runtime"
     assert ROWS["windows_vc_runtime_repair_contract"].module == "qa.runtime_matrix.rows.windows_vc_runtime"
     assert ROWS["python_packaging_tools_repair_contract"].module == "qa.runtime_matrix.rows.python_packaging_repair"
+    assert ROWS["transformers_cpu_dependency_repair_contract"].module == "qa.runtime_matrix.rows.transformers_dependency_repair"
     assert ROWS["windows_directml_provider"].module == "qa.runtime_matrix.rows.windows_directml_provider"
     assert ROWS["directml_provider_conflict_repair"].module == "qa.runtime_matrix.rows.windows_directml_provider"
     assert ROWS["windows_vulkan_runtime"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
@@ -796,6 +797,27 @@ def test_runtime_matrix_maps_real_faster_whisper_smollm_grading_row():
     assert ROWS["faster_whisper_ctranslate2_candidate_fallback_repair"].module == "qa.runtime_matrix.rows.ctranslate2_dynamic_resolver"
     assert ROWS["faster_whisper_vc_runtime_repair"].module == "qa.runtime_matrix.rows.ctranslate2_dynamic_resolver"
     assert ROWS["real_tiny_faster_whisper_smollm_grading"].module == "qa.runtime_matrix.rows.real_faster_whisper_smollm_grading"
+
+
+def test_transformers_cpu_dependency_repair_row_records_full_import_contract(tmp_path):
+    from qa.runtime_matrix.rows import transformers_dependency_repair
+
+    row = transformers_dependency_repair.run("transformers_cpu_dependency_repair_contract", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    assert row["details"]["repair_action"] == "upgrade_outdated"
+    assert row["details"]["missing_after"] == []
+    assert row["details"]["runtime_resolution_path"]
+    assert set(row["details"]["loaded_modules"]) == {
+        "torch",
+        "transformers",
+        "safetensors",
+        "sentencepiece",
+        "google.protobuf",
+        "torchaudio",
+    }
+    assert row["details"]["commands"]
+    assert "transformers_cpu.txt" in row["details"]["commands"][0]
 
 
 def test_faster_whisper_pkg_resources_repair_row_records_native_repair_contract(tmp_path):

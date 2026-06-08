@@ -107,6 +107,15 @@ def test_release_verification_documents_python_packaging_repair_contract_row():
     assert "pkg_resources" in text
 
 
+def test_release_verification_documents_transformers_dependency_repair_contract_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row transformers_cpu_dependency_repair_contract" in text
+    assert "requirements\\transformers_cpu.txt" in text
+    assert "torch`, `transformers`, `safetensors`, `sentencepiece`, `google.protobuf`, and `torchaudio`" in text
+    assert "runtime-resolution record" in text
+
+
 def test_release_verification_documents_directml_conflict_repair_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 
