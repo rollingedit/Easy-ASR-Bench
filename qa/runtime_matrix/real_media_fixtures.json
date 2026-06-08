@@ -18,6 +18,15 @@
       "expected_sha256_prefix": "a0db5f3a4809",
       "notes": "Historic real speech OGG fixture. Useful for decode/normalization coverage, not modern ASR WER thresholds."
     },
+    "wikimedia_public_domain_spoken_words_webm": {
+      "kind": "real_video_webm_with_audio",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Spoken_Words.webm",
+      "download_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Spoken%20Words.webm",
+      "license": "Public domain United States government work as reported by Wikimedia Commons file page",
+      "expected_sha256_prefix": "2363d2ea181c",
+      "notes": "Small CDC public-domain spoken-word WebM fixture with audio. Use for real video-to-ASR smoke and media normalization coverage.",
+      "expected_text": "You are at risk for HIV."
+    },
     "samplefile_h264_aac_mp4": {
       "kind": "real_video_mp4_with_audio",
       "source_page": "https://samplefile.com/samples/video/mp4/",

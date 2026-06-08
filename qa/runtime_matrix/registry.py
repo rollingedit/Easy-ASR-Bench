@@ -46,6 +46,7 @@ ROWS: dict[str, RowDefinition] = {
     "no_audio_video_readable_error": row("no_audio_video_readable_error", "qa.runtime_matrix.rows.media_fixtures"),
     "real_media_download_cache": row("real_media_download_cache", "qa.runtime_matrix.rows.real_media_download_cache", hardware="network"),
     "real_public_media_faster_whisper_smollm_grading": row("real_public_media_faster_whisper_smollm_grading", "qa.runtime_matrix.rows.real_public_media_faster_whisper_smollm", hardware="network"),
+    "real_public_video_faster_whisper_smollm_grading": row("real_public_video_faster_whisper_smollm_grading", "qa.runtime_matrix.rows.real_public_media_faster_whisper_smollm", hardware="network"),
     "hf_downloader_qwen3_asr_gguf_mmproj_layout": row("hf_downloader_qwen3_asr_gguf_mmproj_layout", "qa.runtime_matrix.rows.hf_downloader_layouts"),
     "hf_downloader_qwen3_asr_gguf_mmproj_public_listing": row("hf_downloader_qwen3_asr_gguf_mmproj_public_listing", "qa.runtime_matrix.rows.hf_downloader_layouts", hardware="network"),
     "hf_downloader_qwen3_asr_gguf_mmproj_cached_materialization": row("hf_downloader_qwen3_asr_gguf_mmproj_cached_materialization", "qa.runtime_matrix.rows.hf_downloader_layouts"),

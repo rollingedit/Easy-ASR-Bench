@@ -44,7 +44,8 @@
         "faster_whisper_ctranslate2",
         "real_tiny_faster_whisper_report_smoke",
         "faster_whisper_cpu",
-        "real_public_media_faster_whisper_smollm_grading"
+        "real_public_media_faster_whisper_smollm_grading",
+        "real_public_video_faster_whisper_smollm_grading"
       ]
     },
     "wikimedia_cc0_word_wav": {
@@ -57,6 +58,16 @@
       ],
       "notes": "CC0/public-domain-dedicated spoken-word WAV from Wikimedia Commons. Used for real web-media normalization and faster-whisper plus SmolLM scored-report validation; WER is recorded but not release-gated because this is a single-word public-media smoke fixture."
     },
+    "wikimedia_public_domain_spoken_words_webm": {
+      "source_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Spoken%20Words.webm",
+      "kind": "real_public_video_fixture",
+      "expected_text": "You are at risk for HIV.",
+      "rows": [
+        "real_media_download_cache",
+        "real_public_video_faster_whisper_smollm_grading"
+      ],
+      "notes": "Small CDC public-domain spoken-word WebM from Wikimedia Commons. Used for real video-to-ASR normalization and faster-whisper plus SmolLM scored-report validation; WER is recorded but not release-gated because this is a short public-media smoke fixture."
+    },
     "smollm_135m_gguf": {
       "repo": "HuggingFaceTB/SmolLM-135M-GGUF",
       "local_path": "Temp/real_tiny_llm_smoke/Models/SmolLM-135M-GGUF/SmolLM-135M.Q4_K_M.gguf",
@@ -66,6 +77,7 @@
         "gguf_text_llm_reference_only",
         "smollm_reference_grading_report",
         "real_public_media_faster_whisper_smollm_grading",
+        "real_public_video_faster_whisper_smollm_grading",
         "llama_cpp_cuda_smollm_smoke",
         "llama_cpp_vulkan_smollm_smoke"
       ]
