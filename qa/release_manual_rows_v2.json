@@ -94,6 +94,7 @@
       "openai_whisper_pt_checksum_verified": "not_run",
       "openai_whisper_pt_unknown_blocked": "not_run",
       "openai_pt_unverified_blocked": "not_run",
+      "openai_whisper_cuda_unavailable_cpu_fallback": "not_run",
       "generic_onnx_ctc_manifest_v1": "not_run",
       "generic_onnx_manifest_cpu": "not_run",
       "generic_onnx_openvino_unavailable_cpu_fallback": "not_run",

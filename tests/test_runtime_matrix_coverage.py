@@ -763,6 +763,19 @@ def test_transformers_cuda_fallback_row_records_runtime_plan_and_repair_command(
     assert "torch_cuda_available" in row["details"]["hardware"]
 
 
+def test_openai_whisper_cuda_fallback_row_records_runtime_plan_and_repair_command(tmp_path):
+    from qa.runtime_matrix.rows import cuda_provider_matrix
+
+    row = cuda_provider_matrix.run("openai_whisper_cuda_unavailable_cpu_fallback", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    assert row["details"]["plan"]["requested_provider"] == "cuda"
+    assert row["details"]["plan"]["actual_provider"] in {"cpu", "cuda"}
+    commands = " ".join(row["details"]["explicit_cuda_requirement_commands"]).replace("\\", "/")
+    assert "requirements/torch_cuda_cu128.txt" in commands
+    assert "requirements/openai_whisper.txt" in commands
+
+
 def test_runtime_matrix_maps_hf_safetensors_rows_to_real_tiny_fixture_runner():
     assert ROWS["hf_safetensors_asr"].module == "qa.runtime_matrix.rows.hf_safetensors_tiny"
     assert ROWS["hf_whisper_safetensors"].module == "qa.runtime_matrix.rows.hf_safetensors_tiny"
@@ -849,6 +862,7 @@ def test_runtime_matrix_maps_openai_whisper_pt_safety_rows():
     assert ROWS["openai_whisper_pt_unknown_blocked"].module == "qa.runtime_matrix.rows.openai_whisper_pt_safety"
     assert ROWS["openai_pt_unverified_blocked"].module == "qa.runtime_matrix.rows.openai_whisper_pt_safety"
     assert ROWS["openai_whisper_pt_checksum_verified"].module == "qa.runtime_matrix.rows.openai_whisper_pt_safety"
+    assert ROWS["openai_whisper_cuda_unavailable_cpu_fallback"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
 
 
 def test_runtime_matrix_maps_whisper_cpp_ggml_row():

@@ -111,6 +111,7 @@ ROWS: dict[str, RowDefinition] = {
     "openai_whisper_pt_checksum_verified": row("openai_whisper_pt_checksum_verified", "qa.runtime_matrix.rows.openai_whisper_pt_safety"),
     "openai_whisper_pt_unknown_blocked": row("openai_whisper_pt_unknown_blocked", "qa.runtime_matrix.rows.openai_whisper_pt_safety"),
     "openai_pt_unverified_blocked": row("openai_pt_unverified_blocked", "qa.runtime_matrix.rows.openai_whisper_pt_safety"),
+    "openai_whisper_cuda_unavailable_cpu_fallback": row("openai_whisper_cuda_unavailable_cpu_fallback", "qa.runtime_matrix.rows.cuda_provider_matrix"),
     "generic_onnx_ctc_manifest_v1": row("generic_onnx_ctc_manifest_v1", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"),
     "generic_onnx_manifest_cpu": row("generic_onnx_manifest_cpu", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"),
     "generic_onnx_openvino_unavailable_cpu_fallback": row("generic_onnx_openvino_unavailable_cpu_fallback", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"),

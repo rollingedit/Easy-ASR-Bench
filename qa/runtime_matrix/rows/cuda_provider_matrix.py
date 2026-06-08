@@ -18,6 +18,7 @@ def _repair_commands() -> dict[str, str]:
     cuda_config = {"runtime": {"provider": "cuda"}, "dependency_install": {"allow_accelerator_install": True}}
     return {
         "torch_transformers": recovery_command_for_config("transformers_cpu", cuda_config),
+        "openai_whisper": recovery_command_for_config("openai_whisper", cuda_config),
         "onnx_cuda": recovery_command_for_config("onnx", cuda_config),
         "faster_whisper_cuda": recovery_command_for_config("faster_whisper", cuda_config),
         "llama_cpp_cuda": recovery_command_for_config("llama_cpp", cuda_config),
@@ -390,6 +391,58 @@ def _transformers_cuda_fallback(row_id: str, evidence_dir: Path) -> dict:
     )
 
 
+def _openai_whisper_cuda_fallback(row_id: str, evidence_dir: Path) -> dict:
+    hardware = hardware_from_dependency_manager()
+    plan = resolve_runtime_plan(
+        "openai_whisper",
+        {"runtime": {"provider": "cuda", "prefer_gpu": True, "fallback_to_cpu": True}},
+        hardware,
+    )
+    details = {
+        "plan": {
+            "model_family": plan.model_family,
+            "requested_provider": plan.requested_provider,
+            "actual_provider": plan.actual_provider,
+            "device": plan.device,
+            "backend_verified": plan.backend_verified,
+            "fallback_allowed": plan.fallback_allowed,
+            "reason": plan.reason,
+            "fallback_reason": plan.fallback_reason,
+        },
+        "hardware": {
+            "nvidia": hardware.nvidia,
+            "torch_cuda_available": hardware.torch_cuda_available,
+        },
+        "cuda_provider_checks": cuda_diagnostics(),
+        "dependency_versions": package_versions(["torch", "openai-whisper"]),
+        "repair_command": _repair_commands()["openai_whisper"],
+        "explicit_cuda_requirement_commands": _explicit_cuda_requirement_commands().get("openai_whisper", []),
+    }
+    if plan.actual_provider == "cpu" and plan.fallback_reason and plan.fallback_allowed and not plan.backend_verified:
+        return write_row(
+            row_id,
+            "pass",
+            evidence_dir,
+            summary="OpenAI Whisper .pt CUDA request resolves to explicit CPU fallback when Torch CUDA is not verified.",
+            details=details,
+        )
+    if plan.actual_provider == "cuda" and plan.backend_verified:
+        return write_row(
+            row_id,
+            "pass",
+            evidence_dir,
+            summary="OpenAI Whisper .pt CUDA request resolves to verified Torch CUDA on this machine.",
+            details=details,
+        )
+    return write_row(
+        row_id,
+        "fail",
+        evidence_dir,
+        summary="OpenAI Whisper .pt CUDA fallback plan was not explicit enough.",
+        details=details,
+    )
+
+
 def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: bool) -> dict:
     if row_id == "nvidia_cuda_torch_onnx_faster_whisper_llama":
         return _nvidia_cuda_combo(row_id, evidence_dir)
@@ -407,4 +460,6 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
         return _faster_whisper_cuda_fallback(row_id, evidence_dir)
     if row_id == "transformers_cuda_unavailable_cpu_fallback":
         return _transformers_cuda_fallback(row_id, evidence_dir)
+    if row_id == "openai_whisper_cuda_unavailable_cpu_fallback":
+        return _openai_whisper_cuda_fallback(row_id, evidence_dir)
     return write_row(row_id, "fail", evidence_dir, summary=f"Unsupported CUDA provider row: {row_id}")

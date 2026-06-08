@@ -7,6 +7,7 @@ from typing import Sequence
 from .base import ChunkTranscript, ModelCandidate, ModelRunResult
 from ..benchmark import process_memory_mb
 from ..precision_detector import normalize_precision_label
+from ..runtime_plan import resolve_runtime_plan
 
 
 KNOWN_OFFICIAL_SHA256: dict[str, str] = {
@@ -33,6 +34,7 @@ class OpenAIWhisperPTAdapter:
         self.model = None
         self.candidate: ModelCandidate | None = None
         self.runtime_config: dict = {}
+        self.runtime_plan = None
 
     def discover(self, models_root: Path) -> list[ModelCandidate]:
         candidates: list[ModelCandidate] = []
@@ -79,9 +81,27 @@ class OpenAIWhisperPTAdapter:
             raise RuntimeError("OpenAI Whisper .pt support requires requirements/openai_whisper.txt.") from exc
         self.candidate = candidate
         self.runtime_config = runtime_config
-        wants_cuda = runtime_config.get("provider") == "cuda" or bool(runtime_config.get("prefer_gpu", False))
-        device = "cuda" if wants_cuda and torch.cuda.is_available() else None
-        self.model = whisper.load_model(str(candidate.path), device=device) if device else whisper.load_model(str(candidate.path))
+        plan = resolve_runtime_plan("openai_whisper", runtime_config)
+        self.runtime_plan = plan
+        device = "cuda" if plan.actual_provider == "cuda" else None
+        try:
+            self.model = whisper.load_model(str(candidate.path), device=device) if device else whisper.load_model(str(candidate.path))
+        except Exception as exc:
+            if device == "cuda" and plan.fallback_allowed:
+                self.model = whisper.load_model(str(candidate.path))
+                self.runtime_plan = plan.__class__(
+                    plan.model_family,
+                    plan.requested_provider,
+                    "cpu",
+                    "cpu",
+                    plan.compute_type,
+                    False,
+                    plan.fallback_allowed,
+                    plan.reason,
+                    f"CUDA load failed; retried CPU: {exc}",
+                )
+            else:
+                raise
         return self
 
     def transcribe_chunks(self, chunks: Sequence, chunk_metadata: list[dict]) -> ModelRunResult:
@@ -106,6 +126,14 @@ class OpenAIWhisperPTAdapter:
         metrics = {
             "provider": "openai-whisper",
             "device": device,
+            "provider_summary": {
+                "requested_provider": getattr(self.runtime_plan, "requested_provider", "unknown"),
+                "actual_provider": getattr(self.runtime_plan, "actual_provider", device),
+                "backend_verified": getattr(self.runtime_plan, "backend_verified", False),
+                "fallback_allowed": getattr(self.runtime_plan, "fallback_allowed", True),
+                "reason": getattr(self.runtime_plan, "reason", ""),
+                "fallback_reason": getattr(self.runtime_plan, "fallback_reason", None),
+            },
             "audio_seconds": audio_seconds,
             "chunk_count": len(chunks),
             "inference_seconds": inference_seconds,
