@@ -37,6 +37,7 @@ python qa\runtime_matrix\run_row.py --row repair_plan_issue_classification_contr
 python qa\runtime_matrix\run_row.py --row setup_repair_model_layouts --workdir Temp\runtime_matrix_setup_repair_model_layouts
 python qa\runtime_matrix\run_row.py --row clean_vm_zero_dependency_bootstrap --workdir Temp\runtime_matrix_clean_vm_bootstrap
 python qa\runtime_matrix\run_row.py --row report_atomic_write_failure_cleanup --workdir Temp\runtime_matrix_report_atomic_write_failure_cleanup
+python qa\runtime_matrix\run_row.py --row watched_folder_partial_write_queue_contract --workdir Temp\runtime_matrix_watched_folder_partial_write_queue_contract
 python qa\runtime_matrix\run_row.py --row model_fixture_quality_claims --workdir Temp\runtime_matrix_model_fixture_quality_claims
 python qa\runtime_matrix\run_row.py --row hf_downloader_package_variant_taxonomy --workdir Temp\runtime_matrix_hf_downloader_package_variant_taxonomy
 python qa\runtime_matrix\run_row.py --row generic_onnx_openvino_unavailable_cpu_fallback --workdir Temp\runtime_matrix_generic_onnx_openvino_unavailable_cpu_fallback
@@ -93,6 +94,8 @@ The `clean_vm_zero_dependency_bootstrap` row is the final fresh-machine proof. O
 `app.doctor --validate-real-smoke` is the local post-repair smoke wrapper. It emits `easy_asr_bench.real_smoke_validation.v1`, includes the `repair_all_safe` JSON, and records each runtime-matrix row status plus its `row.json` path. Use `--no-network` for explicit offline diagnostics, or `--allow-downloads` only when model/media downloads are intentionally permitted.
 
 The `report_atomic_write_failure_cleanup` row forces simulated replace failures in report text and CSV atomic-write paths and verifies failed `.partial` files are removed while the previous complete artifact remains intact. This guards against partial report artifacts after disk, permission, antivirus, or interrupted-write failures.
+
+The `watched_folder_partial_write_queue_contract` row is a non-destructive queue/watch contract for drag-drop and watched-folder input. It verifies the queue waits through a partial write before recording the fast size/mtime key, repeated watch polls do not duplicate queue state for the same source file, and completed fast keys are skipped without rehashing large already-processed files.
 
 The `model_fixture_quality_claims` row validates `qa\runtime_matrix\model_fixtures.json` so structural tiny/random/generated fixtures are explicitly marked as not quality-bearing, same-media mixed rows disclose structural inclusions, and quality-bearing fixtures have WER/transcript-oriented runtime rows. This prevents structural smoke fixtures from being counted as accuracy evidence.
 

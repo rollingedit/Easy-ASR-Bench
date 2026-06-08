@@ -68,6 +68,7 @@ ROWS: dict[str, RowDefinition] = {
     "compare_html_offline_large_transcript": row("compare_html_offline_large_transcript", "qa.runtime_matrix.rows.report_reference_validation"),
     "compare_html_offline": row("compare_html_offline", "qa.runtime_matrix.rows.report_reference_validation"),
     "report_atomic_write_failure_cleanup": row("report_atomic_write_failure_cleanup", "qa.runtime_matrix.rows.report_reference_validation"),
+    "watched_folder_partial_write_queue_contract": row("watched_folder_partial_write_queue_contract", "qa.runtime_matrix.rows.queue_watch_races"),
     "batch_continues_after_one_model_or_chunk_fails": row("batch_continues_after_one_model_or_chunk_fails", "qa.runtime_matrix.rows.failure_isolation"),
     "one_model_failure_continues": row("one_model_failure_continues", "qa.runtime_matrix.rows.failure_isolation"),
     "one_chunk_failure_continues": row("one_chunk_failure_continues", "qa.runtime_matrix.rows.failure_isolation"),

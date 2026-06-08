@@ -46,6 +46,7 @@
     "compare_html_offline",
     "compare_html_offline_large_transcript",
     "report_atomic_write_failure_cleanup",
+    "watched_folder_partial_write_queue_contract",
     "llm_reference_json_import",
     "model_fixture_quality_claims",
     "hf_downloader_package_variant_taxonomy",

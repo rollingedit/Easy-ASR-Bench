@@ -1344,12 +1344,27 @@ def test_report_atomic_write_failure_cleanup_row_removes_partials(tmp_path):
     assert not (Path(row["details"]["output_dir"]) / "atomic_text_failure.txt.partial").exists()
 
 
+def test_watched_folder_queue_contract_row_covers_partial_and_repeat_polls(tmp_path):
+    from qa.runtime_matrix.rows import queue_watch_races
+
+    row = queue_watch_races.run("watched_folder_partial_write_queue_contract", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    assert row["details"]["partial_write"]["partial_bytes"] < row["details"]["partial_write"]["complete_bytes"]
+    assert row["details"]["partial_write"]["wait_calls"]
+    assert row["details"]["repeat_poll"]["queue_item_count"] == 1
+    assert row["details"]["repeat_poll"]["source_count"] == 1
+    assert row["details"]["done_fast_key_skip"]["queued"] == []
+    assert row["details"]["done_fast_key_skip"]["sha256_file_called"] is False
+
+
 def test_runtime_matrix_maps_failure_isolation_rows():
     assert ROWS["batch_continues_after_one_model_or_chunk_fails"].module == "qa.runtime_matrix.rows.failure_isolation"
     assert ROWS["one_model_failure_continues"].module == "qa.runtime_matrix.rows.failure_isolation"
     assert ROWS["one_chunk_failure_continues"].module == "qa.runtime_matrix.rows.failure_isolation"
     assert ROWS["dependency_install_declined"].module == "qa.runtime_matrix.rows.failure_isolation"
     assert ROWS["dependency_install_accepted"].module == "qa.runtime_matrix.rows.failure_isolation"
+    assert ROWS["watched_folder_partial_write_queue_contract"].module == "qa.runtime_matrix.rows.queue_watch_races"
 
 
 def test_one_model_failure_row_preserves_successful_report_artifacts(tmp_path):
