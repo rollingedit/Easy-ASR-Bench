@@ -160,6 +160,14 @@ def test_release_verification_documents_repair_plan_issue_classification_row():
     assert "incompatible package/runtime stacks" in text
 
 
+def test_release_verification_documents_stale_cached_resolution_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row repair_all_safe_stale_cached_resolution" in text
+    assert "cached-resolution repair contract" in text
+    assert "does not reinstall packages unnecessarily" in text
+
+
 def test_release_verification_documents_report_atomic_write_cleanup_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 

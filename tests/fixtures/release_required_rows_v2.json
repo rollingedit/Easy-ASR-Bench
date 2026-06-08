@@ -9,6 +9,7 @@
     "setup_doctor_strict",
     "setup_repair_all_safe",
     "repair_all_safe_failure_isolation",
+    "repair_all_safe_stale_cached_resolution",
     "repair_plan_issue_classification_contract",
     "setup_repair_model_layouts",
     "windows_vc_runtime_repair_contract",
