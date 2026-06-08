@@ -116,6 +116,16 @@ def test_release_verification_documents_transformers_dependency_repair_contract_
     assert "runtime-resolution record" in text
 
 
+def test_release_verification_documents_media_tools_repair_contract_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row media_tools_dependency_repair_contract" in text
+    assert "requirements\\core.txt" in text
+    assert "imageio_ffmpeg" in text
+    assert "media-tools FFmpeg runtime" in text
+    assert "real audio/video smoke rows" in text
+
+
 def test_release_verification_documents_directml_conflict_repair_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 

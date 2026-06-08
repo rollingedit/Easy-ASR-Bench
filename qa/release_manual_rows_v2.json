@@ -8,6 +8,7 @@
     "windows_vc_runtime_repair_contract": "not_run",
     "python_packaging_tools_repair_contract": "not_run",
     "transformers_cpu_dependency_repair_contract": "not_run",
+    "media_tools_dependency_repair_contract": "not_run",
     "directml_provider_conflict_repair": "not_run",
     "install_path_with_spaces": "not_run",
     "setup_verify_release_bad_checksum": "not_run",
