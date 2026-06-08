@@ -427,7 +427,8 @@ def _run_real_public_media_quality(row_id: str, evidence_dir: Path, install_deps
     if isinstance(fixture_or_row, dict):
         return fixture_or_row
     model_dir = fixture_or_row
-    source, fixture_details, fixture_error = _download_fixture("wikimedia_cc0_word_wav", evidence_dir, allow_downloads)
+    fixture_id = "wikimedia_public_domain_spoken_words_webm" if row_id == "real_public_video_generic_onnx_ctc_smollm_grading_cpu" else "wikimedia_cc0_word_wav"
+    source, fixture_details, fixture_error = _download_fixture(fixture_id, evidence_dir, allow_downloads)
     if fixture_error or source is None:
         return write_row(
             row_id,
@@ -535,7 +536,7 @@ def _run_real_public_media_quality(row_id: str, evidence_dir: Path, install_deps
             "expected_text": expected_text,
             "normalized_wer": normalized_wer,
             "quality_bearing": True,
-            "quality_note": "Single-word public-media WER is recorded but not release-gated.",
+            "quality_note": "Short public-media WER is recorded but not release-gated.",
             "output_dir": str(output_dir),
             "score_status": scored.get("status"),
             "generic_onnx_ctc_score": {
@@ -576,6 +577,7 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
         "generic_onnx_smollm_grading_directml",
         "generic_onnx_ctc_quality_smollm_grading_cpu",
         "real_public_media_generic_onnx_ctc_smollm_grading_cpu",
+        "real_public_video_generic_onnx_ctc_smollm_grading_cpu",
     }:
         return write_row(
             row_id,
@@ -608,7 +610,7 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
         )
     if row_id == "generic_onnx_ctc_quality_smollm_grading_cpu":
         return _run_public_quality(row_id, evidence_dir, _install_deps, _allow_downloads)
-    if row_id == "real_public_media_generic_onnx_ctc_smollm_grading_cpu":
+    if row_id in {"real_public_media_generic_onnx_ctc_smollm_grading_cpu", "real_public_video_generic_onnx_ctc_smollm_grading_cpu"}:
         return _run_real_public_media_quality(row_id, evidence_dir, _install_deps, _allow_downloads)
     try:
         import onnx  # noqa: F401
