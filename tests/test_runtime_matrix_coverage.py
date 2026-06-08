@@ -252,6 +252,7 @@ def test_clean_vm_bootstrap_accepts_complete_same_media_evidence():
                 "invalid_resolution_files": 0,
             },
             "dependency_resolution_groups": [
+                "python_packaging",
                 "media_tools",
                 "faster_whisper",
                 "onnx",
@@ -262,9 +263,9 @@ def test_clean_vm_bootstrap_accepts_complete_same_media_evidence():
                 "llama_mtmd",
             ],
             "last_repair_summary": {
-                "runtime_resolutions": 9,
+                "runtime_resolutions": 10,
                 "cached_runtime_resolutions": 5,
-                "previous_runtime_resolution_valid": 9,
+                "previous_runtime_resolution_valid": 10,
                 "previous_runtime_resolution_stale": 0,
             },
         }
@@ -1014,6 +1015,7 @@ def test_same_media_multi_model_dependency_groups_include_smollm_and_mtmd():
     groups = set(same_media_multi_model_smollm_benchmark.GROUPS)
 
     assert {
+        "python_packaging",
         "media_tools",
         "faster_whisper",
         "onnx",

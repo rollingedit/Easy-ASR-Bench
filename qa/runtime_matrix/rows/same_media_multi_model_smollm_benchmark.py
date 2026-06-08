@@ -11,6 +11,7 @@ from app.html_report_builder import build_html_report
 from app.main import process_file_with_candidates
 from app.model_scanner import scan_models
 from app.reference_import import import_llm_reference
+from app.repair_plan import execute_repair_plan
 from app.scoring import wer
 from qa.run_real_tiny_model_smoke import REFERENCE_TEXT, generate_windows_sapi_wav, smoke_config
 from qa.runtime_matrix.common import dependency_resolution_report_failures, package_versions, write_row
@@ -35,7 +36,7 @@ from qa.runtime_matrix.rows.whisper_cpp_ggml import MODEL_URL as WHISPER_CPP_MOD
 from qa.runtime_matrix.rows.whisper_cpp_ggml import _download_model as _download_whisper_cpp_model
 
 
-GROUPS = ["media_tools", "faster_whisper", "onnx", "transformers_cpu", "whisper_cpp", "openai_whisper", "llama_cpp", "llama_mtmd"]
+GROUPS = ["python_packaging", "media_tools", "faster_whisper", "onnx", "transformers_cpu", "whisper_cpp", "openai_whisper", "llama_cpp", "llama_mtmd"]
 REQUIRED_ADAPTERS = {
     "faster_whisper",
     "openai_whisper_pt",
@@ -253,6 +254,11 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
             details={**dependency_details, "dependency_versions": package_versions(["onnxruntime", "onnxruntime-directml"])},
             artifacts=dependency_artifacts,
         )
+    repair_evidence = execute_repair_plan(config, project_root=evidence_dir)
+    dependency_details["repair_all_safe_summary"] = repair_evidence.get("summary", {})
+    repair_evidence_path = Path(config["folders"]["logs"]) / "repair_all_safe_last.json"
+    if repair_evidence_path.exists():
+        dependency_artifacts.append(repair_evidence_path)
 
     models_root = Path(config["folders"]["models"])
     fixture_errors: list[str] = []
@@ -431,7 +437,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
             "score_count": len(scores),
             "output_dir": str(output_dir),
             **dependency_report_details,
-            "dependency_versions": package_versions(["faster-whisper", "ctranslate2", "onnx", "onnxruntime", "onnxruntime-directml", "torch", "transformers", "safetensors", "pywhispercpp", "openai-whisper", "llama-cpp-python"]),
+            "dependency_versions": package_versions(["pip", "setuptools", "faster-whisper", "ctranslate2", "onnx", "onnxruntime", "onnxruntime-directml", "torch", "transformers", "safetensors", "pywhispercpp", "openai-whisper", "llama-cpp-python"]),
             "failures": failures,
         },
         artifacts=[
