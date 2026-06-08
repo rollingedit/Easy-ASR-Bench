@@ -106,6 +106,7 @@ def test_runtime_matrix_includes_native_runtime_prerequisite_rows():
     assert ROWS["windows_vc_runtime_repair_contract"].module == "qa.runtime_matrix.rows.windows_vc_runtime"
     assert ROWS["python_packaging_tools_repair_contract"].module == "qa.runtime_matrix.rows.python_packaging_repair"
     assert ROWS["transformers_cpu_dependency_repair_contract"].module == "qa.runtime_matrix.rows.transformers_dependency_repair"
+    assert ROWS["media_tools_dependency_repair_contract"].module == "qa.runtime_matrix.rows.media_tools_repair"
     assert ROWS["windows_directml_provider"].module == "qa.runtime_matrix.rows.windows_directml_provider"
     assert ROWS["directml_provider_conflict_repair"].module == "qa.runtime_matrix.rows.windows_directml_provider"
     assert ROWS["windows_vulkan_runtime"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
@@ -146,6 +147,20 @@ def test_python_packaging_tools_repair_contract_row_records_shared_repair_contra
     assert row["details"]["missing_after"] == []
     assert "requirements/python_packaging.txt" in row["details"]["repair_command"]
     assert row["details"]["backend_probe"]["kind"] == "python_import_probe"
+    assert row["details"]["runtime_resolution_path"]
+
+
+def test_media_tools_dependency_repair_contract_row_records_ffmpeg_runtime_resolution(tmp_path):
+    from qa.runtime_matrix.rows import media_tools_repair
+
+    row = media_tools_repair.run("media_tools_dependency_repair_contract", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    assert row["details"]["missing_before"] == ["imageio_ffmpeg", "ffmpeg executable"]
+    assert row["details"]["missing_after"] == []
+    assert "requirements/core.txt" in row["details"]["repair_command"]
+    assert row["details"]["backend_probe"]["kind"] == "media_tools_ffmpeg_probe"
+    assert row["details"]["runtime_status"]["ffmpeg_path"]
     assert row["details"]["runtime_resolution_path"]
 
 

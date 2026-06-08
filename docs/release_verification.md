@@ -21,6 +21,7 @@ cmd /c setup.bat --dry-run --local --json
 python qa\runtime_matrix\run_row.py --row windows_vc_runtime_repair_contract --workdir Temp\runtime_matrix_vc_runtime_repair_contract
 python qa\runtime_matrix\run_row.py --row python_packaging_tools_repair_contract --workdir Temp\runtime_matrix_python_packaging_repair_contract
 python qa\runtime_matrix\run_row.py --row transformers_cpu_dependency_repair_contract --workdir Temp\runtime_matrix_transformers_cpu_dependency_repair_contract
+python qa\runtime_matrix\run_row.py --row media_tools_dependency_repair_contract --workdir Temp\runtime_matrix_media_tools_dependency_repair_contract
 python qa\runtime_matrix\run_row.py --row directml_provider_conflict_repair --workdir Temp\runtime_matrix_directml_conflict_repair
 python qa\runtime_matrix\run_row.py --row faster_whisper_pkg_resources_repair --workdir Temp\runtime_matrix_faster_whisper_pkg_resources_repair
 python qa\runtime_matrix\run_row.py --row faster_whisper_ctranslate2_candidate_fallback_repair --workdir Temp\runtime_matrix_faster_whisper_ctranslate2_candidate_fallback_repair
@@ -56,6 +57,8 @@ The `windows_vc_runtime_repair_contract` runtime-matrix row is a non-destructive
 The `python_packaging_tools_repair_contract` runtime-matrix row is a non-destructive repair contract for the packaging layer that drives all pip-based dependency repair. It simulates missing `pkg_resources`, routes through the shared `app.repair_plan.execute_repair_plan` path for the `python_packaging` dependency group, verifies `requirements\python_packaging.txt` is the repair target, reprobes `pip`, `setuptools`, and `pkg_resources`, and persists a runtime-resolution record.
 
 The `transformers_cpu_dependency_repair_contract` runtime-matrix row is a non-destructive repair contract for the Hugging Face Transformers ASR dependency group. It simulates a mixed missing/outdated `transformers_cpu` stack, routes through `app.repair_plan.execute_repair_plan`, verifies `requirements\transformers_cpu.txt` is the repair target, reprobes `torch`, `transformers`, `safetensors`, `sentencepiece`, `google.protobuf`, and `torchaudio`, and persists a runtime-resolution record.
+
+The `media_tools_dependency_repair_contract` runtime-matrix row is a non-destructive repair contract for audio/video conversion prerequisites. It simulates missing `imageio_ffmpeg` and FFmpeg executable evidence, routes through `app.repair_plan.execute_repair_plan`, verifies `requirements\core.txt` is the repair target, reprobes the media-tools FFmpeg runtime, records the FFmpeg path, and persists a runtime-resolution record used by real audio/video smoke rows.
 
 The `directml_provider_conflict_repair` runtime-matrix row is a non-destructive repair contract for the reproduced ONNX Runtime DirectML conflict. It simulates plain `onnxruntime` blocking `DmlExecutionProvider`, routes through the product `install_group_for_config("onnx", ...)` repair executor with commands captured instead of executed, and verifies the repair removes plain `onnxruntime`, installs `requirements\onnx_directml.txt`, force-probes a compatible `onnxruntime-directml` package, and clears the missing-provider state.
 
