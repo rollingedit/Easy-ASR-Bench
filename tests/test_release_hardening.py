@@ -228,3 +228,33 @@ def test_release_verifier_falls_back_to_gh_for_draft_release():
 
 def test_physical_files_validate_repo_bytes():
     validate_root(ROOT)
+
+
+def test_physical_validator_ignores_suffixed_pytest_tmp_dirs(tmp_path):
+    app_root = tmp_path / "app_root"
+    for rel in [
+        "setup.bat",
+        "Run.bat",
+        "Drop_Audio_Or_Folders_Here.bat",
+        "installer/install.ps1",
+        "app/main.py",
+        "app/model_scanner.py",
+        "app/results_writer.py",
+        "app/scoring.py",
+        "app/hf_model_downloader.py",
+        "scripts/validate_physical_files.py",
+        "scripts/verify_github_release.py",
+        ".github/workflows/release-gate.yml",
+        ".github/workflows/publish-release.yml",
+        "requirements/core.txt",
+        "config.json",
+    ]:
+        source = ROOT / rel
+        target = app_root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(source.read_bytes())
+    ignored = app_root / ".pytest_tmp_llama_mtmd_stage10" / "bad.json"
+    ignored.parent.mkdir()
+    ignored.write_text("{bad json\r\n", encoding="utf-8")
+
+    validate_root(app_root)

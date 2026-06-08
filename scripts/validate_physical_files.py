@@ -25,6 +25,7 @@ SKIP_DIRS = {
     "Models",
     "Input",
 }
+SKIP_DIR_PREFIXES = (".pytest_tmp",)
 
 REQUIRED_FILES = {
     "setup.bat",
@@ -72,7 +73,7 @@ def _is_skipped(path: Path, root: Path) -> bool:
         rel = path.relative_to(root)
     except ValueError:
         return True
-    return bool(SKIP_DIRS & set(rel.parts))
+    return bool(SKIP_DIRS & set(rel.parts)) or any(part.startswith(SKIP_DIR_PREFIXES) for part in rel.parts)
 
 
 def _raw(path: Path) -> bytes:

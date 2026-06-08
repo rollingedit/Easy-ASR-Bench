@@ -24,8 +24,13 @@ SKIP_DIRS = {
     "Models",
     "Input",
 }
+SKIP_DIR_PREFIXES = (".pytest_tmp",)
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+
+def is_skipped(path: Path) -> bool:
+    return bool(SKIP_DIRS & set(path.parts)) or any(part.startswith(SKIP_DIR_PREFIXES) for part in path.parts)
 
 def raw(path: Path) -> bytes:
     return path.read_bytes()
@@ -57,10 +62,10 @@ def assert_line_ending(path: Path, expected: bytes) -> None:
 
 def validate_formats() -> None:
     for path in ROOT.rglob("*.json"):
-        if not (SKIP_DIRS & set(path.parts)):
+        if not is_skipped(path):
             json.loads(path.read_text(encoding="utf-8"))
     for path in ROOT.rglob("*.py"):
-        if not (SKIP_DIRS & set(path.parts)):
+        if not is_skipped(path):
             source = path.read_text(encoding="utf-8")
             ast.parse(source)
             compile(source, str(path), "exec")
@@ -89,7 +94,7 @@ def validate_installer_safety() -> None:
 
 def validate_endings() -> None:
     for path in ROOT.rglob("*"):
-        if not path.is_file() or (SKIP_DIRS & set(path.parts)):
+        if not path.is_file() or is_skipped(path):
             continue
         suffix = path.suffix.lower()
         if suffix in {".bat", ".cmd", ".ps1"}:
