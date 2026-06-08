@@ -114,6 +114,7 @@ ROWS: dict[str, RowDefinition] = {
     "whisper_cpp_ggml_smollm_grading": row("whisper_cpp_ggml_smollm_grading", "qa.runtime_matrix.rows.whisper_cpp_smollm_grading"),
     "whisper_cpp_ggml_speech_smollm_grading": row("whisper_cpp_ggml_speech_smollm_grading", "qa.runtime_matrix.rows.whisper_cpp_smollm_grading"),
     "real_public_media_whisper_cpp_ggml_smollm_grading": row("real_public_media_whisper_cpp_ggml_smollm_grading", "qa.runtime_matrix.rows.whisper_cpp_smollm_grading", hardware="network"),
+    "real_public_video_whisper_cpp_ggml_smollm_grading": row("real_public_video_whisper_cpp_ggml_smollm_grading", "qa.runtime_matrix.rows.whisper_cpp_smollm_grading", hardware="network"),
     "openai_whisper_pt_checksum_verified": row("openai_whisper_pt_checksum_verified", "qa.runtime_matrix.rows.openai_whisper_pt_safety"),
     "openai_whisper_pt_unknown_blocked": row("openai_whisper_pt_unknown_blocked", "qa.runtime_matrix.rows.openai_whisper_pt_safety"),
     "openai_pt_unverified_blocked": row("openai_pt_unverified_blocked", "qa.runtime_matrix.rows.openai_whisper_pt_safety"),

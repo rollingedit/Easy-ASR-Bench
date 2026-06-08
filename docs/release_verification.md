@@ -34,6 +34,7 @@ python qa\runtime_matrix\run_row.py --row real_public_media_openai_whisper_pt_sm
 python qa\runtime_matrix\run_row.py --row real_public_video_openai_whisper_pt_smollm_grading --workdir Temp\runtime_matrix_real_public_video_openai_whisper --allow-downloads
 python qa\runtime_matrix\run_row.py --row whisper_cpp_ggml_speech_smollm_grading --workdir Temp\runtime_matrix_whisper_cpp_speech_smollm_grading --allow-downloads
 python qa\runtime_matrix\run_row.py --row real_public_media_whisper_cpp_ggml_smollm_grading --workdir Temp\runtime_matrix_real_public_media_whisper_cpp --allow-downloads
+python qa\runtime_matrix\run_row.py --row real_public_video_whisper_cpp_ggml_smollm_grading --workdir Temp\runtime_matrix_real_public_video_whisper_cpp --allow-downloads
 python qa\runtime_matrix\run_row.py --row hf_whisper_safetensors_quality_smollm_grading_cpu --workdir Temp\runtime_matrix_hf_whisper_safetensors_quality_smollm --allow-downloads
 python qa\runtime_matrix\run_row.py --row real_public_media_hf_whisper_safetensors_smollm_grading_cpu --workdir Temp\runtime_matrix_real_public_media_hf_whisper_safetensors --allow-downloads
 python qa\runtime_matrix\run_row.py --row real_public_media_generic_onnx_ctc_smollm_grading_cpu --workdir Temp\runtime_matrix_real_public_media_generic_onnx_ctc --allow-downloads

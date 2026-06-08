@@ -71,9 +71,10 @@
       "rows": [
         "real_media_download_cache",
         "real_public_video_faster_whisper_smollm_grading",
-        "real_public_video_openai_whisper_pt_smollm_grading"
+        "real_public_video_openai_whisper_pt_smollm_grading",
+        "real_public_video_whisper_cpp_ggml_smollm_grading"
       ],
-      "notes": "Small CDC public-domain spoken-word WebM from Wikimedia Commons. Used for real video-to-ASR normalization and faster-whisper/OpenAI Whisper .pt plus SmolLM scored-report validation; WER is recorded but not release-gated because this is a short public-media smoke fixture."
+      "notes": "Small CDC public-domain spoken-word WebM from Wikimedia Commons. Used for real video-to-ASR normalization and faster-whisper/OpenAI Whisper .pt/whisper.cpp GGML plus SmolLM scored-report validation; WER is recorded but not release-gated because this is a short public-media smoke fixture."
     },
     "smollm_135m_gguf": {
       "repo": "HuggingFaceTB/SmolLM-135M-GGUF",
@@ -91,6 +92,7 @@
         "real_public_media_gguf_asr_mmproj_smollm_grading",
         "real_public_video_faster_whisper_smollm_grading",
         "real_public_video_openai_whisper_pt_smollm_grading",
+        "real_public_video_whisper_cpp_ggml_smollm_grading",
         "llama_cpp_cuda_smollm_smoke",
         "llama_cpp_vulkan_smollm_smoke"
       ]
@@ -204,9 +206,10 @@
         "whisper_cpp_ggml",
         "whisper_cpp_ggml_smollm_grading",
         "whisper_cpp_ggml_speech_smollm_grading",
-        "real_public_media_whisper_cpp_ggml_smollm_grading"
+        "real_public_media_whisper_cpp_ggml_smollm_grading",
+        "real_public_video_whisper_cpp_ggml_smollm_grading"
       ],
-      "notes": "The blank-audio row is structural; the speech SmolLM row uses generated SAPI speech and asserts non-empty transcript plus WER threshold. The real public-media row uses the Wikimedia CC0 WAV fixture and records single-word WER without release-gating it."
+      "notes": "The blank-audio row is structural; the speech SmolLM row uses generated SAPI speech and asserts non-empty transcript plus WER threshold. The real public-media rows use Wikimedia CC0/public-domain audio and video fixtures and record WER without release-gating it."
     },
     "openai_whisper_tiny_pt": {
       "repo": "openai/whisper",
