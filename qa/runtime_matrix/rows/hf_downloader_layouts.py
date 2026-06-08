@@ -775,17 +775,22 @@ def _run_supported_outcome_taxonomy(row_id: str, evidence_dir: Path) -> dict:
         ],
     )
     repair_files = sorted(path.name for path in repair_dir.iterdir())
+    repair_plan_path = repair_dir / "hf_model_layout_repair_plan.json"
     cases["missing_sidecar_repair"] = {
         "destination": str(repair_dir),
         "prompts": repair_prompts,
         "messages": repair_messages,
         "files": repair_files,
+        "repair_plan_path": str(repair_plan_path),
+        "repair_plan_file_exists": repair_plan_path.exists(),
         "scan_calls": repair_state["calls"],
         "interactive_repair_plan": interactive_repair_plan,
         "structured_repair_plan": structured_repair_plan,
     }
     if not {"config.json", "preprocessor_config.json"} <= set(repair_files):
         failures.append("missing-sidecar repair did not download exact metadata matches")
+    if not repair_plan_path.exists():
+        failures.append("missing-sidecar repair did not persist model-layout repair plan")
     plan_record = structured_repair_plan["records"][0] if structured_repair_plan["records"] else {}
     if structured_repair_plan.get("schema") != "easy_asr_bench.model_layout_repair_plan.v1":
         failures.append("missing-sidecar repair plan used the wrong schema")

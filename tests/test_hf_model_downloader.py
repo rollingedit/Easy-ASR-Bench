@@ -652,6 +652,10 @@ def test_offer_missing_file_repair_downloads_exact_repo_matches(tmp_path: Path, 
         print_func=lambda text: None,
     )
 
+    repair_plan_path = destination / "hf_model_layout_repair_plan.json"
+    repair_plan = json.loads(repair_plan_path.read_text(encoding="utf-8"))
+    assert repair_plan["schema"] == "easy_asr_bench.model_layout_repair_plan.v1"
+    assert repair_plan["records"][0]["safe_download_files"] == ["config.json", "preprocessor_config.json"]
     assert "config.json" in downloaded
     assert "preprocessor_config.json" in downloaded
 
