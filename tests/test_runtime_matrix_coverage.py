@@ -1052,7 +1052,8 @@ def test_real_media_manifest_has_downloadable_wikimedia_audio_fixtures():
 
 def test_runtime_fixture_manifest_covers_core_runtime_formats():
     data = json.loads((ROOT / "qa" / "runtime_matrix" / "model_fixtures.json").read_text(encoding="utf-8"))
-    kinds = {fixture["kind"] for fixture in data["fixtures"].values()}
+    fixtures = data["fixtures"]
+    kinds = {fixture["kind"] for fixture in fixtures.values()}
 
     assert "faster_whisper_ctranslate2" in kinds
     assert "gguf_reference_llm" in kinds
@@ -1063,8 +1064,16 @@ def test_runtime_fixture_manifest_covers_core_runtime_formats():
     assert "openai_whisper_pt" in kinds
     assert "gguf_asr_mmproj_candidate" in kinds
     assert "same_media_multi_model_benchmark_directml" in kinds
-    assert "generic_onnx_ctc_fixture" in data["fixtures"]["same_media_multi_model_cpu_set"]["includes"]
-    assert "generic_onnx_ctc_fixture" in data["fixtures"]["same_media_multi_model_directml_set"]["includes"]
-    assert "qwen3_asr_0_6b_gguf" in data["fixtures"]["same_media_multi_model_cpu_set"]["includes"]
-    assert "qwen3_asr_0_6b_gguf" in data["fixtures"]["same_media_multi_model_directml_set"]["includes"]
-    assert "hf_whisper_sharded_safetensors_smollm_grading_cpu" in data["fixtures"]["hf_tiny_random_whisper_sharded_safetensors"]["rows"]
+    assert "generic_onnx_ctc_fixture" in fixtures["same_media_multi_model_cpu_set"]["includes"]
+    assert "generic_onnx_ctc_fixture" in fixtures["same_media_multi_model_directml_set"]["includes"]
+    assert "qwen3_asr_0_6b_gguf" in fixtures["same_media_multi_model_cpu_set"]["includes"]
+    assert "qwen3_asr_0_6b_gguf" in fixtures["same_media_multi_model_directml_set"]["includes"]
+    assert "hf_whisper_sharded_safetensors_smollm_grading_cpu" in fixtures["hf_tiny_random_whisper_sharded_safetensors"]["rows"]
+    assert "llama_cpp_vulkan_smollm_smoke" in fixtures["smollm_135m_gguf"]["rows"]
+
+    fixture_ids = set(fixtures)
+    for fixture_id, fixture in fixtures.items():
+        for row_id in fixture.get("rows", []):
+            assert row_id in ROWS, f"{fixture_id} references unknown runtime row {row_id}"
+        for included in fixture.get("includes", []):
+            assert included in fixture_ids, f"{fixture_id} includes unknown fixture {included}"
