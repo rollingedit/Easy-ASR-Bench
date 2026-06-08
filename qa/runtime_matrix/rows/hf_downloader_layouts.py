@@ -798,6 +798,11 @@ def _run_supported_outcome_taxonomy(row_id: str, evidence_dir: Path) -> dict:
         failures.append("missing-sidecar repair plan did not choose exact missing-file repair")
     if set(plan_record.get("safe_download_files", [])) != {"config.json", "preprocessor_config.json"}:
         failures.append("missing-sidecar repair plan did not record exact safe sidecar downloads")
+    execution = interactive_repair_plan.get("last_execution", {}) if isinstance(interactive_repair_plan, dict) else {}
+    if execution.get("schema") != "easy_asr_bench.model_layout_repair_execution.v1":
+        failures.append("missing-sidecar repair did not record structured execution evidence")
+    if execution.get("summary", {}).get("repaired") != 1:
+        failures.append("missing-sidecar repair execution did not record one repaired issue")
 
     reference_dest, reference_prompts, reference_messages = _patched_downloader_flow(
         evidence_dir / "reference_llm",

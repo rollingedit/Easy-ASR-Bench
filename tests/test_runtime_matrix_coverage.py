@@ -711,6 +711,9 @@ def test_hf_downloader_supported_outcome_taxonomy_row(tmp_path):
     assert repair_plan["records"][0]["repair_action"] == "download_exact_missing_files"
     assert set(repair_plan["records"][0]["safe_download_files"]) == {"config.json", "preprocessor_config.json"}
     assert cases["missing_sidecar_repair"]["repair_plan_file_exists"] is True
+    execution = cases["missing_sidecar_repair"]["interactive_repair_plan"]["last_execution"]
+    assert execution["schema"] == "easy_asr_bench.model_layout_repair_execution.v1"
+    assert execution["summary"]["repaired"] == 1
     artifact_names = {Path(artifact["path"]).name for artifact in row["artifacts"]}
     assert "hf_model_layout_repair_plan.json" in artifact_names
     assert any(item["adapter_name"] == "gguf_llm_reference" for item in cases["gguf_reference_llm"]["unsupported"])
