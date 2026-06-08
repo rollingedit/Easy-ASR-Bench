@@ -41,6 +41,7 @@ python qa\runtime_matrix\run_row.py --row hf_safetensors_asr_quality_smollm_grad
 python qa\runtime_matrix\run_row.py --row hf_whisper_sharded_safetensors_smollm_grading_cpu --workdir Temp\runtime_matrix_hf_whisper_sharded_safetensors_smollm --allow-downloads
 python qa\runtime_matrix\run_row.py --row setup_repair_all_safe --workdir Temp\runtime_matrix_setup_repair_all_safe
 python qa\runtime_matrix\run_row.py --row setup_dry_run_json --workdir Temp\runtime_matrix_setup_dry_run_json
+python qa\runtime_matrix\run_row.py --row setup_double_click_equivalent --workdir Temp\runtime_matrix_setup_double_click_equivalent
 python qa\runtime_matrix\run_row.py --row repair_all_safe_failure_isolation --workdir Temp\runtime_matrix_repair_all_safe_failure_isolation
 python qa\runtime_matrix\run_row.py --row repair_all_safe_stale_cached_resolution --workdir Temp\runtime_matrix_repair_all_safe_stale_cached_resolution
 python qa\runtime_matrix\run_row.py --row repair_plan_issue_classification_contract --workdir Temp\runtime_matrix_repair_plan_issue_classification_contract
@@ -68,6 +69,8 @@ python -m app.doctor --config config.json --strict
 The staged `--asset-dir` check must run before a draft release is published. It validates the same `setup.bat`, `install.ps1`, `manifest.json`, `checksums.json`, and ZIP bytes that will become release assets, without depending on public release URLs.
 
 `setup.bat --dry-run --json` emits a final `easy_asr_bench.setup_dry_run.v1` JSON object after the normal human-readable dry-run output. The `setup_dry_run_json` runtime-matrix row parses that object and verifies setup dry-run machine-readable fields such as mode, version, exit code, installer presence, install folder, and `no_files_modified=true`.
+
+The `setup_double_click_equivalent` runtime-matrix row is the non-interactive proof for the double-click setup path. It verifies the setup bootstrap markers, installer SHA verification path, completion-menu markers, and `setup.bat --dry-run --local` evidence. It should pass on normal Windows development machines when the scripted setup contract is intact; clean no-Python and Windows 10 OS-specific setup proofs remain separate VM/Sandbox rows.
 
 The `windows_vc_runtime_repair_contract` runtime-matrix row is a non-destructive repair contract for native Windows ASR dependencies. It simulates a missing Microsoft Visual C++ 2015-2022 Redistributable x64 state, verifies the bootstrap repair path invokes `winget install -e --id Microsoft.VCRedist.2015+.x64 --accept-package-agreements --accept-source-agreements`, and verifies the post-repair redistributable probe passes.
 

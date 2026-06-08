@@ -222,6 +222,7 @@ def test_runtime_matrix_maps_setup_environment_rows():
     assert ROWS["clean_vm_zero_dependency_bootstrap"].hardware == "clean_windows_vm"
     assert ROWS["win10_existing_python_setup"].module == "qa.runtime_matrix.rows.setup_environment"
     assert ROWS["setup_double_click_equivalent"].module == "qa.runtime_matrix.rows.setup_environment"
+    assert ROWS["setup_double_click_equivalent"].hardware == "windows"
     assert ROWS["first_run_smoke_json"].module == "qa.runtime_matrix.rows.setup_environment"
 
 
@@ -371,6 +372,10 @@ def test_setup_environment_rows_emit_concrete_setup_evidence(tmp_path):
         assert row["details"]["setup_static_contract"]["missing_markers"] == []
         assert row["details"]["setup_dry_run_local"]["exit_code"] == 0
         assert "python_visible_on_path" in row["details"]["python_probe"]
+
+    double_click = setup_environment.run("setup_double_click_equivalent", tmp_path / "setup_double_click_pass", False, False)
+    assert double_click["status"] == "pass"
+    assert "block_reason" not in double_click
 
 
 def test_win11_clean_setup_accepts_prebootstrap_no_python_probe(tmp_path, monkeypatch):
