@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
-from dataclasses import replace
 from pathlib import Path
 import urllib.request
 
@@ -24,6 +24,7 @@ PUBLIC_QWEN3_ASR_MODEL_URL = f"https://huggingface.co/{PUBLIC_QWEN3_ASR_REPO}/re
 PUBLIC_QWEN3_ASR_MMPROJ_URL = f"https://huggingface.co/{PUBLIC_QWEN3_ASR_REPO}/resolve/main/{PUBLIC_QWEN3_ASR_MMPROJ_FILE}"
 PUBLIC_QWEN3_ASR_SOURCE_URL = f"https://huggingface.co/{PUBLIC_QWEN3_ASR_REPO}"
 REJECTED_QWEN3_ASR_LOWER_QUANT = "Qwen3-ASR-0.6B.Q2_K.gguf"
+LOCAL_PUBLIC_FIXTURE_SEARCH_ROOTS = ("Temp", "Models", "Cache")
 
 
 def _write_fixture(root: Path, kind: str) -> Path:
@@ -82,12 +83,41 @@ def _write_manifest(model_dir: Path, model_file: str = PUBLIC_QWEN3_ASR_MODEL_FI
     return path
 
 
+def _find_cached_public_fixture(target_dir: Path) -> Path | None:
+    target = target_dir.resolve()
+    for root_name in LOCAL_PUBLIC_FIXTURE_SEARCH_ROOTS:
+        root = Path.cwd() / root_name
+        if not root.exists():
+            continue
+        for model_path in root.rglob(PUBLIC_QWEN3_ASR_MODEL_FILE):
+            parent = model_path.parent
+            try:
+                if parent.resolve() == target:
+                    continue
+            except OSError:
+                continue
+            if (parent / PUBLIC_QWEN3_ASR_MMPROJ_FILE).exists():
+                return parent
+    return None
+
+
+def _copy_cached_public_fixture(source_dir: Path, destination_dir: Path) -> None:
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    for name in [PUBLIC_QWEN3_ASR_MODEL_FILE, PUBLIC_QWEN3_ASR_MMPROJ_FILE]:
+        shutil.copy2(source_dir / name, destination_dir / name)
+    _write_manifest(destination_dir)
+
+
 def _ensure_public_fixture(row_id: str, evidence_dir: Path, allow_downloads: bool) -> dict | Path:
     model_dir = evidence_dir / "Models" / PUBLIC_QWEN3_ASR_REPO.replace("/", "__")
     model_path = model_dir / PUBLIC_QWEN3_ASR_MODEL_FILE
     mmproj_path = model_dir / PUBLIC_QWEN3_ASR_MMPROJ_FILE
     manifest_path = _write_manifest(model_dir)
     if model_path.exists() and mmproj_path.exists():
+        return model_dir
+    cached_dir = _find_cached_public_fixture(model_dir)
+    if cached_dir is not None:
+        _copy_cached_public_fixture(cached_dir, model_dir)
         return model_dir
     if not allow_downloads:
         return write_row(
@@ -196,24 +226,21 @@ def _scan_fixture(row_id: str, evidence_dir: Path, kind: str) -> dict:
     if kind == "complete":
         ok = (
             candidate.adapter_name == "gguf_asr_mmproj"
-            and candidate.runnable is False
+            and candidate.runnable is True
             and candidate.missing_files == []
-            and candidate.metadata.get("model_status") == "recognized_experimental"
             and "mmproj_path" in candidate.metadata
         )
         return write_row(
             row_id,
-            "blocked" if ok else "fail",
+            "pass" if ok else "fail",
             evidence_dir,
             summary=(
-                "Complete ASR GGUF+mmproj package is recognized but remains blocked until a real ASR GGUF smoke fixture proves runtime support."
+                "Complete ASR GGUF+mmproj package is recognized as a normal dependency-gated runnable ASR candidate."
                 if ok
-                else "Complete ASR GGUF+mmproj package did not produce the expected experimental blocker evidence."
+                else "Complete ASR GGUF+mmproj package did not produce the expected runnable scanner evidence."
             ),
             details=details,
             artifacts=artifacts,
-            block_reason="ASR GGUF+mmproj runtime is experimental until a real smoke fixture passes through the app.",
-            external_requirement="verified ASR GGUF+mmproj model/runtime fixture and full transcription smoke",
         )
     expected_missing = "matching mmproj .gguf"
     ok = (
@@ -284,6 +311,15 @@ def run_qwen3_asr_model_dir(row_id: str, evidence_dir: Path, model_dir: Path, in
             "fail",
             evidence_dir,
             summary="Public Qwen3-ASR GGUF+mmproj fixture scanned as incomplete despite an exact pairing manifest.",
+            details={"candidate": _candidate_details(candidate)},
+            artifacts=artifacts,
+        )
+    if not candidate.runnable:
+        return write_row(
+            row_id,
+            "fail",
+            evidence_dir,
+            summary="Public Qwen3-ASR GGUF+mmproj fixture still scanned as unsupported instead of using the normal dependency-gated app path.",
             details={"candidate": _candidate_details(candidate)},
             artifacts=artifacts,
         )
@@ -359,13 +395,7 @@ def run_qwen3_asr_model_dir(row_id: str, evidence_dir: Path, model_dir: Path, in
 
     source = Path(config["folders"]["input"]) / "qwen3_asr_gguf_mmproj_sapi.wav"
     generate_windows_sapi_wav(source, REFERENCE_TEXT)
-    runtime_candidate = replace(
-        candidate,
-        runnable=True,
-        runnable_after_dependency_install=True,
-        warnings=[*candidate.warnings, "Runtime matrix forced this recognized-experimental candidate into a live smoke attempt."],
-    )
-    output_dir = process_file_with_candidates(source, [runtime_candidate], config, unsupported, reference_llm=llm_candidate)
+    output_dir = process_file_with_candidates(source, [candidate], config, unsupported, reference_llm=llm_candidate)
     if output_dir is None:
         return write_row(
             row_id,

@@ -18,10 +18,10 @@ def test_gguf_asr_adapter_discovers_complete_mmproj_pair(tmp_path: Path):
     candidates = GGUFASRMMProjAdapter().discover(tmp_path)
 
     assert len(candidates) == 1
-    assert candidates[0].runnable is False
+    assert candidates[0].runnable is True
+    assert candidates[0].runnable_after_dependency_install is True
     assert candidates[0].adapter_name == "gguf_asr_mmproj"
-    assert candidates[0].metadata["model_status"] == "recognized_experimental"
-    assert "experimental" in candidates[0].warnings[0]
+    assert candidates[0].metadata["model_status"] == ""
     assert candidates[0].metadata["model_path"].endswith("Qwen3-ASR-1.7B-Q8_0.gguf")
     assert candidates[0].metadata["mmproj_path"].endswith("mmproj-Qwen3-ASR-1.7B-Q8_0.gguf")
     assert candidates[0].dependency_groups == ["llama_cpp", "llama_mtmd"]
@@ -67,8 +67,9 @@ def test_gguf_asr_adapter_uses_manifest_pair_when_multiple_pairs_exist(tmp_path:
 
     candidate = GGUFASRMMProjAdapter().discover(tmp_path)[0]
 
-    assert candidate.runnable is False
-    assert candidate.metadata["model_status"] == "recognized_experimental"
+    assert candidate.runnable is True
+    assert candidate.runnable_after_dependency_install is True
+    assert candidate.metadata["model_status"] == ""
     assert candidate.metadata["model_path"].endswith("Qwen3-ASR-1.7B-Q4_K_M.gguf")
 
 
