@@ -3,8 +3,9 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+from app.adapters.base import ModelCandidate
 from app import hf_model_downloader
-from app.hf_model_downloader import HFModelRef, build_download_choices, build_smart_download_choices, download_choice, download_hf_model_from_ref, list_repo_files
+from app.hf_model_downloader import HFModelRef, DownloadChoice, build_download_choices, build_smart_download_choices, download_choice, download_hf_model_from_ref, list_repo_files, offer_missing_file_repair
 from app.model_scanner import scan_models
 from qa.runtime_matrix.common import ROOT, sha256, write_row
 from qa.runtime_matrix.rows.gguf_asr_mmproj import run_qwen3_asr_model_dir
@@ -54,6 +55,8 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
         return _run_public_download_to_asr(row_id, evidence_dir, _install_deps, _allow_downloads)
     if row_id == "hf_downloader_qwen3_asr_gguf_mmproj_public_real_download_to_asr":
         return _run_public_real_download_to_asr(row_id, evidence_dir, _install_deps, _allow_downloads)
+    if row_id == "hf_downloader_supported_outcome_taxonomy":
+        return _run_supported_outcome_taxonomy(row_id, evidence_dir)
     if row_id != "hf_downloader_qwen3_asr_gguf_mmproj_layout":
         return write_row(row_id, "fail", evidence_dir, summary=f"Unhandled HF downloader layout row: {row_id}")
     return _run_materialized_layout(row_id, evidence_dir)
@@ -147,7 +150,7 @@ def _run_materialized_layout(row_id: str, evidence_dir: Path) -> dict:
         hf_model_downloader._download_file = original_download
 
     manifest = destination / "model_package.json"
-    runnable, unsupported = scan_models(destination)
+    runnable, unsupported = scan_models(destination.parent)
     candidates = [candidate for candidate in [*runnable, *unsupported] if candidate.adapter_name == "gguf_asr_mmproj"]
     failures: list[str] = []
     if not manifest.exists():
@@ -243,7 +246,7 @@ def _run_cached_materialization(row_id: str, evidence_dir: Path) -> dict:
         hf_model_downloader._download_file = original_download
 
     manifest = destination / "model_package.json"
-    runnable, unsupported = scan_models(destination)
+    runnable, unsupported = scan_models(destination.parent)
     candidates = [candidate for candidate in [*runnable, *unsupported] if candidate.adapter_name == "gguf_asr_mmproj"]
     materialized = {path.name: path for path in downloaded if path.name in cached}
     failures: list[str] = []
@@ -583,4 +586,217 @@ def _run_product_downloader_flow(
             ],
         },
         artifacts=[manifest] if manifest else [],
+    )
+
+
+def _patched_downloader_flow(
+    evidence_dir: Path,
+    *,
+    repo_id: str,
+    files: list[str],
+    selected_choice: str | None = None,
+    repair_answers: list[str] | None = None,
+    scan_override=None,
+) -> tuple[Path | None, list[str], list[str]]:
+    answers = iter([item for item in [selected_choice, *(repair_answers or [])] if item is not None])
+    messages: list[str] = []
+    prompts: list[str] = []
+
+    def input_func(prompt: str = "") -> str:
+        prompts.append(prompt)
+        return next(answers, "")
+
+    def fake_download(_repo_id: str, _revision: str | None, filename: str, destination: Path, relative_name: str | None = None) -> Path:
+        target = destination / (relative_name or filename)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if filename.endswith(".json"):
+            target.write_text("{}", encoding="utf-8")
+        else:
+            target.write_bytes(f"fixture:{filename}".encode("utf-8"))
+        return target
+
+    original_download = hf_model_downloader._download_file
+    original_list_repo_files = hf_model_downloader.list_repo_files
+    original_scan = None
+    hf_model_downloader._download_file = fake_download
+    hf_model_downloader.list_repo_files = lambda _ref: list(files)
+    if scan_override is not None:
+        import app.model_scanner as model_scanner
+
+        original_scan = model_scanner.scan_models
+        model_scanner.scan_models = scan_override
+    try:
+        destination = download_hf_model_from_ref(
+            evidence_dir / "Models",
+            repo_id,
+            input_func=input_func,
+            print_func=messages.append,
+        )
+    finally:
+        hf_model_downloader._download_file = original_download
+        hf_model_downloader.list_repo_files = original_list_repo_files
+        if original_scan is not None:
+            import app.model_scanner as model_scanner
+
+            model_scanner.scan_models = original_scan
+    return destination, prompts, messages
+
+
+def _candidate_payloads(destination: Path | None) -> tuple[list[dict], list[dict]]:
+    if destination is None or not destination.exists():
+        return [], []
+    runnable, unsupported = scan_models(destination.parent)
+
+    def payload(candidate):
+        return {
+            "candidate_id": candidate.candidate_id,
+            "adapter_name": candidate.adapter_name,
+            "container_format": candidate.container_format,
+            "task": candidate.task,
+            "runnable": candidate.runnable,
+            "missing_files": candidate.missing_files,
+            "warnings": candidate.warnings,
+        }
+
+    return [payload(candidate) for candidate in runnable], [payload(candidate) for candidate in unsupported]
+
+
+def _run_supported_outcome_taxonomy(row_id: str, evidence_dir: Path) -> dict:
+    cases: dict[str, dict] = {}
+    failures: list[str] = []
+
+    runnable_dest, runnable_prompts, runnable_messages = _patched_downloader_flow(
+        evidence_dir / "runnable_asr",
+        repo_id="owner/fw-asr",
+        files=["model.bin", "config.json", "tokenizer.json"],
+    )
+    runnable, unsupported = _candidate_payloads(runnable_dest)
+    cases["complete_runnable_asr"] = {
+        "destination": str(runnable_dest) if runnable_dest else "",
+        "prompts": runnable_prompts,
+        "messages": runnable_messages,
+        "runnable": runnable,
+        "unsupported": unsupported,
+    }
+    if not any(item["adapter_name"] == "faster_whisper" and item["runnable"] for item in runnable):
+        failures.append("complete runnable ASR package did not scan as faster-whisper")
+
+    repair_dir = evidence_dir / "missing_sidecar_repair" / "model"
+    repair_dir.mkdir(parents=True, exist_ok=True)
+    (repair_dir / "model.safetensors").write_bytes(b"fixture:model.safetensors")
+    repair_choice = DownloadChoice(
+        label="Safetensors",
+        kind="safetensors",
+        primary_files=("model.safetensors",),
+        files=("model.safetensors",),
+        task_hint="metadata_required",
+    )
+    repair_prompts: list[str] = []
+    repair_messages: list[str] = []
+    repair_state = {"calls": 0}
+
+    def repair_input(prompt: str = "") -> str:
+        repair_prompts.append(prompt)
+        return "y"
+
+    def repair_download(_repo_id: str, _revision: str | None, filename: str, destination: Path, relative_name: str | None = None) -> Path:
+        target = destination / (relative_name or filename)
+        target.write_text("{}", encoding="utf-8")
+        return target
+
+    def repair_scan(root: Path):
+        repair_state["calls"] += 1
+        return [], [
+            ModelCandidate(
+                candidate_id="incomplete",
+                display_name="Incomplete",
+                family_name="Incomplete",
+                backend="transformers",
+                container_format="safetensors",
+                task="automatic-speech-recognition",
+                precision="unknown",
+                quantization_label="Unknown precision",
+                path=root,
+                adapter_name="hf_transformers_asr",
+                runnable=False,
+                missing_files=["config.json", "preprocessor_config.json"],
+            )
+        ]
+
+    original_download = hf_model_downloader._download_file
+    hf_model_downloader._download_file = repair_download
+    import app.model_scanner as model_scanner
+
+    original_scan = model_scanner.scan_models
+    model_scanner.scan_models = repair_scan
+    try:
+        offer_missing_file_repair(
+            HFModelRef("owner/hf-asr"),
+            repair_choice,
+            ["model.safetensors", "config.json", "preprocessor_config.json", "tokenizer.json"],
+            repair_dir,
+            input_func=repair_input,
+            print_func=repair_messages.append,
+        )
+    finally:
+        hf_model_downloader._download_file = original_download
+        model_scanner.scan_models = original_scan
+
+    repair_files = sorted(path.name for path in repair_dir.iterdir())
+    cases["missing_sidecar_repair"] = {
+        "destination": str(repair_dir),
+        "prompts": repair_prompts,
+        "messages": repair_messages,
+        "files": repair_files,
+        "scan_calls": repair_state["calls"],
+    }
+    if not {"config.json", "preprocessor_config.json"} <= set(repair_files):
+        failures.append("missing-sidecar repair did not download exact metadata matches")
+
+    reference_dest, reference_prompts, reference_messages = _patched_downloader_flow(
+        evidence_dir / "reference_llm",
+        repo_id="owner/llm",
+        files=["Model-Q4_K_M.gguf"],
+    )
+    runnable, unsupported = _candidate_payloads(reference_dest)
+    cases["gguf_reference_llm"] = {
+        "destination": str(reference_dest) if reference_dest else "",
+        "prompts": reference_prompts,
+        "messages": reference_messages,
+        "runnable": runnable,
+        "unsupported": unsupported,
+    }
+    if not any(item["adapter_name"] == "gguf_llm_reference" and item["task"] == "llm-corrected-reference" for item in unsupported):
+        failures.append("GGUF reference LLM was not routed as reference-only")
+
+    unsafe_dest, unsafe_prompts, unsafe_messages = _patched_downloader_flow(
+        evidence_dir / "unsafe_unknown",
+        repo_id="https://huggingface.co/owner/unsafe/tree/main/custom",
+        files=["custom/custom.pt"],
+        repair_answers=["DOWNLOAD"],
+    )
+    runnable, unsupported = _candidate_payloads(unsafe_dest)
+    cases["unsafe_or_unknown_inspection"] = {
+        "destination": str(unsafe_dest) if unsafe_dest else "",
+        "prompts": unsafe_prompts,
+        "messages": unsafe_messages,
+        "runnable": runnable,
+        "unsupported": unsupported,
+    }
+    if unsafe_dest is None or not any("unknown package layout" in message for message in unsafe_messages):
+        failures.append("unknown/unsafe repo did not require inspection confirmation")
+    if runnable:
+        failures.append("unknown/unsafe repo produced runnable candidates")
+
+    return write_row(
+        row_id,
+        "fail" if failures else "pass",
+        evidence_dir,
+        summary=(
+            "HF downloader routed supported repo outcomes into runnable ASR, sidecar repair, reference LLM, and inspection-only paths."
+            if not failures
+            else "HF downloader supported-outcome taxonomy validation failed."
+        ),
+        details={"cases": cases, "failures": failures},
+        artifacts=[],
     )
