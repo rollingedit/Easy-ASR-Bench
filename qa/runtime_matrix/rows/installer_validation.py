@@ -571,6 +571,148 @@ def _repair_all_safe_failure_isolation(row_id: str, evidence_dir: Path) -> dict:
     )
 
 
+def _repair_all_safe_stale_cached_resolution(row_id: str, evidence_dir: Path) -> dict:
+    from app import repair_plan
+
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    config_path = evidence_dir / "config.json"
+    config = {
+        "runtime": {"provider": "cpu", "prefer_gpu": False, "fallback_to_cpu": True},
+        "dependency_install": {"use_cached_runtime_resolutions": True},
+        "folders": {
+            "models": str(evidence_dir / "Models"),
+            "input": str(evidence_dir / "Input"),
+            "output": str(evidence_dir / "Output"),
+            "temp": str(evidence_dir / "Temp"),
+            "logs": str(evidence_dir / "Logs"),
+            "cache": str(evidence_dir / "Cache"),
+        },
+    }
+    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8", newline="\n")
+    stale_resolution_path = evidence_dir / "Logs" / "dependency_resolution_python_packaging.json"
+    stale_resolution_path.parent.mkdir(parents=True, exist_ok=True)
+    stale_resolution = {
+        "schema": "easy_asr_bench.runtime_resolution.v1",
+        "dependency_group": "python_packaging",
+        "status": "backend_usable",
+        "backend_verified": True,
+        "backend_probe_kind": "python_import_probe",
+        "versions": {"pip": "0.0.0"},
+        "providers": [],
+        "runtime_path": "",
+        "accelerator_requested": False,
+        "accelerator": "",
+        "accelerator_verified": False,
+        "config_runtime": {"provider": "cpu", "prefer_gpu": False, "fallback_to_cpu": True},
+    }
+    stale_resolution_path.write_text(json.dumps(stale_resolution, indent=2) + "\n", encoding="utf-8", newline="\n")
+    status = {
+        "python_packaging": {
+            "available": True,
+            "missing": [],
+            "install_kind": "pip",
+            "requirement_file": "requirements/python_packaging.txt",
+            "recovery_command": "python -m pip install -r requirements/python_packaging.txt",
+        },
+    }
+    probe_calls: list[str] = []
+    install_calls: list[str] = []
+    original_acceleration = repair_plan.acceleration_install_decision
+    original_install = repair_plan.install_group_for_config
+    original_missing = repair_plan.missing_modules_for_config
+    original_probe = repair_plan.backend_probe_for_group
+
+    def fake_acceleration(_config: dict, _group: str) -> dict:
+        return {"use_accelerator": False, "accelerator": None}
+
+    def fake_install(group: str, _project_root: Path, _config: dict, log_path: Path | None = None) -> dict:
+        install_calls.append(group)
+        raise AssertionError(f"stale cached resolution should be refreshed by probing, not reinstalling {group}")
+
+    def fake_probe(group: str, _config: dict) -> dict:
+        probe_calls.append(group)
+        return {
+            "kind": "python_import_probe",
+            "ok": True,
+            "imports": {
+                "ok": True,
+                "loaded": [
+                    {"module": "pip", "version": "refreshed"},
+                    {"module": "setuptools", "version": "refreshed"},
+                    {"module": "pkg_resources", "version": "refreshed"},
+                ],
+            },
+        }
+
+    try:
+        repair_plan.acceleration_install_decision = fake_acceleration
+        repair_plan.install_group_for_config = fake_install
+        repair_plan.missing_modules_for_config = lambda _group, _config: []
+        repair_plan.backend_probe_for_group = fake_probe
+        plan = repair_plan.execute_repair_plan(config, project_root=evidence_dir, status=status)
+    finally:
+        repair_plan.acceleration_install_decision = original_acceleration
+        repair_plan.install_group_for_config = original_install
+        repair_plan.missing_modules_for_config = original_missing
+        repair_plan.backend_probe_for_group = original_probe
+
+    plan_path = evidence_dir / "repair_all_safe_stale_cached_resolution.json"
+    plan_path.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8", newline="\n")
+    record = (plan.get("records") or [{}])[0]
+    cached_check = record.get("cached_runtime_resolution_check", {})
+    after = record.get("after", {})
+    refreshed = {}
+    if stale_resolution_path.exists():
+        refreshed = json.loads(stale_resolution_path.read_text(encoding="utf-8"))
+    failures = []
+    if cached_check.get("status") != "stale":
+        failures.append(f"cached resolution was not marked stale: {cached_check.get('status')}")
+    if "versions" not in cached_check.get("mismatches", []):
+        failures.append("cached resolution stale check did not include version mismatch")
+    if probe_calls != ["python_packaging"]:
+        failures.append(f"backend probe was not rerun exactly once: {probe_calls}")
+    if install_calls:
+        failures.append(f"unexpected install calls occurred: {install_calls}")
+    if after.get("repair_result") != "already_ok":
+        failures.append("stale cached resolution was not refreshed through already_ok probe path")
+    if after.get("backend_probe", {}).get("ok") is not True:
+        failures.append("refreshed backend probe did not pass")
+    previous_check = after.get("previous_runtime_resolution_check", {})
+    if previous_check.get("status") != "stale":
+        failures.append("persisted refresh did not record stale previous resolution")
+    if refreshed.get("versions", {}).get("pip") != "refreshed":
+        failures.append("runtime resolution file was not refreshed with new probe versions")
+    summary = plan.get("summary", {})
+    if summary.get("cached_runtime_resolutions") != 0:
+        failures.append("stale cached resolution was incorrectly counted as reused")
+    if summary.get("runtime_resolutions") != 1:
+        failures.append("refreshed runtime resolution was not counted")
+    if summary.get("previous_runtime_resolution_stale") != 1:
+        failures.append("repair summary did not count the stale previous resolution")
+    return write_row(
+        row_id,
+        "pass" if not failures else "fail",
+        evidence_dir,
+        summary=(
+            "repair-all-safe rejects stale cached runtime resolutions, reruns the backend probe, and refreshes persisted evidence without reinstalling."
+            if not failures
+            else "repair-all-safe stale cached runtime resolution validation failed."
+        ),
+        details={
+            "config_path": str(config_path),
+            "stale_resolution_path": str(stale_resolution_path),
+            "cached_runtime_resolution_check": cached_check,
+            "probe_calls": probe_calls,
+            "install_calls": install_calls,
+            "repair_summary": summary,
+            "previous_runtime_resolution_check": previous_check,
+            "refreshed_versions": refreshed.get("versions", {}),
+            "failures": failures,
+        },
+        artifacts=[config_path, plan_path, stale_resolution_path, evidence_dir / "Logs" / "repair_all_safe_last.json"],
+    )
+
+
 def _repair_plan_issue_classification_contract(row_id: str, evidence_dir: Path) -> dict:
     from app import repair_plan
 
@@ -1060,6 +1202,8 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
         return _setup_repair_all_safe(row_id, evidence_dir, _install_deps)
     if row_id == "repair_all_safe_failure_isolation":
         return _repair_all_safe_failure_isolation(row_id, evidence_dir)
+    if row_id == "repair_all_safe_stale_cached_resolution":
+        return _repair_all_safe_stale_cached_resolution(row_id, evidence_dir)
     if row_id == "repair_plan_issue_classification_contract":
         return _repair_plan_issue_classification_contract(row_id, evidence_dir)
     if row_id == "setup_repair_model_layouts":

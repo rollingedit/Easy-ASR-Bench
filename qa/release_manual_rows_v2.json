@@ -16,6 +16,7 @@
     "setup_doctor_strict": "not_run",
     "setup_repair_all_safe": "not_run",
     "repair_all_safe_failure_isolation": "not_run",
+    "repair_all_safe_stale_cached_resolution": "not_run",
     "repair_plan_issue_classification_contract": "not_run",
     "setup_repair_model_layouts": "not_run",
     "update_preserves_user_data": "not_run",

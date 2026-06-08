@@ -26,6 +26,7 @@ python qa\runtime_matrix\run_row.py --row faster_whisper_ctranslate2_candidate_f
 python qa\runtime_matrix\run_row.py --row setup_repair_all_safe --workdir Temp\runtime_matrix_setup_repair_all_safe
 python qa\runtime_matrix\run_row.py --row setup_dry_run_json --workdir Temp\runtime_matrix_setup_dry_run_json
 python qa\runtime_matrix\run_row.py --row repair_all_safe_failure_isolation --workdir Temp\runtime_matrix_repair_all_safe_failure_isolation
+python qa\runtime_matrix\run_row.py --row repair_all_safe_stale_cached_resolution --workdir Temp\runtime_matrix_repair_all_safe_stale_cached_resolution
 python qa\runtime_matrix\run_row.py --row repair_plan_issue_classification_contract --workdir Temp\runtime_matrix_repair_plan_issue_classification_contract
 python qa\runtime_matrix\run_row.py --row setup_repair_model_layouts --workdir Temp\runtime_matrix_setup_repair_model_layouts
 python qa\runtime_matrix\run_row.py --row clean_vm_zero_dependency_bootstrap --workdir Temp\runtime_matrix_clean_vm_bootstrap
@@ -60,6 +61,8 @@ The `faster_whisper_ctranslate2_candidate_fallback_repair` runtime-matrix row is
 The `setup_repair_all_safe` runtime-matrix row preflights `app.doctor --repair-plan` and then runs `app.doctor --repair-all-safe` only when safe. If the plan would install dependencies, run it with `--install-deps` only on a machine where dependency repair is intentionally being exercised. The row writes `row.json`, `repair_plan.json`, and `repair_all_safe.json` with backend and accelerator probe summaries. Usable backend records also include `runtime_resolution_path` values pointing to `Logs\dependency_resolution_<group>.json`, which capture the persisted working backend/provider resolution and any requested-but-unverified accelerator state. The repair summary must include `previous_runtime_resolution_valid`, `previous_runtime_resolution_stale`, and `cached_runtime_resolutions` so release evidence shows whether saved resolutions still matched the current package/provider/config state before refresh and whether any valid saved resolutions were consumed.
 
 The `repair_all_safe_failure_isolation` runtime-matrix row is a non-destructive repair contract for failed dependency repair isolation. It routes through `app.repair_plan.execute_repair_plan`, simulates one failed dependency-group repair followed by one repairable group, and verifies the failed group is capped at one logged attempt while the later group still repairs, probes, and persists runtime-resolution evidence.
+
+The `repair_all_safe_stale_cached_resolution` row is a non-destructive cached-resolution repair contract. It seeds a stale saved dependency resolution with mismatched package-version evidence, routes through `app.repair_plan.execute_repair_plan`, and verifies repair-all-safe marks the cache stale, reruns the backend probe, refreshes the persisted runtime-resolution file, and does not reinstall packages unnecessarily.
 
 The `repair_plan_issue_classification_contract` row is a non-destructive repair-plan contract for bootstrapper troubleshooting language. It verifies `app.repair_plan.build_repair_plan` distinguishes corrupt installs, incompatible package/runtime stacks, provider conflicts, outdated packages, missing native tools, and manual blockers while retaining concrete repair commands for auto-repairable groups.
 
