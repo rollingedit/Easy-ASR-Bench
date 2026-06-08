@@ -115,6 +115,7 @@ ROWS: dict[str, RowDefinition] = {
     "openai_whisper_cuda_unavailable_cpu_fallback": row("openai_whisper_cuda_unavailable_cpu_fallback", "qa.runtime_matrix.rows.cuda_provider_matrix"),
     "generic_onnx_ctc_manifest_v1": row("generic_onnx_ctc_manifest_v1", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"),
     "generic_onnx_manifest_cpu": row("generic_onnx_manifest_cpu", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"),
+    "generic_onnx_cuda_unavailable_cpu_fallback": row("generic_onnx_cuda_unavailable_cpu_fallback", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"),
     "generic_onnx_openvino_unavailable_cpu_fallback": row("generic_onnx_openvino_unavailable_cpu_fallback", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"),
     "generic_onnx_smollm_grading_cpu": row("generic_onnx_smollm_grading_cpu", "qa.runtime_matrix.rows.generic_onnx_smollm_grading"),
     "generic_onnx_smollm_grading_directml": row("generic_onnx_smollm_grading_directml", "qa.runtime_matrix.rows.generic_onnx_smollm_grading", hardware="directml"),

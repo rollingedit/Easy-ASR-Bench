@@ -210,6 +210,7 @@ def test_release_manual_matrix_includes_granular_cuda_rows():
         "llama_cpp_cuda_smollm_smoke",
         "llama_cpp_vulkan_smollm_smoke",
         "transformers_cuda_unavailable_cpu_fallback",
+        "generic_onnx_cuda_unavailable_cpu_fallback",
     } <= ids
 
 
@@ -616,6 +617,7 @@ def test_nested_models_runtime_row_generates_unique_candidate_ids(tmp_path):
 def test_runtime_matrix_maps_generic_onnx_rows_to_real_tiny_ctc_fixture():
     assert ROWS["generic_onnx_ctc_manifest_v1"].module == "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"
     assert ROWS["generic_onnx_manifest_cpu"].module == "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"
+    assert ROWS["generic_onnx_cuda_unavailable_cpu_fallback"].module == "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"
     assert ROWS["generic_onnx_openvino_unavailable_cpu_fallback"].module == "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"
     assert ROWS["generic_onnx_smollm_grading_cpu"].module == "qa.runtime_matrix.rows.generic_onnx_smollm_grading"
     assert ROWS["generic_onnx_smollm_grading_directml"].module == "qa.runtime_matrix.rows.generic_onnx_smollm_grading"
@@ -689,6 +691,21 @@ def test_generic_onnx_openvino_fallback_row_preserves_requested_provider(tmp_pat
     summary = row["details"]["provider_summary"]
     assert summary["requested_runtime_provider"] == "openvino"
     assert summary["openvino_requested"] is True
+    assert row["details"]["transcript"] == "ab"
+    if not row["details"]["provider_available"]:
+        assert summary["provider_fallback"] is True
+        assert summary["active_providers"] == ["CPUExecutionProvider"]
+
+
+def test_generic_onnx_cuda_fallback_row_preserves_requested_provider(tmp_path):
+    from qa.runtime_matrix.rows import generic_onnx_ctc_tiny
+
+    row = generic_onnx_ctc_tiny.run("generic_onnx_cuda_unavailable_cpu_fallback", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    summary = row["details"]["provider_summary"]
+    assert summary["requested_runtime_provider"] == "cuda"
+    assert summary["cuda_requested"] is True
     assert row["details"]["transcript"] == "ab"
     if not row["details"]["provider_available"]:
         assert summary["provider_fallback"] is True
