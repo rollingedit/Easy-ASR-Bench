@@ -89,6 +89,15 @@ def test_release_verification_documents_vc_runtime_repair_contract_row():
     assert "post-repair redistributable probe passes" in text
 
 
+def test_release_verification_documents_python_packaging_repair_contract_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row python_packaging_tools_repair_contract" in text
+    assert "requirements\\python_packaging.txt" in text
+    assert "app.repair_plan.execute_repair_plan" in text
+    assert "pkg_resources" in text
+
+
 def test_release_verification_documents_directml_conflict_repair_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 

@@ -46,6 +46,11 @@ class LlamaCppWheelDecision:
 
 
 DEPENDENCY_GROUPS = {
+    "python_packaging": DependencyGroup(
+        ("pip", "setuptools", "pkg_resources"),
+        "requirements/python_packaging.txt",
+        "Python packaging tools needed for dependency repair and native package imports",
+    ),
     "core": DependencyGroup(
         tuple(CORE_IMPORTS.values()),
         "requirements/core.txt",

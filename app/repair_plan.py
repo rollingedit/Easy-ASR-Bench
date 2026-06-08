@@ -12,6 +12,7 @@ from .dependency_manager import acceleration_install_decision, dependency_status
 
 
 GROUP_IMPORT_PROBES = {
+    "python_packaging": ("pip", "setuptools", "pkg_resources"),
     "core": ("jinja2", "numpy", "soundfile", "jiwer"),
     "transformers_cpu": ("torch", "transformers", "safetensors", "sentencepiece", "google.protobuf", "torchaudio"),
     "openai_whisper": ("whisper", "torch"),

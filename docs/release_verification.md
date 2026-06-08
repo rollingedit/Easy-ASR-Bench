@@ -18,6 +18,7 @@ python scripts\write_release_smoke.py --tag vX.Y.Z --commit <commit> --output re
 python scripts\validate_release_smoke.py --smoke release-smoke-vX.Y.Z.json --required tests\fixtures\release_required_rows_v2.json
 cmd /c setup.bat --dry-run --local
 python qa\runtime_matrix\run_row.py --row windows_vc_runtime_repair_contract --workdir Temp\runtime_matrix_vc_runtime_repair_contract
+python qa\runtime_matrix\run_row.py --row python_packaging_tools_repair_contract --workdir Temp\runtime_matrix_python_packaging_repair_contract
 python qa\runtime_matrix\run_row.py --row directml_provider_conflict_repair --workdir Temp\runtime_matrix_directml_conflict_repair
 python qa\runtime_matrix\run_row.py --row faster_whisper_pkg_resources_repair --workdir Temp\runtime_matrix_faster_whisper_pkg_resources_repair
 python qa\runtime_matrix\run_row.py --row setup_repair_all_safe --workdir Temp\runtime_matrix_setup_repair_all_safe
@@ -38,6 +39,8 @@ python -m app.doctor --config config.json --strict
 The staged `--asset-dir` check must run before a draft release is published. It validates the same `setup.bat`, `install.ps1`, `manifest.json`, `checksums.json`, and ZIP bytes that will become release assets, without depending on public release URLs.
 
 The `windows_vc_runtime_repair_contract` runtime-matrix row is a non-destructive repair contract for native Windows ASR dependencies. It simulates a missing Microsoft Visual C++ 2015-2022 Redistributable x64 state, verifies the bootstrap repair path invokes `winget install -e --id Microsoft.VCRedist.2015+.x64 --accept-package-agreements --accept-source-agreements`, and verifies the post-repair redistributable probe passes.
+
+The `python_packaging_tools_repair_contract` runtime-matrix row is a non-destructive repair contract for the packaging layer that drives all pip-based dependency repair. It simulates missing `pkg_resources`, routes through the shared `app.repair_plan.execute_repair_plan` path for the `python_packaging` dependency group, verifies `requirements\python_packaging.txt` is the repair target, reprobes `pip`, `setuptools`, and `pkg_resources`, and persists a runtime-resolution record.
 
 The `directml_provider_conflict_repair` runtime-matrix row is a non-destructive repair contract for the reproduced ONNX Runtime DirectML conflict. It simulates plain `onnxruntime` blocking `DmlExecutionProvider`, routes through the product `install_group_for_config("onnx", ...)` repair executor with commands captured instead of executed, and verifies the repair removes plain `onnxruntime`, installs `requirements\onnx_directml.txt`, force-probes a compatible `onnxruntime-directml` package, and clears the missing-provider state.
 

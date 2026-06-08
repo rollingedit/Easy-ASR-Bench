@@ -98,6 +98,7 @@ def test_runtime_matrix_rows_point_to_importable_modules():
 def test_runtime_matrix_includes_native_runtime_prerequisite_rows():
     assert ROWS["windows_vc_runtime"].module == "qa.runtime_matrix.rows.windows_vc_runtime"
     assert ROWS["windows_vc_runtime_repair_contract"].module == "qa.runtime_matrix.rows.windows_vc_runtime"
+    assert ROWS["python_packaging_tools_repair_contract"].module == "qa.runtime_matrix.rows.python_packaging_repair"
     assert ROWS["windows_directml_provider"].module == "qa.runtime_matrix.rows.windows_directml_provider"
     assert ROWS["directml_provider_conflict_repair"].module == "qa.runtime_matrix.rows.windows_directml_provider"
     assert ROWS["windows_vulkan_runtime"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
@@ -126,6 +127,19 @@ def test_windows_vc_runtime_repair_contract_row_records_winget_command(tmp_path)
     assert "--accept-package-agreements" in command
     assert "--accept-source-agreements" in command
     assert row["details"]["visual_cpp_redistributable"]["installed"] is True
+
+
+def test_python_packaging_tools_repair_contract_row_records_shared_repair_contract(tmp_path):
+    from qa.runtime_matrix.rows import python_packaging_repair
+
+    row = python_packaging_repair.run("python_packaging_tools_repair_contract", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    assert row["details"]["missing_before"] == ["pkg_resources"]
+    assert row["details"]["missing_after"] == []
+    assert "requirements/python_packaging.txt" in row["details"]["repair_command"]
+    assert row["details"]["backend_probe"]["kind"] == "python_import_probe"
+    assert row["details"]["runtime_resolution_path"]
 
 
 def test_directml_provider_conflict_repair_row_records_safe_repair_contract(tmp_path):
