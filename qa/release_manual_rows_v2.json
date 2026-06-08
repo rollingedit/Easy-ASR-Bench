@@ -106,6 +106,7 @@
       "generic_onnx_smollm_grading_cpu": "not_run",
       "generic_onnx_smollm_grading_directml": "not_run",
       "generic_onnx_ctc_quality_smollm_grading_cpu": "not_run",
+      "real_public_media_generic_onnx_ctc_smollm_grading_cpu": "not_run",
       "generic_onnx_without_manifest_rejected": "not_run",
       "multi_file_onnx_ar_nar": "not_run",
       "audio_asr_gguf_mmproj": "not_run",

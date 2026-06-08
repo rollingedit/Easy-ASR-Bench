@@ -217,8 +217,11 @@ def test_release_verification_documents_required_safetensors_quality_rows():
 
     assert "qa\\runtime_matrix\\run_row.py --row hf_whisper_safetensors_quality_smollm_grading_cpu" in text
     assert "qa\\runtime_matrix\\run_row.py --row real_public_media_hf_whisper_safetensors_smollm_grading_cpu" in text
+    assert "qa\\runtime_matrix\\run_row.py --row real_public_media_generic_onnx_ctc_smollm_grading_cpu" in text
     assert "qa\\runtime_matrix\\run_row.py --row hf_safetensors_asr_quality_smollm_grading_cpu" in text
     assert "qa\\runtime_matrix\\run_row.py --row hf_whisper_sharded_safetensors_smollm_grading_cpu" in text
+    assert "Wikimedia CC0 WAV fixture" in text
+    assert "Generic ONNX CTC path" in text
     assert "`openai/whisper-tiny` Safetensors" in text
     assert "`facebook/wav2vec2-base-960h`" in text
     assert "structural sharded-loading evidence" in text

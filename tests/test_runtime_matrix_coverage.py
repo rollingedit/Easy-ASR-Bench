@@ -622,6 +622,8 @@ def test_runtime_matrix_maps_generic_onnx_rows_to_real_tiny_ctc_fixture():
     assert ROWS["generic_onnx_smollm_grading_cpu"].module == "qa.runtime_matrix.rows.generic_onnx_smollm_grading"
     assert ROWS["generic_onnx_smollm_grading_directml"].module == "qa.runtime_matrix.rows.generic_onnx_smollm_grading"
     assert ROWS["generic_onnx_ctc_quality_smollm_grading_cpu"].module == "qa.runtime_matrix.rows.generic_onnx_smollm_grading"
+    assert ROWS["real_public_media_generic_onnx_ctc_smollm_grading_cpu"].module == "qa.runtime_matrix.rows.generic_onnx_smollm_grading"
+    assert ROWS["real_public_media_generic_onnx_ctc_smollm_grading_cpu"].hardware == "network"
     assert ROWS["generic_onnx_without_manifest_rejected"].module == "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"
     assert ROWS["multi_file_onnx_ar_nar"].module == "qa.runtime_matrix.rows.multi_file_onnx_ar_nar"
 
@@ -1583,12 +1585,15 @@ def test_runtime_fixture_manifest_covers_core_runtime_formats():
     assert "real_public_media_openai_whisper_pt_smollm_grading" in fixtures["wikimedia_cc0_word_wav"]["rows"]
     assert "real_public_media_whisper_cpp_ggml_smollm_grading" in fixtures["wikimedia_cc0_word_wav"]["rows"]
     assert "real_public_media_hf_whisper_safetensors_smollm_grading_cpu" in fixtures["wikimedia_cc0_word_wav"]["rows"]
+    assert "real_public_media_generic_onnx_ctc_smollm_grading_cpu" in fixtures["wikimedia_cc0_word_wav"]["rows"]
     assert "real_public_media_openai_whisper_pt_smollm_grading" in fixtures["openai_whisper_tiny_pt"]["rows"]
     assert "real_public_media_whisper_cpp_ggml_smollm_grading" in fixtures["whisper_cpp_tiny_en_q5"]["rows"]
     assert "real_public_media_hf_whisper_safetensors_smollm_grading_cpu" in fixtures["hf_whisper_tiny_safetensors"]["rows"]
+    assert "real_public_media_generic_onnx_ctc_smollm_grading_cpu" in fixtures["generic_onnx_ctc_fixture"]["rows"]
     assert "real_public_media_openai_whisper_pt_smollm_grading" in fixtures["smollm_135m_gguf"]["rows"]
     assert "real_public_media_whisper_cpp_ggml_smollm_grading" in fixtures["smollm_135m_gguf"]["rows"]
     assert "real_public_media_hf_whisper_safetensors_smollm_grading_cpu" in fixtures["smollm_135m_gguf"]["rows"]
+    assert "real_public_media_generic_onnx_ctc_smollm_grading_cpu" in fixtures["smollm_135m_gguf"]["rows"]
     assert "real_public_video_faster_whisper_smollm_grading" in fixtures["wikimedia_public_domain_spoken_words_webm"]["rows"]
     fixture_ids = set(fixtures)
     for fixture_id, fixture in fixtures.items():
