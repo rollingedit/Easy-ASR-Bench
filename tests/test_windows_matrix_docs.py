@@ -145,3 +145,14 @@ def test_release_verification_documents_validate_real_smoke_doctor_mode():
     assert "cpu_model_smoke" in setup_text
     assert "--no-network" in setup_text
     assert "--allow-downloads" in text
+
+
+def test_setup_docs_include_python_packaging_repair_group():
+    text = Path("docs/what_setup_installs.md").read_text(encoding="utf-8")
+
+    assert "Python packaging repair tools" in text
+    assert "requirements/python_packaging.txt" in text
+    assert "pip" in text
+    assert "setuptools" in text
+    assert "pkg_resources" in text
+    assert "dependency_resolution_<group>.json" in text
