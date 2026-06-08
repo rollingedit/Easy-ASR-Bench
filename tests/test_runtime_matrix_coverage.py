@@ -147,6 +147,7 @@ def test_clean_vm_bootstrap_row_blocks_without_clean_vm_marker(tmp_path, monkeyp
         "cmd /c setup.bat --doctor --repair-all-safe",
         "cmd /c setup.bat --doctor --repair-model-layouts --allow-downloads",
         "python qa/runtime_matrix/run_row.py --row setup_repair_all_safe --install-deps",
+        "python qa/runtime_matrix/run_row.py --row setup_repair_model_layouts --allow-downloads",
         "python qa/runtime_matrix/run_row.py --row same_media_multi_model_smollm_benchmark --install-deps --allow-downloads",
         "python -m app.main --first-run-smoke --json",
     ]
@@ -234,6 +235,16 @@ def test_clean_vm_bootstrap_rejects_incomplete_setup_repair_evidence():
     assert "setup_repair_all_safe evidence did not record any runtime resolutions" in failures
     assert any("cached_runtime_resolutions" in failure for failure in failures)
     assert "setup_repair_all_safe evidence missing repair_evidence_path" in failures
+
+
+def test_clean_vm_bootstrap_rejects_incomplete_model_layout_repair_evidence():
+    from qa.runtime_matrix.rows.clean_vm_bootstrap import _model_layout_repair_evidence_failures
+
+    failures = _model_layout_repair_evidence_failures({"details": {"sweep_summary": {"repaired": 0}}})
+
+    assert "setup_repair_model_layouts evidence did not repair any persisted model-layout plan" in failures
+    assert any("downloaded_files" in failure for failure in failures)
+    assert "setup_repair_model_layouts evidence missing persisted last_execution repair" in failures
 
 
 def test_setup_environment_rows_emit_concrete_setup_evidence(tmp_path):
