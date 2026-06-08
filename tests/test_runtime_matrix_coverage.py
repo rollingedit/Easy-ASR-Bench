@@ -980,8 +980,15 @@ def test_real_media_download_cache_blocks_without_network_permission(tmp_path):
 
     assert row["status"] == "blocked"
     assert row["block_reason"] == "network downloads are disabled for this row"
-    assert row["details"]["downloadable_fixture_count"] >= 1
-    assert row["details"]["source_only_fixtures"]
+    assert row["details"]["downloadable_fixture_count"] >= 4
+    assert isinstance(row["details"]["source_only_fixtures"], dict)
+
+
+def test_real_media_manifest_has_downloadable_wikimedia_audio_fixtures():
+    data = json.loads((ROOT / "qa" / "runtime_matrix" / "real_media_fixtures.json").read_text(encoding="utf-8"))
+
+    assert data["fixtures"]["wikimedia_cc0_word_wav"]["download_url"].startswith("https://commons.wikimedia.org/wiki/Special:FilePath/")
+    assert data["fixtures"]["wikimedia_public_domain_speech_ogg"]["download_url"].startswith("https://commons.wikimedia.org/wiki/Special:FilePath/")
 
 
 def test_runtime_fixture_manifest_covers_core_runtime_formats():

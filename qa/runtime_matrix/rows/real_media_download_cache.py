@@ -110,6 +110,21 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, allow_downloads: b
             "sha256": digest,
             "bytes": target.stat().st_size,
         }
+        if str(fixture.get("kind", "")).startswith("real_audio_"):
+            wav_path, samples, chunks = prepare_audio(target, evidence_dir / "normalized" / name, _config())
+            artifacts.append(wav_path)
+            downloaded[name]["normalized_wav"] = str(wav_path)
+            downloaded[name]["sample_count"] = int(len(samples))
+            downloaded[name]["chunk_count"] = len(chunks)
+            if len(samples) == 0 or not chunks:
+                return write_row(
+                    row_id,
+                    "fail",
+                    evidence_dir,
+                    summary=f"Downloaded real audio fixture {name} normalized to empty audio.",
+                    details={**details, "downloaded": downloaded},
+                    artifacts=artifacts,
+                )
         if fixture.get("kind") == "real_video_mp4_with_audio":
             wav_path, samples, chunks = prepare_audio(target, evidence_dir / "normalized" / name, _config())
             artifacts.append(wav_path)
@@ -153,7 +168,7 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, allow_downloads: b
         row_id,
         "pass",
         evidence_dir,
-        summary="Downloaded and cached real media fixtures with stable URLs, recorded hashes, and validated MP4 audio/no-audio behavior.",
+        summary="Downloaded and cached real media fixtures with stable URLs, recorded hashes, and validated real audio plus MP4 audio/no-audio behavior.",
         details={**details, "downloaded": downloaded},
         artifacts=artifacts,
     )
