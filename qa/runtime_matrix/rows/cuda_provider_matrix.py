@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.metadata
+import json
+import subprocess
 from pathlib import Path
 
 import sys
@@ -8,6 +10,8 @@ import sys
 from app.dependency_manager import CUDA_INSTALL_OVERRIDES, cuda_diagnostics, llama_cpp_gpu_capable, recovery_command_for_config
 from app.runtime_plan import hardware_from_dependency_manager, resolve_runtime_plan
 from qa.runtime_matrix.common import package_versions, write_row
+from qa.runtime_matrix.rows.gguf_reference_llm_smollm135 import SMOLLM_PATH
+from qa.runtime_matrix.rows.generic_onnx_ctc_tiny import _write_tiny_ctc_fixture
 
 
 def _repair_commands() -> dict[str, str]:
@@ -91,6 +95,195 @@ def _nvidia_cuda_combo(row_id: str, evidence_dir: Path) -> dict:
     )
 
 
+def _cuda_block(row_id: str, evidence_dir: Path, *, missing: list[str], details: dict, external_requirement: str) -> dict:
+    return write_row(
+        row_id,
+        "blocked",
+        evidence_dir,
+        summary="CUDA row has real smoke logic, but this machine is missing required CUDA capability.",
+        block_reason="missing: " + ", ".join(missing),
+        external_requirement=external_requirement,
+        details=details,
+    )
+
+
+def _torch_cuda_smoke(row_id: str, evidence_dir: Path) -> dict:
+    diagnostics = cuda_diagnostics()
+    details = {
+        "cuda_provider_checks": diagnostics,
+        "dependency_versions": package_versions(["torch"]),
+        "repair_command": _repair_commands()["torch_transformers"],
+        "explicit_cuda_requirement_commands": _explicit_cuda_requirement_commands().get("transformers_cpu", []),
+    }
+    missing: list[str] = []
+    if not diagnostics.get("nvidia_gpu_detected", False):
+        missing.append("NVIDIA CUDA-capable GPU")
+    if not diagnostics.get("torch_cuda_available", False):
+        missing.append("Torch CUDA")
+    if missing:
+        return _cuda_block(
+            row_id,
+            evidence_dir,
+            missing=missing,
+            details=details,
+            external_requirement="NVIDIA CUDA machine with a CUDA-enabled Torch wheel and driver-compatible runtime",
+        )
+    try:
+        import torch
+
+        tensor = torch.ones((2, 2), device="cuda")
+        torch.cuda.synchronize()
+        details["tensor_device"] = str(tensor.device)
+        details["tensor_sum"] = float(tensor.sum().item())
+        details["cuda_device_name"] = torch.cuda.get_device_name(0)
+        details["torch_cuda_version"] = torch.version.cuda
+    except Exception as exc:
+        details["smoke_error"] = {"type": type(exc).__name__, "message": str(exc)}
+        return write_row(row_id, "fail", evidence_dir, summary="Torch CUDA was reported available but tiny tensor allocation failed.", details=details)
+    return write_row(row_id, "pass", evidence_dir, summary="Torch CUDA tiny tensor allocation passed.", details=details)
+
+
+def _onnx_cuda_smoke(row_id: str, evidence_dir: Path) -> dict:
+    diagnostics = cuda_diagnostics()
+    details = {
+        "cuda_provider_checks": diagnostics,
+        "dependency_versions": package_versions(["onnx", "onnxruntime", "onnxruntime-gpu"]),
+        "repair_command": _repair_commands()["onnx_cuda"],
+        "explicit_cuda_requirement_commands": _explicit_cuda_requirement_commands().get("onnx", []),
+    }
+    missing: list[str] = []
+    if not diagnostics.get("nvidia_gpu_detected", False):
+        missing.append("NVIDIA CUDA-capable GPU")
+    if not diagnostics.get("onnx_cuda_available", False):
+        missing.append("ONNX Runtime CUDAExecutionProvider")
+    if missing:
+        return _cuda_block(
+            row_id,
+            evidence_dir,
+            missing=missing,
+            details=details,
+            external_requirement="NVIDIA CUDA machine with onnxruntime-gpu exposing CUDAExecutionProvider",
+        )
+    try:
+        import numpy as np
+        import onnxruntime as ort
+
+        model_dir = evidence_dir / "tiny_onnx_cuda"
+        artifacts = _write_tiny_ctc_fixture(model_dir)
+        session = ort.InferenceSession(str(model_dir / "model.onnx"), providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
+        output = session.run(None, {"input_values": np.zeros((1, 1600), dtype=np.float32)})
+        details["active_providers"] = session.get_providers()
+        details["output_shape"] = list(output[0].shape)
+    except Exception as exc:
+        details["smoke_error"] = {"type": type(exc).__name__, "message": str(exc)}
+        return write_row(row_id, "fail", evidence_dir, summary="ONNX Runtime CUDA provider was visible but tiny session execution failed.", details=details)
+    if "CUDAExecutionProvider" not in details["active_providers"]:
+        return write_row(row_id, "fail", evidence_dir, summary="ONNX Runtime CUDA smoke fell back without using CUDAExecutionProvider.", details=details)
+    return write_row(row_id, "pass", evidence_dir, summary="ONNX Runtime CUDA tiny session passed.", details=details, artifacts=artifacts)
+
+
+def _faster_whisper_cuda_smoke(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bool) -> dict:
+    diagnostics = cuda_diagnostics()
+    details = {
+        "cuda_provider_checks": diagnostics,
+        "dependency_versions": package_versions(["ctranslate2", "faster-whisper"]),
+        "repair_command": _repair_commands()["faster_whisper_cuda"],
+        "explicit_cuda_requirement_commands": _explicit_cuda_requirement_commands().get("faster_whisper", []),
+    }
+    missing: list[str] = []
+    if not diagnostics.get("nvidia_gpu_detected", False):
+        missing.append("NVIDIA CUDA-capable GPU")
+    if not diagnostics.get("ctranslate2_cuda_available", False):
+        missing.append("CTranslate2 CUDA backend")
+    if missing:
+        return _cuda_block(
+            row_id,
+            evidence_dir,
+            missing=missing,
+            details=details,
+            external_requirement="NVIDIA CUDA machine with faster-whisper and a verified CTranslate2 CUDA backend",
+        )
+    if not allow_downloads:
+        return write_row(
+            row_id,
+            "blocked",
+            evidence_dir,
+            summary="faster-whisper CUDA smoke needs the tiny model fixture and downloads are disabled.",
+            block_reason="downloads disabled for Systran/faster-whisper-tiny.en fixture",
+            external_requirement="rerun with --allow-downloads on a CUDA machine",
+            details=details,
+        )
+    command = [
+        sys.executable,
+        "qa/run_real_tiny_model_smoke.py",
+        "--provider",
+        "cuda",
+        "--workdir",
+        str(evidence_dir / "real_tiny_faster_whisper_cuda_smoke"),
+    ]
+    if install_deps:
+        command.append("--install-deps")
+    completed = subprocess.run(command, text=True, capture_output=True, timeout=900)
+    details["command"] = {
+        "command": command,
+        "exit_code": completed.returncode,
+        "stdout_tail": completed.stdout[-4000:],
+        "stderr_tail": completed.stderr[-4000:],
+    }
+    if completed.returncode != 0:
+        return write_row(row_id, "fail", evidence_dir, summary="faster-whisper CUDA app-pipeline smoke failed.", details=details)
+    try:
+        payload = json.loads(completed.stdout[completed.stdout.rfind("{") :])
+    except Exception:
+        payload = {}
+    details["smoke_payload"] = payload
+    metrics = payload.get("metrics", {}) if isinstance(payload, dict) else {}
+    if metrics.get("provider_summary", {}).get("actual_provider") not in {"cuda", "auto"} and metrics.get("device") != "cuda":
+        return write_row(row_id, "fail", evidence_dir, summary="faster-whisper CUDA smoke completed without CUDA provider evidence.", details=details)
+    return write_row(row_id, "pass", evidence_dir, summary="faster-whisper/CTranslate2 CUDA app-pipeline smoke passed.", details=details)
+
+
+def _llama_cpp_cuda_smoke(row_id: str, evidence_dir: Path) -> dict:
+    diagnostics = cuda_diagnostics()
+    gpu_capable = llama_cpp_gpu_capable()
+    details = {
+        "cuda_provider_checks": diagnostics,
+        "llama_cpp_gpu_offload": gpu_capable,
+        "dependency_versions": package_versions(["llama-cpp-python"]),
+        "repair_command": _repair_commands()["llama_cpp_cuda"],
+        "explicit_cuda_requirement_commands": _explicit_cuda_requirement_commands().get("llama_cpp", []),
+        "smollm_path": str(SMOLLM_PATH),
+    }
+    missing: list[str] = []
+    if not diagnostics.get("nvidia_gpu_detected", False):
+        missing.append("NVIDIA CUDA-capable GPU")
+    if not gpu_capable:
+        missing.append("llama-cpp-python GPU offload backend")
+    if not SMOLLM_PATH.exists():
+        missing.append("SmolLM 135M GGUF fixture")
+    if missing:
+        return _cuda_block(
+            row_id,
+            evidence_dir,
+            missing=missing,
+            details=details,
+            external_requirement="NVIDIA CUDA machine with CUDA-capable llama-cpp-python and cached SmolLM 135M GGUF",
+        )
+    try:
+        from llama_cpp import Llama
+
+        llm = Llama(model_path=str(SMOLLM_PATH), n_ctx=256, n_gpu_layers=-1, verbose=False)
+        output = llm("Say one short word.", max_tokens=8, temperature=0)
+        text = output["choices"][0]["text"].strip()
+        details["generated_text"] = text
+    except Exception as exc:
+        details["smoke_error"] = {"type": type(exc).__name__, "message": str(exc)}
+        return write_row(row_id, "fail", evidence_dir, summary="llama.cpp CUDA/offload SmolLM smoke failed.", details=details, artifacts=[SMOLLM_PATH])
+    if not details.get("generated_text"):
+        return write_row(row_id, "fail", evidence_dir, summary="llama.cpp CUDA/offload SmolLM smoke returned empty text.", details=details, artifacts=[SMOLLM_PATH])
+    return write_row(row_id, "pass", evidence_dir, summary="llama.cpp CUDA/offload SmolLM smoke passed.", details=details, artifacts=[SMOLLM_PATH])
+
+
 def _faster_whisper_cuda_fallback(row_id: str, evidence_dir: Path) -> dict:
     hardware = hardware_from_dependency_manager()
     plan = resolve_runtime_plan(
@@ -147,6 +340,16 @@ def _faster_whisper_cuda_fallback(row_id: str, evidence_dir: Path) -> dict:
 def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: bool) -> dict:
     if row_id == "nvidia_cuda_torch_onnx_faster_whisper_llama":
         return _nvidia_cuda_combo(row_id, evidence_dir)
+    if row_id == "nvidia_cuda_hardware_detection":
+        return _nvidia_cuda_combo(row_id, evidence_dir)
+    if row_id == "torch_cuda_tensor_smoke":
+        return _torch_cuda_smoke(row_id, evidence_dir)
+    if row_id == "onnxruntime_cuda_tiny_session":
+        return _onnx_cuda_smoke(row_id, evidence_dir)
+    if row_id == "faster_whisper_ctranslate2_cuda_smoke":
+        return _faster_whisper_cuda_smoke(row_id, evidence_dir, _install_deps, _allow_downloads)
+    if row_id == "llama_cpp_cuda_smollm_smoke":
+        return _llama_cpp_cuda_smoke(row_id, evidence_dir)
     if row_id == "faster_whisper_cuda_unavailable_cpu_fallback":
         return _faster_whisper_cuda_fallback(row_id, evidence_dir)
     return write_row(row_id, "fail", evidence_dir, summary=f"Unsupported CUDA provider row: {row_id}")

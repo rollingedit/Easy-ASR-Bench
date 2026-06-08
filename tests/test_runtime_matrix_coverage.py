@@ -101,8 +101,25 @@ def test_runtime_matrix_includes_native_runtime_prerequisite_rows():
     assert ROWS["amd_directml_onnx_smoke"].module == "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"
     assert ROWS["intel_openvino_onnx_smoke"].module == "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"
     assert ROWS["nvidia_cuda_torch_onnx_faster_whisper_llama"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
+    assert ROWS["nvidia_cuda_hardware_detection"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
+    assert ROWS["torch_cuda_tensor_smoke"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
+    assert ROWS["onnxruntime_cuda_tiny_session"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
+    assert ROWS["faster_whisper_ctranslate2_cuda_smoke"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
+    assert ROWS["llama_cpp_cuda_smollm_smoke"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
     assert ROWS["faster_whisper_cuda_unavailable_cpu_fallback"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
     assert ROWS["vulkan_runtime_no_sdk"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
+
+
+def test_release_manual_matrix_includes_granular_cuda_rows():
+    ids = _manual_row_ids()
+
+    assert {
+        "nvidia_cuda_hardware_detection",
+        "torch_cuda_tensor_smoke",
+        "onnxruntime_cuda_tiny_session",
+        "faster_whisper_ctranslate2_cuda_smoke",
+        "llama_cpp_cuda_smollm_smoke",
+    } <= ids
 
 
 def test_runtime_matrix_maps_setup_environment_rows():
@@ -474,6 +491,25 @@ def test_cuda_combined_row_has_real_detector(tmp_path):
     assert "cuda_provider_checks" in row["details"]
     assert "repair_commands" in row["details"]
     assert "explicit_cuda_requirement_commands" in row["details"]
+
+
+def test_granular_cuda_rows_emit_pass_or_blocked_evidence(tmp_path):
+    from qa.runtime_matrix.rows import cuda_provider_matrix
+
+    for row_id in [
+        "nvidia_cuda_hardware_detection",
+        "torch_cuda_tensor_smoke",
+        "onnxruntime_cuda_tiny_session",
+        "faster_whisper_ctranslate2_cuda_smoke",
+        "llama_cpp_cuda_smollm_smoke",
+    ]:
+        row = cuda_provider_matrix.run(row_id, tmp_path / row_id, False, False)
+
+        assert row["status"] in {"pass", "blocked"}
+        assert "cuda_provider_checks" in row["details"]
+        if row["status"] == "blocked":
+            assert row["block_reason"]
+            assert row["external_requirement"]
 
 
 def test_faster_whisper_cuda_fallback_row_records_runtime_plan(tmp_path):
