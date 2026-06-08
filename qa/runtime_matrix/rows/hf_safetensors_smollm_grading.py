@@ -517,10 +517,114 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
             },
             artifacts=[SMOLLM_PATH, *model_dir.glob("*.safetensors")],
         )
+    candidate = candidates[0]
+    if row_id == "hf_whisper_sharded_safetensors_smollm_grading_cpu":
+        llm_candidate, scan_details = _smollm_candidate()
+        if llm_candidate is None:
+            return write_row(
+                row_id,
+                "fail",
+                evidence_dir,
+                summary="SmolLM GGUF was not classified as a reference/correction LLM candidate.",
+                details=scan_details,
+                artifacts=[SMOLLM_PATH, *model_dir.glob("*.safetensors"), *model_dir.glob("*.safetensors.index*.json")],
+            )
+        config = smoke_config(evidence_dir, "cpu")
+        config["runtime"]["llm_context_tokens"] = 1024
+        config["runtime"]["llm_reference_max_tokens"] = 128
+        config["runtime"]["llm_reference_temperature"] = 0.0
+        source = Path(config["folders"]["input"]) / "hf_whisper_sharded_safetensors_sapi.wav"
+        generate_windows_sapi_wav(source, REFERENCE_TEXT)
+        output_dir = process_file_with_candidates(source, [candidate], config, unsupported, reference_llm=llm_candidate)
+        if output_dir is None:
+            return write_row(
+                row_id,
+                "fail",
+                evidence_dir,
+                summary="Sharded Whisper Safetensors app-pipeline row did not produce a report directory.",
+                details={"repo_id": repo_id, "adapter_name": adapter_name, **scan_details},
+                artifacts=[SMOLLM_PATH, *model_dir.glob("*.safetensors"), *model_dir.glob("*.safetensors.index*.json"), source],
+            )
+        results = json.loads((output_dir / "results.json").read_text(encoding="utf-8"))
+        runs = results.get("runs", [])
+        transcript = "\n".join(chunk.get("text", "") for run in runs for chunk in run.get("transcript_chunks", []))
+        reference = _reference_for(results, transcript)
+        scored = import_llm_reference(results, "SmolLM corrected reference fixture:\n```json\n" + json.dumps(reference) + "\n```")
+        scored_path = output_dir / "scored_report.json"
+        scored_path.write_text(json.dumps(scored, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+        scored_results = dict(results)
+        if scored.get("status") == "scored":
+            scored_results["reference_scores"] = scored["scores"]
+        scored_html = output_dir / "compare_scored.html"
+        scored_html.write_text(build_html_report(scored_results), encoding="utf-8", newline="\n")
+
+        dependency_report_failures, dependency_report_details = dependency_resolution_report_failures(results, expected_groups={"transformers_cpu", "llama_cpp"})
+        failures: list[str] = list(dependency_report_failures)
+        if not transcript.strip():
+            failures.append("sharded Whisper Safetensors app-pipeline transcript was empty")
+        for name in ["results.json", "results.txt", "benchmark.csv", "compare.html", "scored_report.json", "compare_scored.html"]:
+            if not (output_dir / name).exists():
+                failures.append(f"missing report artifact {name}")
+        report_text = (output_dir / "results.txt").read_text(encoding="utf-8")
+        scored_html_text = scored_html.read_text(encoding="utf-8")
+        if "Local GGUF Reference/Correction LLM" not in report_text:
+            failures.append("results.txt missing local GGUF reference/correction LLM section")
+        if "Loaded precomputed LLM-corrected reference scores" not in scored_html_text:
+            failures.append("compare_scored.html missing precomputed score marker")
+        run_id = runs[0]["model"]["candidate_id"] if runs else ""
+        score = scored.get("scores", {}).get(run_id, {})
+        if scored.get("status") != "scored" or score.get("normalized_wer") is None:
+            failures.append("sharded Whisper Safetensors scored reference was not produced")
+
+        return write_row(
+            row_id,
+            "pass" if not failures else "fail",
+            evidence_dir,
+            summary=(
+                "Complete sharded Whisper Safetensors folder ran through generated media, app reports, SmolLM, and scored HTML validation."
+                if not failures
+                else "Complete sharded Whisper Safetensors app-pipeline validation failed."
+            ),
+            details={
+                "repo_id": repo_id,
+                "adapter_name": adapter_name,
+                "reference_text": REFERENCE_TEXT,
+                "transcript": transcript,
+                "quality_bearing": False,
+                "quality_note": "Tiny random sharded Whisper fixture is used for structural media/app/report regression only; real WER proof remains covered by openai/whisper-tiny.",
+                "sharded_safetensors": True,
+                "sharded_artifacts": [str(path) for path in sharded_artifacts],
+                "output_dir": str(output_dir),
+                "source": str(source),
+                "score_status": scored.get("status"),
+                "hf_sharded_safetensors_score": {
+                    "candidate_id": run_id,
+                    "normalized_wer": score.get("normalized_wer"),
+                    "balanced_score": score.get("balanced_score"),
+                    "balanced_rank": score.get("balanced_rank"),
+                    "alignment_mode": score.get("alignment_mode"),
+                },
+                "dependency_versions": package_versions(["torch", "transformers", "safetensors", "sentencepiece", "tokenizers", "torchaudio", "llama-cpp-python"]),
+                **dependency_report_details,
+                "failures": failures,
+                **scan_details,
+            },
+            artifacts=[
+                SMOLLM_PATH,
+                *model_dir.glob("*.safetensors"),
+                *model_dir.glob("*.safetensors.index*.json"),
+                source,
+                output_dir / "results.json",
+                output_dir / "results.txt",
+                output_dir / "benchmark.csv",
+                output_dir / "compare.html",
+                scored_path,
+                scored_html,
+            ],
+        )
 
     from app.main import adapter_for
 
-    candidate = candidates[0]
     adapter = adapter_for(candidate)
     try:
         adapter.load(candidate, {"provider": "cpu", "prefer_gpu": False, "language": "en", "task": "transcribe"})
