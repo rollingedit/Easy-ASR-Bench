@@ -249,6 +249,8 @@ def test_windows_sandbox_deploy_row_generates_launch_bundle(tmp_path, monkeypatc
     from qa.runtime_matrix.rows import clean_vm_bootstrap
 
     monkeypatch.delenv(clean_vm_bootstrap.SANDBOX_LAUNCH_ENV, raising=False)
+    monkeypatch.setattr(clean_vm_bootstrap, "_windows_sandbox_executable", lambda: r"C:\Windows\System32\WindowsSandbox.exe")
+    monkeypatch.setattr(clean_vm_bootstrap, "_windows_edition_details", lambda: {"available": True, "edition_id": "Professional", "sandbox_supported_edition": True})
     evidence_dir = ROOT / "Temp" / f"pytest_windows_sandbox_deploy_{tmp_path.name}"
     row = clean_vm_bootstrap.run("windows_sandbox_clean_bootstrap_deploy", evidence_dir, False, False)
 
@@ -263,8 +265,33 @@ def test_windows_sandbox_deploy_row_generates_launch_bundle(tmp_path, monkeypatc
     assert "EASY_ASR_BENCH_PREBOOTSTRAP_PROBE" in script_text
     assert "$exe = $Command[0]" in script_text
     assert "clean_vm_zero_dependency_bootstrap" in script_text
+    assert "--validate-real-smoke --full-real-smoke --allow-downloads" in script_text
     assert "validate_release_smoke.py" in script_text
     assert "MappedFolder" in config.read_text(encoding="utf-8")
+
+
+def test_windows_sandbox_deploy_row_blocks_when_feature_missing(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import clean_vm_bootstrap
+
+    monkeypatch.setattr(clean_vm_bootstrap, "_windows_sandbox_executable", lambda: "")
+    monkeypatch.setattr(clean_vm_bootstrap, "_windows_edition_details", lambda: {"available": True, "edition_id": "Professional", "sandbox_supported_edition": True})
+    row = clean_vm_bootstrap.run("windows_sandbox_clean_bootstrap_deploy", ROOT / "Temp" / f"pytest_windows_sandbox_missing_{tmp_path.name}", False, False)
+
+    assert row["status"] == "blocked"
+    assert "WindowsSandbox.exe" in row["block_reason"]
+    assert row["details"]["windows_sandbox_executable"] == ""
+
+
+def test_windows_sandbox_deploy_row_blocks_on_unsupported_edition(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import clean_vm_bootstrap
+
+    monkeypatch.setattr(clean_vm_bootstrap, "_windows_sandbox_executable", lambda: "")
+    monkeypatch.setattr(clean_vm_bootstrap, "_windows_edition_details", lambda: {"available": True, "edition_id": "Core", "sandbox_supported_edition": False})
+    row = clean_vm_bootstrap.run("windows_sandbox_clean_bootstrap_deploy", ROOT / "Temp" / f"pytest_windows_sandbox_core_{tmp_path.name}", False, False)
+
+    assert row["status"] == "blocked"
+    assert "Core" in row["block_reason"]
+    assert "Pro, Enterprise, or Education" in row["external_requirement"]
 
 
 def test_clean_vm_bootstrap_requires_first_run_repair_evidence():

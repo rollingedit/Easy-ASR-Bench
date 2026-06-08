@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -14,6 +15,14 @@ from qa.runtime_matrix.rows import setup_environment
 PROOF_ENV = "EASY_ASR_BENCH_CLEAN_VM_BOOTSTRAP_PROOF"
 SANDBOX_LAUNCH_ENV = "EASY_ASR_BENCH_LAUNCH_WINDOWS_SANDBOX"
 SANDBOX_ROW_ID = "windows_sandbox_clean_bootstrap_deploy"
+SANDBOX_SUPPORTED_EDITIONS = {
+    "Education",
+    "Enterprise",
+    "EnterpriseS",
+    "Professional",
+    "ProfessionalEducation",
+    "ProfessionalWorkstation",
+}
 
 
 def _sandbox_script_text() -> str:
@@ -77,6 +86,7 @@ $setupRepairLog = Join-Path $Evidence "setup-repair-all-safe.log"
 $modelRepairLog = Join-Path $Evidence "setup-repair-model-layouts.log"
 $win11RowLog = Join-Path $Evidence "win11-clean-no-python-row.log"
 $cleanVmRowLog = Join-Path $Evidence "clean-vm-bootstrap-row.log"
+$fullRealSmokeLog = Join-Path $Evidence "full-real-smoke.log"
 $writeSmokeLog = Join-Path $Evidence "write-release-smoke.log"
 $mergeSmokeLog = Join-Path $Evidence "merge-release-evidence.log"
 $validateSmokeLog = Join-Path $Evidence "validate-release-smoke-evidence.log"
@@ -84,6 +94,7 @@ cmd /c setup.bat --doctor --repair-all-safe *> $setupRepairLog
 cmd /c setup.bat --doctor --repair-model-layouts --allow-downloads *> $modelRepairLog
 python qa\runtime_matrix\run_row.py --row win11_clean_no_python_setup --workdir Temp\windows_sandbox_clean_bootstrap_evidence *> $win11RowLog
 python qa\runtime_matrix\run_row.py --row clean_vm_zero_dependency_bootstrap --workdir Temp\windows_sandbox_clean_bootstrap_evidence --install-deps --allow-downloads *> $cleanVmRowLog
+python -m app.doctor --config config.json --validate-real-smoke --full-real-smoke --allow-downloads *> $fullRealSmokeLog
 python scripts\write_release_smoke.py --tag v0.3.9 --output release-smoke-v0.3.9-sandbox.json *> $writeSmokeLog
 python scripts\merge_release_evidence.py --smoke release-smoke-v0.3.9-sandbox.json --evidence-dir Temp --output release-smoke-v0.3.9-sandbox.json --ignore-unknown *> $mergeSmokeLog
 python scripts\validate_release_smoke.py --smoke release-smoke-v0.3.9-sandbox.json --required tests\fixtures\release_required_rows_v2.json --require-log-hashes --require-environment-summary *> $validateSmokeLog
@@ -117,6 +128,45 @@ def _write_windows_sandbox_bundle(evidence_dir: Path) -> dict:
     script_path.write_text(_sandbox_script_text(), encoding="utf-8", newline="\r\n")
     config_path.write_text(_sandbox_config_text(script_path), encoding="utf-8", newline="\n")
     return {"script_path": str(script_path), "config_path": str(config_path)}
+
+
+def _windows_sandbox_executable() -> str:
+    resolved = shutil.which("WindowsSandbox.exe")
+    if resolved:
+        return resolved
+    system_root = Path(os.environ.get("SystemRoot") or r"C:\Windows")
+    standard = system_root / "System32" / "WindowsSandbox.exe"
+    if standard.exists():
+        return str(standard)
+    return ""
+
+
+def _windows_edition_details() -> dict:
+    if sys.platform != "win32":
+        return {"available": False, "reason": f"platform is {sys.platform}"}
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion") as key:
+            values = {}
+            for name in ["ProductName", "EditionID", "DisplayVersion", "CurrentBuild", "UBR"]:
+                try:
+                    values[name] = winreg.QueryValueEx(key, name)[0]
+                except OSError:
+                    values[name] = ""
+    except Exception as exc:
+        return {"available": False, "reason": f"{type(exc).__name__}: {exc}"}
+    edition_id = str(values.get("EditionID") or "")
+    return {
+        "available": True,
+        "product_name": values.get("ProductName", ""),
+        "edition_id": edition_id,
+        "display_version": values.get("DisplayVersion", ""),
+        "current_build": str(values.get("CurrentBuild", "")),
+        "ubr": str(values.get("UBR", "")),
+        "sandbox_supported_edition": edition_id in SANDBOX_SUPPORTED_EDITIONS,
+        "supported_edition_ids": sorted(SANDBOX_SUPPORTED_EDITIONS),
+    }
 
 
 def _run_command(command: list[str], evidence_dir: Path, name: str, timeout: int = 3600) -> dict:
@@ -401,10 +451,15 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
 
 def _run_windows_sandbox_deploy(row_id: str, evidence_dir: Path) -> dict:
     bundle = _write_windows_sandbox_bundle(evidence_dir)
+    feature_result = ROOT / "Temp" / "windows_sandbox_feature_result.json"
     artifacts = [Path(bundle["script_path"]), Path(bundle["config_path"])]
+    if feature_result.exists():
+        artifacts.append(feature_result)
     details = {
         "launch_env": SANDBOX_LAUNCH_ENV,
         "launch_env_value": os.environ.get(SANDBOX_LAUNCH_ENV, ""),
+        "windows_sandbox_executable": _windows_sandbox_executable(),
+        "windows_edition": _windows_edition_details(),
         "proof_env": PROOF_ENV,
         "prebootstrap_probe_env": setup_environment.PREBOOTSTRAP_PROBE_ENV,
         "bundle": bundle,
@@ -418,6 +473,37 @@ def _run_windows_sandbox_deploy(row_id: str, evidence_dir: Path) -> dict:
             summary="Windows Sandbox deployment can only run on Windows.",
             block_reason=f"current platform is {sys.platform}",
             external_requirement="Run this row on Windows with Windows Sandbox enabled.",
+            details=details,
+            artifacts=artifacts,
+        )
+    if details["windows_edition"].get("available") and not details["windows_edition"].get("sandbox_supported_edition"):
+        return write_row(
+            row_id,
+            "blocked",
+            evidence_dir,
+            summary="Windows Sandbox clean-bootstrap deployment bundle was generated, but this Windows edition does not support Windows Sandbox.",
+            block_reason=(
+                "Windows edition "
+                f"{details['windows_edition'].get('edition_id') or 'unknown'} does not expose the {SANDBOX_ROW_ID} required Sandbox feature"
+            ),
+            external_requirement=(
+                "Run this row on a Windows 10/11 Pro, Enterprise, or Education host with virtualization enabled, "
+                f"then set {SANDBOX_LAUNCH_ENV}=1 and rerun this row."
+            ),
+            details=details,
+            artifacts=artifacts,
+        )
+    if not details["windows_sandbox_executable"]:
+        return write_row(
+            row_id,
+            "blocked",
+            evidence_dir,
+            summary="Windows Sandbox clean-bootstrap deployment bundle was generated, but Windows Sandbox is not installed or not enabled on this host.",
+            block_reason="WindowsSandbox.exe was not found on PATH or under %SystemRoot%\\System32",
+            external_requirement=(
+                "Enable the Windows Sandbox optional feature on a Windows 10/11 Pro/Enterprise/Education host with virtualization enabled, "
+                f"then set {SANDBOX_LAUNCH_ENV}=1 and rerun this row."
+            ),
             details=details,
             artifacts=artifacts,
         )
