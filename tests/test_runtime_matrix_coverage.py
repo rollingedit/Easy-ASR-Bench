@@ -128,6 +128,7 @@ def test_runtime_matrix_maps_setup_environment_rows():
     assert ROWS["clean_vm_zero_dependency_bootstrap"].hardware == "clean_windows_vm"
     assert ROWS["win10_existing_python_setup"].module == "qa.runtime_matrix.rows.setup_environment"
     assert ROWS["setup_double_click_equivalent"].module == "qa.runtime_matrix.rows.setup_environment"
+    assert ROWS["first_run_smoke_json"].module == "qa.runtime_matrix.rows.setup_environment"
 
 
 def test_clean_vm_bootstrap_row_blocks_without_clean_vm_marker(tmp_path, monkeypatch):
@@ -239,6 +240,20 @@ def test_setup_environment_rows_emit_concrete_setup_evidence(tmp_path):
         assert row["details"]["setup_static_contract"]["missing_markers"] == []
         assert row["details"]["setup_dry_run_local"]["exit_code"] == 0
         assert "python_visible_on_path" in row["details"]["python_probe"]
+
+
+def test_first_run_smoke_json_row_emits_repair_and_action_evidence(tmp_path):
+    from qa.runtime_matrix.rows import setup_environment
+
+    row = setup_environment.run("first_run_smoke_json", tmp_path / "first_run_smoke_json", False, False)
+
+    assert row["status"] == "pass"
+    payload = row["details"]["payload"]
+    assert payload["schema"] == "easy_asr_bench.first_run_smoke.v1"
+    assert payload["repair_plan_schema"] == "easy_asr_bench.repair_plan.v1"
+    assert payload["repair_command"] == "setup.bat --doctor --repair-all-safe"
+    assert payload["real_smoke_command"] == "setup.bat --doctor --validate-real-smoke"
+    assert payload["dead_end"] is False
 
 
 def test_runtime_matrix_maps_safe_installer_validation_rows():
