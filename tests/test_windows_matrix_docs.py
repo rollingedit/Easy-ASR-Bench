@@ -94,6 +94,7 @@ def test_release_verification_documents_clean_vm_bootstrap_runtime_row():
 
     assert "qa\\runtime_matrix\\run_row.py --row clean_vm_zero_dependency_bootstrap" in text
     assert "EASY_ASR_BENCH_CLEAN_VM_BOOTSTRAP_PROOF=1" in text
+    assert "setup_repair_model_layouts` subrow" in text
     assert "same-media multi-model SmolLM benchmark" in text
 
 

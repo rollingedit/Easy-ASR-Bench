@@ -70,6 +70,25 @@ def _setup_repair_evidence_failures(payload: dict) -> list[str]:
     return failures
 
 
+def _model_layout_repair_evidence_failures(payload: dict) -> list[str]:
+    failures: list[str] = []
+    details = payload.get("details", {})
+    summary = details.get("sweep_summary", {})
+    last_execution = details.get("last_execution_summary", {})
+    for key in ["plan_count", "repaired", "blocked", "failed", "downloaded_files"]:
+        if key not in summary:
+            failures.append(f"setup_repair_model_layouts evidence missing sweep_summary.{key}")
+    if int(summary.get("repaired", 0) or 0) <= 0:
+        failures.append("setup_repair_model_layouts evidence did not repair any persisted model-layout plan")
+    if int(summary.get("downloaded_files", 0) or 0) <= 0:
+        failures.append("setup_repair_model_layouts evidence did not record any downloaded sidecars")
+    if int(summary.get("blocked", 0) or 0) != 0 or int(summary.get("failed", 0) or 0) != 0:
+        failures.append("setup_repair_model_layouts evidence reported blocked or failed repairs")
+    if int(last_execution.get("repaired", 0) or 0) <= 0:
+        failures.append("setup_repair_model_layouts evidence missing persisted last_execution repair")
+    return failures
+
+
 def _same_media_evidence_failures(payload: dict) -> list[str]:
     failures: list[str] = []
     details = payload.get("details", {})
@@ -123,6 +142,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
             "cmd /c setup.bat --doctor --repair-all-safe",
             "cmd /c setup.bat --doctor --repair-model-layouts --allow-downloads",
             "python qa/runtime_matrix/run_row.py --row setup_repair_all_safe --install-deps",
+            "python qa/runtime_matrix/run_row.py --row setup_repair_model_layouts --allow-downloads",
             "python qa/runtime_matrix/run_row.py --row same_media_multi_model_smollm_benchmark --install-deps --allow-downloads",
             "python -m app.main --first-run-smoke --json",
         ],
@@ -174,6 +194,16 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
         "--install-deps",
     ]
     repair_row = _run_command(repair_row_cmd, evidence_dir, "setup_repair_all_safe_row", timeout=3600)
+    model_layout_row_cmd = [
+        sys.executable,
+        "qa/runtime_matrix/run_row.py",
+        "--row",
+        "setup_repair_model_layouts",
+        "--workdir",
+        str(evidence_dir / "subrows"),
+        "--allow-downloads",
+    ]
+    model_layout_row = _run_command(model_layout_row_cmd, evidence_dir, "setup_repair_model_layouts_row", timeout=3600)
     benchmark_cmd = [
         sys.executable,
         "qa/runtime_matrix/run_row.py",
@@ -188,6 +218,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
     first_run = _run_command([sys.executable, "-m", "app.main", "--first-run-smoke", "--json"], evidence_dir, "first_run_smoke", timeout=900)
 
     repair_payload = _row_payload(evidence_dir / "subrows" / "setup_repair_all_safe" / "row.json")
+    model_layout_payload = _row_payload(evidence_dir / "subrows" / "setup_repair_model_layouts" / "row.json")
     benchmark_payload = _row_payload(evidence_dir / "subrows" / "same_media_multi_model_smollm_benchmark" / "row.json")
     first_run_payload = _json_from_command_stdout(first_run)
     failures = []
@@ -199,6 +230,10 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
         failures.append("setup_repair_all_safe subrow did not pass")
     else:
         failures.extend(_setup_repair_evidence_failures(repair_payload))
+    if model_layout_row["exit_code"] != 0 or model_layout_payload.get("status") != "pass":
+        failures.append("setup_repair_model_layouts subrow did not pass")
+    else:
+        failures.extend(_model_layout_repair_evidence_failures(model_layout_payload))
     if benchmark_row["exit_code"] != 0 or benchmark_payload.get("status") != "pass":
         failures.append("same-media multi-model benchmark subrow did not pass")
     else:
@@ -219,10 +254,12 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
             "setup_doctor_repair_all_safe": setup_repair,
             "setup_doctor_repair_model_layouts": model_layout_repair,
             "setup_repair_all_safe_row": repair_row,
+            "setup_repair_model_layouts_row": model_layout_row,
             "same_media_multi_model_row": benchmark_row,
             "first_run_smoke": first_run,
             "first_run_smoke_payload": first_run_payload,
             "setup_repair_all_safe_status": repair_payload.get("status"),
+            "setup_repair_model_layouts_status": model_layout_payload.get("status"),
             "same_media_multi_model_status": benchmark_payload.get("status"),
             "failures": failures,
         }
@@ -232,9 +269,11 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
             evidence_dir / "setup_doctor_repair_all_safe.json",
             evidence_dir / "setup_doctor_repair_model_layouts.json",
             evidence_dir / "setup_repair_all_safe_row.json",
+            evidence_dir / "setup_repair_model_layouts_row.json",
             evidence_dir / "same_media_multi_model_row.json",
             evidence_dir / "first_run_smoke.json",
             evidence_dir / "subrows" / "setup_repair_all_safe" / "row.json",
+            evidence_dir / "subrows" / "setup_repair_model_layouts" / "row.json",
             evidence_dir / "subrows" / "same_media_multi_model_smollm_benchmark" / "row.json",
         ]
     )
