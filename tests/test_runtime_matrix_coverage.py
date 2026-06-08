@@ -328,6 +328,7 @@ def test_first_run_smoke_json_row_emits_repair_and_action_evidence(tmp_path):
 def test_runtime_matrix_maps_safe_installer_validation_rows():
     assert ROWS["install_path_with_spaces"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["setup_dry_run_verify_release"].module == "qa.runtime_matrix.rows.installer_validation"
+    assert ROWS["setup_dry_run_json"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["setup_doctor_strict"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["setup_repair_all_safe"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["repair_all_safe_failure_isolation"].module == "qa.runtime_matrix.rows.installer_validation"
@@ -371,6 +372,17 @@ def test_setup_verify_release_bad_checksum_row_fails_before_activation(tmp_path)
     assert row["status"] == "pass"
     assert row["details"]["command"]["exit_code"] != 0
     assert "Checksum mismatch" in row["details"]["command"]["stderr_tail"] + row["details"]["command"]["stdout_tail"]
+
+
+def test_setup_dry_run_json_row_emits_parseable_payload(tmp_path):
+    from qa.runtime_matrix.rows import installer_validation
+
+    row = installer_validation.run("setup_dry_run_json", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    assert row["details"]["payload"]["schema"] == "easy_asr_bench.setup_dry_run.v1"
+    assert row["details"]["payload"]["mode"] == "dry_run"
+    assert row["details"]["payload"]["no_files_modified"] is True
 
 
 def test_setup_doctor_strict_row_writes_json_evidence(tmp_path):

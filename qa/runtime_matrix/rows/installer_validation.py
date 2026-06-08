@@ -164,6 +164,46 @@ def _verify_release(row_id: str, evidence_dir: Path) -> dict:
     )
 
 
+def _setup_dry_run_json(row_id: str, evidence_dir: Path) -> dict:
+    result = _run(["cmd", "/c", "setup.bat", "--dry-run", "--local", "--json"], temp_dir=evidence_dir / "tmp")
+    output = result["stdout_tail"] + result["stderr_tail"]
+    json_lines = [line.strip() for line in output.splitlines() if line.strip().startswith("{") and "easy_asr_bench.setup_dry_run.v1" in line]
+    payload = {}
+    failures = []
+    payload_path = evidence_dir / "setup_dry_run.json"
+    if not json_lines:
+        failures.append("setup dry-run JSON object was not emitted")
+    else:
+        try:
+            payload = json.loads(json_lines[-1])
+            payload_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8", newline="\n")
+        except json.JSONDecodeError as exc:
+            failures.append(f"setup dry-run JSON could not be parsed: {exc}")
+    if result["exit_code"] != 0:
+        failures.append("setup dry-run command exited nonzero")
+    if payload:
+        if payload.get("schema") != "easy_asr_bench.setup_dry_run.v1":
+            failures.append("setup dry-run JSON schema marker missing")
+        if payload.get("mode") != "dry_run":
+            failures.append("setup dry-run JSON mode marker missing")
+        if payload.get("exit_code") != result["exit_code"]:
+            failures.append("setup dry-run JSON exit_code did not match process exit code")
+        if payload.get("no_files_modified") is not True:
+            failures.append("setup dry-run JSON did not record no_files_modified=true")
+        if payload.get("installer_exists") is not True:
+            failures.append("setup dry-run JSON did not record installer_exists=true for local repo")
+        if not str(payload.get("install_dir") or ""):
+            failures.append("setup dry-run JSON install_dir is missing")
+    return write_row(
+        row_id,
+        "pass" if not failures else "fail",
+        evidence_dir,
+        summary="setup.bat dry-run emits machine-readable JSON while preserving human-readable validation output." if not failures else "setup dry-run JSON validation failed.",
+        details={"command": result, "payload": payload, "json_line_count": len(json_lines), "failures": failures},
+        artifacts=[payload_path],
+    )
+
+
 def _tamper_installer(row_id: str, evidence_dir: Path) -> dict:
     assets = _stage_release_assets(evidence_dir / "assets")
     (assets["install"]).write_text("# tampered installer\n", encoding="utf-8", newline="\n")
@@ -1008,6 +1048,8 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
         return _install_path_with_spaces(row_id, evidence_dir)
     if row_id == "setup_dry_run_verify_release":
         return _verify_release(row_id, evidence_dir)
+    if row_id == "setup_dry_run_json":
+        return _setup_dry_run_json(row_id, evidence_dir)
     if row_id in {"tampered_installer_fails_before_execution", "bad_checksum_fails_before_execution"}:
         return _tamper_installer(row_id, evidence_dir)
     if row_id == "setup_verify_release_bad_checksum":
