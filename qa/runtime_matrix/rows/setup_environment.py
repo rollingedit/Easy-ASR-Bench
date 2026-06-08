@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import platform
 import shutil
 import subprocess
@@ -188,6 +189,70 @@ def _setup_double_click(row_id: str, evidence_dir: Path) -> dict:
     )
 
 
+def _first_run_smoke_json(row_id: str, evidence_dir: Path) -> dict:
+    config = {
+        "folders": {
+            "models": str(evidence_dir / "Models"),
+            "input": str(evidence_dir / "Input"),
+            "output": str(evidence_dir / "Output"),
+            "temp": str(evidence_dir / "Temp"),
+            "logs": str(evidence_dir / "Logs"),
+            "cache": str(evidence_dir / "Cache"),
+        }
+    }
+    config_path = evidence_dir / "config.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8", newline="\n")
+    command = [sys.executable, "-m", "app.main", "--config", str(config_path), "--first-run-smoke", "--json"]
+    completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, timeout=120)
+    smoke_path = evidence_dir / "first-run-smoke.json"
+    payload = {}
+    failures: list[str] = []
+    if completed.returncode != 0:
+        failures.append(f"first-run smoke command exited {completed.returncode}")
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        failures.append(f"first-run smoke stdout was not JSON: {exc}")
+    if payload:
+        smoke_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8", newline="\n")
+        if payload.get("schema") != "easy_asr_bench.first_run_smoke.v1":
+            failures.append("first-run smoke schema is missing or invalid")
+        if payload.get("repair_plan_schema") != "easy_asr_bench.repair_plan.v1":
+            failures.append("first-run smoke did not include repair-plan evidence")
+        if payload.get("repair_command") != "setup.bat --doctor --repair-all-safe":
+            failures.append("first-run smoke repair command is missing or wrong")
+        if payload.get("doctor_command") != "setup.bat --doctor --repair-plan":
+            failures.append("first-run smoke doctor command is missing or wrong")
+        if payload.get("real_smoke_command") != "setup.bat --doctor --validate-real-smoke":
+            failures.append("first-run smoke real-smoke command is missing or wrong")
+        actions = set(payload.get("available_actions") or [])
+        missing_actions = {"download_recommended_baseline", "paste_hugging_face_link", "open_models_folder", "open_input_folder"} - actions
+        if missing_actions:
+            failures.append("first-run smoke missing available actions: " + ", ".join(sorted(missing_actions)))
+        if payload.get("dead_end") is not False:
+            failures.append("first-run smoke reported a dead end")
+    return write_row(
+        row_id,
+        "fail" if failures else "pass",
+        evidence_dir,
+        summary=(
+            "First-run smoke emits actionable JSON with repair-plan, doctor, real-smoke, and next-action evidence."
+            if not failures
+            else "First-run smoke JSON validation failed."
+        ),
+        details={
+            "command": command,
+            "exit_code": completed.returncode,
+            "stdout_tail": completed.stdout[-4000:],
+            "stderr_tail": completed.stderr[-4000:],
+            "payload": payload,
+            "failures": failures,
+        },
+        artifacts=[config_path, smoke_path],
+    )
+
+
 def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: bool) -> dict:
     if row_id == "win11_clean_no_python_setup":
         return _win11_clean_no_python(row_id, evidence_dir)
@@ -195,4 +260,6 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
         return _win10_existing_python(row_id, evidence_dir)
     if row_id == "setup_double_click_equivalent":
         return _setup_double_click(row_id, evidence_dir)
+    if row_id == "first_run_smoke_json":
+        return _first_run_smoke_json(row_id, evidence_dir)
     return write_row(row_id, "fail", evidence_dir, summary=f"Unsupported setup environment row: {row_id}")

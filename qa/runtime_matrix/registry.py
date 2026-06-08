@@ -17,6 +17,7 @@ ROWS: dict[str, RowDefinition] = {
     "win11_clean_no_python_setup": row("win11_clean_no_python_setup", "qa.runtime_matrix.rows.setup_environment", hardware="clean_windows_vm"),
     "clean_vm_zero_dependency_bootstrap": row("clean_vm_zero_dependency_bootstrap", "qa.runtime_matrix.rows.clean_vm_bootstrap", hardware="clean_windows_vm"),
     "win10_existing_python_setup": row("win10_existing_python_setup", "qa.runtime_matrix.rows.setup_environment", hardware="win10_vm"),
+    "first_run_smoke_json": row("first_run_smoke_json", "qa.runtime_matrix.rows.setup_environment"),
     "install_path_with_spaces": row("install_path_with_spaces", "qa.runtime_matrix.rows.installer_validation"),
     "setup_verify_release_bad_checksum": row("setup_verify_release_bad_checksum", "qa.runtime_matrix.rows.installer_validation"),
     "setup_double_click_equivalent": row("setup_double_click_equivalent", "qa.runtime_matrix.rows.setup_environment", hardware="interactive_windows_shell"),
