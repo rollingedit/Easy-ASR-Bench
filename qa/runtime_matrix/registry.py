@@ -104,6 +104,7 @@ ROWS: dict[str, RowDefinition] = {
     "faster_whisper_cpu": row("faster_whisper_cpu", "qa.runtime_matrix.rows.real_tiny_faster_whisper_report_smoke"),
     "real_tiny_faster_whisper_smollm_grading": row("real_tiny_faster_whisper_smollm_grading", "qa.runtime_matrix.rows.real_faster_whisper_smollm_grading"),
     "faster_whisper_cuda_unavailable_cpu_fallback": row("faster_whisper_cuda_unavailable_cpu_fallback", "qa.runtime_matrix.rows.cuda_provider_matrix"),
+    "transformers_cuda_unavailable_cpu_fallback": row("transformers_cuda_unavailable_cpu_fallback", "qa.runtime_matrix.rows.cuda_provider_matrix"),
     "whisper_cpp_ggml": row("whisper_cpp_ggml", "qa.runtime_matrix.rows.whisper_cpp_ggml"),
     "whisper_cpp_ggml_smollm_grading": row("whisper_cpp_ggml_smollm_grading", "qa.runtime_matrix.rows.whisper_cpp_smollm_grading"),
     "whisper_cpp_ggml_speech_smollm_grading": row("whisper_cpp_ggml_speech_smollm_grading", "qa.runtime_matrix.rows.whisper_cpp_smollm_grading"),

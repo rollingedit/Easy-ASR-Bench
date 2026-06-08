@@ -121,6 +121,7 @@ def test_runtime_matrix_includes_native_runtime_prerequisite_rows():
     assert ROWS["llama_cpp_cuda_smollm_smoke"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
     assert ROWS["llama_cpp_vulkan_smollm_smoke"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
     assert ROWS["faster_whisper_cuda_unavailable_cpu_fallback"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
+    assert ROWS["transformers_cuda_unavailable_cpu_fallback"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
     assert ROWS["vulkan_runtime_no_sdk"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
 
 
@@ -208,6 +209,7 @@ def test_release_manual_matrix_includes_granular_cuda_rows():
         "faster_whisper_ctranslate2_cuda_smoke",
         "llama_cpp_cuda_smollm_smoke",
         "llama_cpp_vulkan_smollm_smoke",
+        "transformers_cuda_unavailable_cpu_fallback",
     } <= ids
 
 
@@ -729,6 +731,20 @@ def test_faster_whisper_cuda_fallback_row_records_runtime_plan(tmp_path):
     assert row["status"] == "pass"
     assert row["details"]["plan"]["requested_provider"] == "cuda"
     assert row["details"]["plan"]["actual_provider"] in {"cpu", "cuda"}
+
+
+def test_transformers_cuda_fallback_row_records_runtime_plan_and_repair_command(tmp_path):
+    from qa.runtime_matrix.rows import cuda_provider_matrix
+
+    row = cuda_provider_matrix.run("transformers_cuda_unavailable_cpu_fallback", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    assert row["details"]["plan"]["requested_provider"] == "cuda"
+    assert row["details"]["plan"]["actual_provider"] in {"cpu", "cuda"}
+    commands = " ".join(row["details"]["explicit_cuda_requirement_commands"]).replace("\\", "/")
+    assert "requirements/torch_cuda_cu128.txt" in commands
+    assert "requirements/transformers_cpu.txt" in commands
+    assert "torch_cuda_available" in row["details"]["hardware"]
 
 
 def test_runtime_matrix_maps_hf_safetensors_rows_to_real_tiny_fixture_runner():
