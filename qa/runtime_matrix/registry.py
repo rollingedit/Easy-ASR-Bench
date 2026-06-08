@@ -27,6 +27,7 @@ ROWS: dict[str, RowDefinition] = {
     "setup_dry_run_verify_release": row("setup_dry_run_verify_release", "qa.runtime_matrix.rows.installer_validation"),
     "setup_doctor_strict": row("setup_doctor_strict", "qa.runtime_matrix.rows.installer_validation"),
     "setup_repair_all_safe": row("setup_repair_all_safe", "qa.runtime_matrix.rows.installer_validation"),
+    "repair_all_safe_failure_isolation": row("repair_all_safe_failure_isolation", "qa.runtime_matrix.rows.installer_validation"),
     "setup_repair_model_layouts": row("setup_repair_model_layouts", "qa.runtime_matrix.rows.installer_validation"),
     "update_preserves_user_data": row("update_preserves_user_data", "qa.runtime_matrix.rows.installer_validation"),
     "repair_broken_venv": row("repair_broken_venv", "qa.runtime_matrix.rows.installer_validation"),

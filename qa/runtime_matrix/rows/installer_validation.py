@@ -399,6 +399,138 @@ def _setup_repair_all_safe(row_id: str, evidence_dir: Path, install_deps: bool) 
     )
 
 
+def _repair_all_safe_failure_isolation(row_id: str, evidence_dir: Path) -> dict:
+    from app import repair_plan
+
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    config_path = evidence_dir / "config.json"
+    config = {
+        "runtime": {"provider": "cpu", "prefer_gpu": False, "fallback_to_cpu": True},
+        "dependency_install": {"use_cached_runtime_resolutions": False},
+        "folders": {
+            "models": str(evidence_dir / "Models"),
+            "input": str(evidence_dir / "Input"),
+            "output": str(evidence_dir / "Output"),
+            "temp": str(evidence_dir / "Temp"),
+            "logs": str(evidence_dir / "Logs"),
+            "cache": str(evidence_dir / "Cache"),
+        },
+    }
+    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8", newline="\n")
+    status = {
+        "onnx": {
+            "available": False,
+            "missing": ["provider package conflict hides DmlExecutionProvider"],
+            "install_kind": "pip",
+            "requirement_file": "requirements/onnx_directml.txt",
+            "recovery_command": "python -m pip install -r requirements/onnx_directml.txt",
+        },
+        "faster_whisper": {
+            "available": False,
+            "missing": ["ctranslate2 version outside supported range"],
+            "install_kind": "pip",
+            "requirement_file": "requirements/faster_whisper.txt",
+            "recovery_command": "python -m pip install -r requirements/faster_whisper.txt",
+        },
+    }
+    install_order: list[str] = []
+    original_acceleration = repair_plan.acceleration_install_decision
+    original_install = repair_plan.install_group_for_config
+    original_missing = repair_plan.missing_modules_for_config
+    original_probe = repair_plan.backend_probe_for_group
+
+    def fake_acceleration(_config: dict, _group: str) -> dict:
+        return {"use_accelerator": False, "accelerator": None}
+
+    def fake_install(group: str, project_root: Path, _config: dict, log_path: Path | None = None) -> dict:
+        install_order.append(group)
+        if log_path is not None:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.write_text(f"{group} repair attempt\n", encoding="utf-8", newline="\n")
+        if group == "onnx":
+            raise RuntimeError("simulated pip repair failed after provider conflict")
+        return {"installed_group": group, "log_path": str(log_path or "")}
+
+    def fake_missing(group: str, _config: dict) -> list[str]:
+        if group == "faster_whisper":
+            return []
+        return list(status[group]["missing"])
+
+    def fake_probe(group: str, _config: dict) -> dict:
+        return {"kind": "controlled_backend_probe", "ok": group == "faster_whisper", "group": group}
+
+    try:
+        repair_plan.acceleration_install_decision = fake_acceleration
+        repair_plan.install_group_for_config = fake_install
+        repair_plan.missing_modules_for_config = fake_missing
+        repair_plan.backend_probe_for_group = fake_probe
+        plan = repair_plan.execute_repair_plan(config, project_root=evidence_dir, status=status)
+    finally:
+        repair_plan.acceleration_install_decision = original_acceleration
+        repair_plan.install_group_for_config = original_install
+        repair_plan.missing_modules_for_config = original_missing
+        repair_plan.backend_probe_for_group = original_probe
+
+    plan_path = evidence_dir / "repair_all_safe_failure_isolation.json"
+    plan_path.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8", newline="\n")
+    by_group = {record.get("affected_dependency_group"): record for record in plan.get("records", [])}
+    failed = by_group.get("onnx", {})
+    repaired = by_group.get("faster_whisper", {})
+    failures = []
+    if plan.get("mode") != "repair_all_safe":
+        failures.append("repair executor mode marker missing")
+    if install_order != ["onnx", "faster_whisper"]:
+        failures.append(f"repair executor did not continue after failed group: {install_order}")
+    if plan.get("summary", {}).get("attempted") != 2:
+        failures.append("repair summary did not record exactly two attempts")
+    if plan.get("summary", {}).get("failed") != 1:
+        failures.append("repair summary did not record one failed group")
+    if plan.get("summary", {}).get("repaired") != 1:
+        failures.append("repair summary did not record one repaired group")
+    if failed.get("status") != "repair_failed":
+        failures.append("failed group status was not repair_failed")
+    if len(failed.get("attempts", [])) != 1 or failed.get("attempts", [{}])[0].get("status") != "failed":
+        failures.append("failed group did not record exactly one failed attempt")
+    if not Path(failed.get("attempts", [{}])[0].get("log_path", "")).exists():
+        failures.append("failed group did not persist an attempt log path")
+    if failed.get("after", {}).get("repair_result") != "failed":
+        failures.append("failed group after-state did not record failed repair_result")
+    if repaired.get("status") != "repaired":
+        failures.append("second group was not repaired after prior failure")
+    if len(repaired.get("attempts", [])) != 1 or repaired.get("attempts", [{}])[0].get("status") != "pass":
+        failures.append("repaired group did not record exactly one passing attempt")
+    if repaired.get("after", {}).get("backend_probe", {}).get("ok") is not True:
+        failures.append("repaired group did not record passing backend probe")
+    if not repaired.get("after", {}).get("runtime_resolution_path"):
+        failures.append("repaired group did not persist runtime resolution evidence")
+    evidence_path = plan.get("summary", {}).get("repair_evidence_path", "")
+    if not evidence_path or not Path(evidence_path).exists():
+        failures.append("repair_all_safe_last.json evidence path was not persisted")
+    return write_row(
+        row_id,
+        "pass" if not failures else "fail",
+        evidence_dir,
+        summary="repair-all-safe caps a failed dependency repair at one attempt, logs it, and continues to later groups." if not failures else "repair-all-safe failure isolation validation failed.",
+        details={
+            "config_path": str(config_path),
+            "install_order": install_order,
+            "repair_summary": plan.get("summary", {}),
+            "failed_group_status": failed.get("status"),
+            "repaired_group_status": repaired.get("status"),
+            "failed_attempt": (failed.get("attempts") or [{}])[0],
+            "repaired_attempt": (repaired.get("attempts") or [{}])[0],
+            "failures": failures,
+        },
+        artifacts=[
+            config_path,
+            plan_path,
+            evidence_dir / "Logs" / "dependency_install_onnx.log",
+            evidence_dir / "Logs" / "dependency_install_faster_whisper.log",
+            evidence_dir / "Logs" / "repair_all_safe_last.json",
+        ],
+    )
+
+
 def _write_model_layout_repair_fixture(evidence_dir: Path) -> tuple[Path, Path, Path]:
     config_path, folders = _write_isolated_config(evidence_dir)
     model_dir = Path(folders["models"]) / "owner__tiny-asr"
@@ -794,6 +926,8 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
         return _setup_doctor_strict(row_id, evidence_dir)
     if row_id == "setup_repair_all_safe":
         return _setup_repair_all_safe(row_id, evidence_dir, _install_deps)
+    if row_id == "repair_all_safe_failure_isolation":
+        return _repair_all_safe_failure_isolation(row_id, evidence_dir)
     if row_id == "setup_repair_model_layouts":
         return _setup_repair_model_layouts(row_id, evidence_dir)
     if row_id == "update_preserves_user_data":
