@@ -207,6 +207,9 @@ def test_release_verification_documents_whisper_cpp_speech_smollm_row():
     assert "required quality-bearing whisper.cpp release proof" in text
     assert "generated Windows SAPI speech" in text
     assert "GPU/offload validation belongs to llama.cpp GGUF rows" in text
+    assert "qa\\runtime_matrix\\run_row.py --row real_public_media_whisper_cpp_ggml_smollm_grading" in text
+    assert "Wikimedia CC0 WAV fixture" in text
+    assert "records single-word WER without using it as a release gate" in text
 
 
 def test_release_verification_documents_required_safetensors_quality_rows():

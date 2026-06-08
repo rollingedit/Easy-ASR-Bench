@@ -16,6 +16,7 @@ from qa.runtime_matrix.common import package_versions, sha256, write_row
 REPO_ID = "ggerganov/whisper.cpp"
 MODEL_FILE = "ggml-tiny.en-q5_1.bin"
 MODEL_URL = f"https://huggingface.co/{REPO_ID}/resolve/main/{MODEL_FILE}"
+MODEL_SHA256 = "c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b"
 
 
 def _download_model(destination: Path) -> None:
