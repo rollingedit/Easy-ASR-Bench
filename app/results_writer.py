@@ -500,60 +500,75 @@ def render_text_report(results: dict) -> str:
 
 def write_benchmark_csv(path: Path, results: dict) -> None:
     partial = path.with_suffix(path.suffix + ".partial")
-    with partial.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=[
-                "model_id",
-                "display_name",
-                "backend",
-                "precision",
-                "audio_seconds",
-                "chunk_count",
-                "model_load_seconds",
-                "inference_seconds",
-                "total_wall_seconds",
-                "audio_seconds_per_wall_second",
-                "tokens_generated",
-                "peak_process_memory_mb",
-                "peak_vram_mb",
-                "vram_measurement_source",
-                "torch_peak_vram_mb",
-                "windows_peak_dedicated_vram_mb",
-                "errors",
-            ],
-        )
-        writer.writeheader()
-        for run in results["runs"]:
-            metrics = run["metrics"]
-            writer.writerow(
-                {
-                    "model_id": run["model"]["candidate_id"],
-                    "display_name": run["model"]["display_name"],
-                    "backend": run["model"]["backend"],
-                    "precision": run["model"]["precision"],
-                    "audio_seconds": results["source"]["duration_seconds"],
-                    "chunk_count": len(results["chunk_plan"]["chunks"]),
-                    "model_load_seconds": metrics.get("model_load_seconds", 0),
-                    "inference_seconds": metrics.get("inference_seconds", 0),
-                    "total_wall_seconds": metrics.get("total_wall_seconds", 0),
-                    "audio_seconds_per_wall_second": metrics.get("audio_seconds_per_wall_second", 0),
-                    "tokens_generated": metrics.get("tokens_generated", 0),
-                    "peak_process_memory_mb": metrics.get("peak_process_memory_mb", 0),
-                    "peak_vram_mb": metrics.get("peak_vram_mb"),
-                    "vram_measurement_source": metrics.get("vram_measurement_source", "unavailable"),
-                    "torch_peak_vram_mb": metrics.get("torch_peak_vram_mb"),
-                    "windows_peak_dedicated_vram_mb": metrics.get("windows_peak_dedicated_vram_mb"),
-                    "errors": len(run.get("errors", [])),
-                }
+    try:
+        with partial.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=[
+                    "model_id",
+                    "display_name",
+                    "backend",
+                    "precision",
+                    "audio_seconds",
+                    "chunk_count",
+                    "model_load_seconds",
+                    "inference_seconds",
+                    "total_wall_seconds",
+                    "audio_seconds_per_wall_second",
+                    "tokens_generated",
+                    "peak_process_memory_mb",
+                    "peak_vram_mb",
+                    "vram_measurement_source",
+                    "torch_peak_vram_mb",
+                    "windows_peak_dedicated_vram_mb",
+                    "errors",
+                ],
             )
-    partial.replace(path)
+            writer.writeheader()
+            for run in results["runs"]:
+                metrics = run["metrics"]
+                writer.writerow(
+                    {
+                        "model_id": run["model"]["candidate_id"],
+                        "display_name": run["model"]["display_name"],
+                        "backend": run["model"]["backend"],
+                        "precision": run["model"]["precision"],
+                        "audio_seconds": results["source"]["duration_seconds"],
+                        "chunk_count": len(results["chunk_plan"]["chunks"]),
+                        "model_load_seconds": metrics.get("model_load_seconds", 0),
+                        "inference_seconds": metrics.get("inference_seconds", 0),
+                        "total_wall_seconds": metrics.get("total_wall_seconds", 0),
+                        "audio_seconds_per_wall_second": metrics.get("audio_seconds_per_wall_second", 0),
+                        "tokens_generated": metrics.get("tokens_generated", 0),
+                        "peak_process_memory_mb": metrics.get("peak_process_memory_mb", 0),
+                        "peak_vram_mb": metrics.get("peak_vram_mb"),
+                        "vram_measurement_source": metrics.get("vram_measurement_source", "unavailable"),
+                        "torch_peak_vram_mb": metrics.get("torch_peak_vram_mb"),
+                        "windows_peak_dedicated_vram_mb": metrics.get("windows_peak_dedicated_vram_mb"),
+                        "errors": len(run.get("errors", [])),
+                    }
+                )
+        partial.replace(path)
+    except Exception:
+        _remove_partial(partial)
+        raise
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
     partial = path.with_suffix(path.suffix + ".partial")
-    partial.write_text(text, encoding="utf-8")
-    partial.replace(path)
+    try:
+        partial.write_text(text, encoding="utf-8")
+        partial.replace(path)
+    except Exception:
+        _remove_partial(partial)
+        raise
+
+
+def _remove_partial(partial: Path) -> None:
+    try:
+        partial.unlink()
+    except OSError:
+        pass
 
 
 def _format_optional_mb(value) -> str:

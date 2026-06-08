@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from app.adapters.base import ChunkTranscript, ModelCandidate, ModelRunResult
 from app.html_report_builder import build_html_report
 from app.reference_import import import_llm_reference
+from app import results_writer as results_writer_module
 from app.results_writer import build_results, write_all_reports
 from qa.runtime_matrix.common import dependency_resolution_report_failures, write_row
 
@@ -159,7 +160,70 @@ def _assert_report_files(output_dir: Path, *, large: bool) -> list[str]:
     return failures
 
 
+def _atomic_report_write_failure_cleanup(row_id: str, evidence_dir: Path) -> dict:
+    results, output_dir = _fixture_results(evidence_dir, chunk_count=2)
+    stable_csv = output_dir / "benchmark.csv"
+    stable_csv_before = stable_csv.read_text(encoding="utf-8")
+    text_target = output_dir / "atomic_text_failure.txt"
+    failures = []
+    original_replace = results_writer_module.Path.replace
+
+    def failing_replace(self: Path, target: Path) -> Path:
+        if self.name in {"benchmark.csv.partial", "atomic_text_failure.txt.partial"}:
+            raise OSError(f"simulated replace failure for {self.name}")
+        return original_replace(self, target)
+
+    try:
+        results_writer_module.Path.replace = failing_replace
+        try:
+            results_writer_module.write_benchmark_csv(stable_csv, results)
+            failures.append("CSV write unexpectedly succeeded despite simulated replace failure")
+        except OSError as exc:
+            csv_error = str(exc)
+        try:
+            results_writer_module._atomic_write_text(text_target, "should not be visible")
+            failures.append("text write unexpectedly succeeded despite simulated replace failure")
+        except OSError as exc:
+            text_error = str(exc)
+    finally:
+        results_writer_module.Path.replace = original_replace
+
+    if stable_csv.read_text(encoding="utf-8") != stable_csv_before:
+        failures.append("existing benchmark.csv changed after failed atomic replace")
+    if (output_dir / "benchmark.csv.partial").exists():
+        failures.append("failed CSV write left benchmark.csv.partial")
+    if text_target.exists():
+        failures.append("failed text write created final text target")
+    if (output_dir / "atomic_text_failure.txt.partial").exists():
+        failures.append("failed text write left atomic_text_failure.txt.partial")
+    if "simulated replace failure" not in locals().get("csv_error", ""):
+        failures.append("CSV failure did not surface the replace error")
+    if "simulated replace failure" not in locals().get("text_error", ""):
+        failures.append("text failure did not surface the replace error")
+
+    return write_row(
+        row_id,
+        "pass" if not failures else "fail",
+        evidence_dir,
+        summary=(
+            "Report atomic writes clean failed partial files and preserve existing artifacts."
+            if not failures
+            else "Report atomic write cleanup validation failed."
+        ),
+        details={
+            "output_dir": str(output_dir),
+            "csv_error": locals().get("csv_error", ""),
+            "text_error": locals().get("text_error", ""),
+            "stable_csv_bytes": len(stable_csv_before.encode("utf-8")),
+            "failures": failures,
+        },
+        artifacts=[output_dir / "results.json", output_dir / "results.txt", output_dir / "benchmark.csv", output_dir / "compare.html"],
+    )
+
+
 def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: bool) -> dict:
+    if row_id == "report_atomic_write_failure_cleanup":
+        return _atomic_report_write_failure_cleanup(row_id, evidence_dir)
     large = row_id == "compare_html_offline_large_transcript"
     chunk_count = 120 if large else 3
     results, output_dir = _fixture_results(evidence_dir, chunk_count=chunk_count)

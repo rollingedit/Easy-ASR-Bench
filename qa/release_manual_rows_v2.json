@@ -34,6 +34,7 @@
     "no_audio_video_readable_error": "not_run",
     "compare_html_offline_large_transcript": "not_run",
     "compare_html_offline": "not_run",
+    "report_atomic_write_failure_cleanup": "not_run",
     "batch_continues_after_one_model_or_chunk_fails": "not_run",
     "one_model_failure_continues": "not_run",
     "one_chunk_failure_continues": "not_run",

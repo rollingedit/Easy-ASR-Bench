@@ -1121,6 +1121,7 @@ def test_same_media_multi_model_directml_row_blocks_without_smollm_fixture(tmp_p
 def test_runtime_matrix_maps_report_reference_rows():
     assert ROWS["compare_html_offline"].module == "qa.runtime_matrix.rows.report_reference_validation"
     assert ROWS["compare_html_offline_large_transcript"].module == "qa.runtime_matrix.rows.report_reference_validation"
+    assert ROWS["report_atomic_write_failure_cleanup"].module == "qa.runtime_matrix.rows.report_reference_validation"
     assert ROWS["llm_reference_json_import"].module == "qa.runtime_matrix.rows.report_reference_validation"
 
 
@@ -1152,6 +1153,18 @@ def test_llm_reference_json_import_row_rejects_bad_source_hash(tmp_path):
 
     assert row["status"] == "pass"
     assert row["details"]["score_type"] == "llm_corrected_reference"
+
+
+def test_report_atomic_write_failure_cleanup_row_removes_partials(tmp_path):
+    from qa.runtime_matrix.rows import report_reference_validation
+
+    row = report_reference_validation.run("report_atomic_write_failure_cleanup", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    assert "simulated replace failure" in row["details"]["csv_error"]
+    assert "simulated replace failure" in row["details"]["text_error"]
+    assert not (Path(row["details"]["output_dir"]) / "benchmark.csv.partial").exists()
+    assert not (Path(row["details"]["output_dir"]) / "atomic_text_failure.txt.partial").exists()
 
 
 def test_runtime_matrix_maps_failure_isolation_rows():
