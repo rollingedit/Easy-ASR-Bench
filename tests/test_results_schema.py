@@ -14,7 +14,7 @@ def minimal_results():
             {
                 "model": {},
                 "transcript_chunks": [],
-                "metrics": {"provider": "fixture", "peak_process_memory_mb": 1, "peak_vram_mb": None},
+                "metrics": {"provider": "fixture", "peak_process_memory_mb": 1, "peak_vram_mb": None, "vram_measurement_source": "unavailable"},
                 "errors": [],
             }
         ],
@@ -33,3 +33,10 @@ def test_results_schema_rejects_missing_runtime_metrics():
     del results["runs"][0]["metrics"]["peak_vram_mb"]
 
     assert any("peak_vram_mb" in error for error in validate_results_schema(results))
+
+
+def test_results_schema_rejects_missing_vram_source():
+    results = minimal_results()
+    del results["runs"][0]["metrics"]["vram_measurement_source"]
+
+    assert any("vram_measurement_source" in error for error in validate_results_schema(results))

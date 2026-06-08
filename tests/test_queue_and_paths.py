@@ -1,7 +1,8 @@
 from pathlib import Path
 
+from app import utils
 from app.queue_manager import QueueItem, QueueState, discover_queue
-from app.utils import parse_windows_path_list
+from app.utils import parse_windows_path_list, wait_for_stable_file
 
 
 def test_parse_windows_paths_with_spaces_unicode_and_apostrophe():
@@ -57,6 +58,58 @@ def test_discover_queue_queues_new_file_by_fast_key_before_full_hash(tmp_path: P
     item = QueueState(tmp_path / "state.json").data["items"][0]
     assert item["sha256"] == ""
     assert item["fast_key"]
+
+
+def test_wait_for_stable_file_waits_through_partial_write(monkeypatch):
+    class StatPath:
+        def __init__(self):
+            self.stats = iter([(10, 1.0), (20, 2.0), (20, 2.0), (20, 2.0)])
+
+        def stat(self):
+            size, mtime = next(self.stats)
+            return type("Stat", (), {"st_size": size, "st_mtime": mtime})()
+
+    sleeps = []
+
+    monkeypatch.setattr(utils.time, "monotonic", lambda: len(sleeps) * 0.6)
+    monkeypatch.setattr(utils.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    wait_for_stable_file(StatPath(), 1.0)
+
+    assert sleeps == [0.5, 0.5, 0.5]
+
+
+def test_discover_queue_records_file_key_after_stability_wait(tmp_path: Path, monkeypatch):
+    source = tmp_path / "partial.wav"
+    source.write_bytes(b"partial")
+    state = QueueState(tmp_path / "state.json")
+
+    def finish_write(path: Path, seconds: float) -> None:
+        assert path == source
+        source.write_bytes(b"complete media bytes")
+
+    monkeypatch.setattr("app.queue_manager.wait_for_stable_file", finish_write)
+
+    queued = discover_queue([tmp_path], {".wav"}, recursive=True, stability_seconds=1.0, state=state, skip_done=True)
+
+    assert queued == [source]
+    item = QueueState(tmp_path / "state.json").data["items"][0]
+    assert item["fast_key"].split("|")[1] == str(len(b"complete media bytes"))
+
+
+def test_discover_queue_repeat_poll_does_not_duplicate_queue_state(tmp_path: Path, monkeypatch):
+    source = tmp_path / "drop.wav"
+    source.write_bytes(b"media")
+    state_path = tmp_path / "state.json"
+    state = QueueState(state_path)
+    monkeypatch.setattr("app.queue_manager.wait_for_stable_file", lambda path, seconds: None)
+
+    discover_queue([tmp_path], {".wav"}, recursive=True, stability_seconds=0, state=state, skip_done=False)
+    discover_queue([tmp_path], {".wav"}, recursive=True, stability_seconds=0, state=state, skip_done=False)
+
+    items = QueueState(state_path).data["items"]
+    assert len(items) == 1
+    assert items[0]["source_path"] == str(source.resolve())
 
 
 def test_queue_state_preserves_failed_item_for_resume_visibility(tmp_path: Path):

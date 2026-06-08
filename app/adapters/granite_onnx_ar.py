@@ -74,6 +74,13 @@ class GraniteOnnxARAdapter:
     def load(self, candidate: ModelCandidate, runtime_config: dict):
         self.candidate = candidate
         self.runtime_config = runtime_config
+        probe_error = self.preflight_native_load(candidate, runtime_config)
+        if probe_error:
+            raise RuntimeError(
+                "ONNX Runtime session preflight failed before in-process load. "
+                "Run setup.bat --doctor or repair the ONNX provider package. "
+                f"Probe detail: {probe_error}"
+            )
         from ..onnx_ar import GraniteOnnxAR
 
         self.runner = GraniteOnnxAR(
@@ -84,6 +91,15 @@ class GraniteOnnxARAdapter:
             max_new_tokens=int(runtime_config.get("ar_max_new_tokens", 1024)),
         )
         return self
+
+    def preflight_native_load(self, candidate: ModelCandidate, runtime_config: dict) -> str:
+        from ..onnx_common import choose_providers
+        from ..onnx_probe import probe_onnx_sessions
+
+        folder = candidate.path / candidate.precision
+        model_paths = [folder / name for name in REQUIRED_AR_FILES if name.endswith(".onnx")]
+        providers = choose_providers(runtime_config.get("provider", "auto"))
+        return probe_onnx_sessions(model_paths, providers, int(runtime_config.get("cpu_threads", 0)))
 
     def transcribe_chunks(self, chunks: Sequence, chunk_metadata: list[dict]) -> ModelRunResult:
         if self.runner is None or self.candidate is None or self.runtime_config is None:

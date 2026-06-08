@@ -34,3 +34,15 @@ def test_cuda_install_plan_discloses_large_accelerator_without_typed_confirmatio
     assert "INSTALL CUDA" not in format_install_plan(plan)
     assert "Press Enter to install" in format_install_plan(plan)
     assert plan.estimated_size_class == "large"
+
+
+def test_native_llama_mtmd_install_plan_discloses_winget_not_pip(tmp_path: Path):
+    plan = build_install_plan("llama_mtmd", tmp_path, {"runtime": {"provider": "cpu"}, "dependency_install": {}}, ["Qwen3 ASR GGUF"])
+    text = format_install_plan(plan)
+
+    assert plan.requirement_files == []
+    assert plan.packages == ["ggml.llamacpp"]
+    assert plan.network_destinations == ["Microsoft WinGet source"]
+    assert "native llama.cpp MTMD CLI" in plan.reason
+    assert "GGUF ASR+mmproj models are skipped" in plan.fallback_if_declined
+    assert "PyPI" not in text

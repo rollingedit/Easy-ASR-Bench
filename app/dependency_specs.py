@@ -5,19 +5,10 @@ from dataclasses import dataclass
 
 CORE_IMPORTS = {
     "numpy": "numpy",
-    "scipy": "scipy",
     "soundfile": "soundfile",
     "librosa": "librosa",
     "imageio-ffmpeg": "imageio_ffmpeg",
-    "rich": "rich",
-    "tqdm": "tqdm",
     "psutil": "psutil",
-    "pydantic": "pydantic",
-    "platformdirs": "platformdirs",
-    "watchdog": "watchdog",
-    "jiwer": "jiwer",
-    "orjson": "orjson",
-    "safetensors": "safetensors",
     "huggingface-hub": "huggingface_hub",
 }
 

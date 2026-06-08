@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import shutil
 from dataclasses import dataclass
@@ -33,6 +34,8 @@ METADATA_NAMES = {
 }
 
 LARGE_CHOICE_FILE_COUNT = 20
+MAX_DESTINATION_FOLDER_CHARS = 96
+MAX_WINDOWS_DOWNLOAD_PATH_CHARS = 240
 SAME_PACKAGE_REPAIR_LIMIT = 12
 TYPED_DOWNLOAD_CONFIRMATION = "DOWNLOAD"
 RECOMMENDED_BASELINE_REPO = "Systran/faster-whisper-tiny.en"
@@ -127,6 +130,18 @@ def _known_auxiliary(name: str) -> bool:
     return base in {".gitattributes", "readme.md", "license", "licenses"} or base.endswith((".md", ".py", ".cs"))
 
 
+def _is_mmproj_gguf(name: str) -> bool:
+    base = _basename(name).lower()
+    return base.endswith(".gguf") and (base.startswith(("mmproj", "mmproj-")) or "mmproj" in base)
+
+
+def _gguf_pair_base(name: str) -> str:
+    stem = _basename(name).lower().removesuffix(".gguf")
+    stem = re.sub(r"(?:^|[._-])mmproj(?:[._-].*)?$", "", stem)
+    stem = re.sub(r"(?:[._-])(?:iq[1-4]_[a-z0-9_]+|q[2-8]_[a-z0-9_]+|q[2-8]|f16|f32|bf16|bf8|int[2-8]|nf4|nvfp4|nvp4|fp4|fp8)$", "", stem)
+    return stem.strip("._-")
+
+
 def _sidecars_for(files: list[str], primary: str) -> list[str]:
     folder = _dirname(primary)
     base = _basename(primary)
@@ -141,11 +156,12 @@ def _sidecars_for(files: list[str], primary: str) -> list[str]:
 def _matching_projectors(files: list[str], gguf: str) -> list[str]:
     folder = _dirname(gguf)
     ggufs = [name for name in files if name.lower().endswith(".gguf") and _dirname(name) == folder]
-    projectors = [name for name in ggufs if _basename(name).lower().startswith(("mmproj", "mmproj-"))]
+    projectors = [name for name in ggufs if _is_mmproj_gguf(name)]
     if not projectors:
         return []
     stem = _basename(gguf).lower().replace(".gguf", "")
-    exactish = [name for name in projectors if stem in _basename(name).lower()]
+    main_base = _gguf_pair_base(gguf)
+    exactish = [name for name in projectors if stem in _basename(name).lower() or main_base == _gguf_pair_base(name)]
     main_models = [name for name in ggufs if name not in projectors]
     return exactish or (projectors if len(projectors) == 1 and len(main_models) == 1 else [])
 
@@ -224,7 +240,7 @@ def build_download_choices(files: list[str], ref: HFModelRef) -> list[DownloadCh
     for gguf in ggufs:
         if gguf in handled_ggufs:
             continue
-        if _basename(gguf).lower().startswith(("mmproj", "mmproj-")):
+        if _is_mmproj_gguf(gguf):
             continue
         split_parts = _gguf_split_parts(relevant, gguf)
         handled_ggufs.update(split_parts)
@@ -233,15 +249,27 @@ def build_download_choices(files: list[str], ref: HFModelRef) -> list[DownloadCh
         asr_audio = bool(projectors) or any(signal in _basename(gguf).lower() for signal in ["asr", "audio", "whisper"])
         if asr_audio and not projectors:
             notes = ("No matching mmproj GGUF was found; audio GGUF packages usually need one.",)
-        selected = sorted({*split_parts, *projectors})
         task_hint = "asr_audio" if asr_audio else "reference_llm"
         kind_label = "Audio/ASR GGUF" if asr_audio else "GGUF reference LLM"
+        if asr_audio and projectors:
+            for projector in projectors:
+                choices.append(
+                    DownloadChoice(
+                        label=f"{kind_label}: {_gguf_choice_name(gguf)} + {_basename(projector)}",
+                        kind="gguf",
+                        primary_files=(gguf,),
+                        files=tuple(sorted({*split_parts, projector})),
+                        task_hint=task_hint,
+                        notes=notes,
+                    )
+                )
+            continue
         choices.append(
             DownloadChoice(
-                label=f"{kind_label}: {_gguf_choice_name(gguf)}" + (f" + {_basename(projectors[0])}" if len(projectors) == 1 else ""),
+                label=f"{kind_label}: {_gguf_choice_name(gguf)}",
                 kind="gguf",
                 primary_files=(gguf,),
-                files=tuple(selected),
+                files=tuple(sorted(split_parts)),
                 task_hint=task_hint,
                 notes=notes,
             )
@@ -375,6 +403,33 @@ def _safe_path_part(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip("/")).strip("_")
 
 
+def _bounded_destination_name(name: str, max_chars: int = MAX_DESTINATION_FOLDER_CHARS) -> str:
+    max_chars = max(24, min(max_chars, MAX_DESTINATION_FOLDER_CHARS))
+    if len(name) <= max_chars:
+        return name
+    digest = hashlib.sha1(name.encode("utf-8")).hexdigest()[:10]
+    if "__" in name:
+        prefix, suffix = name.rsplit("__", 1)
+        suffix_keep = min(len(suffix), max(12, max_chars // 3))
+        suffix_part = suffix[-suffix_keep:].lstrip("_")
+        prefix_keep = max_chars - len(digest) - len(suffix_part) - 4
+        if prefix_keep >= 16:
+            return f"{prefix[:prefix_keep].rstrip('_')}__{digest}__{suffix_part}"
+    keep = max_chars - len(digest) - 2
+    return f"{name[:keep].rstrip('_')}__{digest}"
+
+
+def _destination_name_budget(models_root: Path, choice: DownloadChoice | None) -> int:
+    if choice is None:
+        longest_relative_name = 32
+    else:
+        names = [local_relative_name(choice, filename) for filename in choice.files]
+        longest_relative_name = max((len(name) for name in names), default=32)
+    root = models_root if models_root.is_absolute() else Path.cwd() / models_root
+    budget = MAX_WINDOWS_DOWNLOAD_PATH_CHARS - len(str(root)) - longest_relative_name - 2
+    return max(24, min(MAX_DESTINATION_FOLDER_CHARS, budget))
+
+
 def destination_for(models_root: Path, ref: HFModelRef, choice: DownloadChoice | None = None) -> Path:
     name = ref.repo_id.replace("/", "__")
     if choice is not None and choice.primary_files:
@@ -389,7 +444,7 @@ def destination_for(models_root: Path, ref: HFModelRef, choice: DownloadChoice |
             name += "__" + suffix
     elif ref.subfolder:
         name += "__" + _safe_path_part(ref.subfolder)
-    return models_root / name
+    return models_root / _bounded_destination_name(name, _destination_name_budget(models_root, choice))
 
 
 def _download_file(repo_id: str, revision: str | None, filename: str, destination: Path, relative_name: str | None = None) -> Path:
@@ -419,6 +474,31 @@ def local_relative_name(choice: DownloadChoice, filename: str) -> str:
     if choice.kind in {"gguf", "safetensors", "safetensors_index"} and choice.primary_files:
         return _strip_prefix(filename, _dirname(choice.primary_files[0]))
     return filename
+
+
+def _write_gguf_asr_manifest(ref: HFModelRef, choice: DownloadChoice, destination: Path) -> Path | None:
+    if choice.kind != "gguf" or choice.task_hint != "asr_audio" or not choice.primary_files:
+        return None
+    primary = choice.primary_files[0]
+    projectors = [name for name in choice.files if _is_mmproj_gguf(name)]
+    if len(projectors) != 1:
+        return None
+    manifest = {
+        "schema": "easy_asr_bench.model_package.v1",
+        "source_repo": ref.repo_id,
+        "source_url": f"https://huggingface.co/{ref.repo_id}",
+        "artifacts": {
+            "main_model": local_relative_name(choice, primary),
+            "projector": local_relative_name(choice, projectors[0]),
+        },
+        "notes": [
+            "Generated by Easy ASR Bench after selecting an Audio/ASR GGUF package from Hugging Face.",
+            "The exact main/projector pair is recorded so projector quantization does not have to match the main GGUF quantization label.",
+        ],
+    }
+    path = destination / "model_package.json"
+    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n")
+    return path
 
 
 def _expand_index_shards(choice: DownloadChoice, destination: Path) -> list[str]:
@@ -462,6 +542,9 @@ def download_choice(ref: HFModelRef, choice: DownloadChoice, destination: Path, 
                 continue
             print_func(f"Downloading {filename}")
             downloaded.append(_download_file(ref.repo_id, ref.revision, filename, destination, local_relative_name(choice, filename)))
+    manifest = _write_gguf_asr_manifest(ref, choice, destination)
+    if manifest is not None and manifest not in downloaded:
+        downloaded.append(manifest)
     return downloaded
 
 

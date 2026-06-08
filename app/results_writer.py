@@ -14,9 +14,10 @@ from pathlib import Path
 from .html_report_builder import build_html_report
 from . import __version__
 from .version import RELEASE_CHANNEL, RELEASE_COMMIT
-from .dependency_manager import cuda_diagnostics
+from .dependency_manager import cuda_diagnostics, onnxruntime_available_providers
 from .llm_reference_prompt import build_llm_reference_prompt
 from .results_schema import validate_results_schema
+from .reference_scoring import runtime_rankings
 from .scoring import pairwise_metrics
 from .utils import format_timestamp, now_stamp, safe_stem, sha256_file
 
@@ -36,6 +37,10 @@ DEPENDENCY_PACKAGES = [
     "openai-whisper",
     "llama-cpp-python",
 ]
+
+
+def _default_project_root() -> Path:
+    return Path(__file__).resolve().parent.parent
 
 
 def format_error_summary(error) -> str:
@@ -117,7 +122,86 @@ def dependency_versions() -> dict[str, str]:
     return versions
 
 
-def runtime_environment() -> dict:
+def _compact_runtime_resolution(path: Path, resolution: dict) -> dict:
+    return {
+        "path": str(path),
+        "dependency_group": resolution.get("dependency_group", ""),
+        "status": resolution.get("status", ""),
+        "backend_verified": bool(resolution.get("backend_verified", False)),
+        "backend_probe_kind": resolution.get("backend_probe_kind", ""),
+        "accelerator_requested": bool(resolution.get("accelerator_requested", False)),
+        "accelerator": resolution.get("accelerator", ""),
+        "accelerator_verified": bool(resolution.get("accelerator_verified", False)),
+        "versions": dict(resolution.get("versions") or {}),
+        "providers": list(resolution.get("providers") or []),
+        "runtime_path": str(resolution.get("runtime_path") or ""),
+        "config_runtime": dict(resolution.get("config_runtime") or {}),
+    }
+
+
+def _compact_repair_record(record: dict) -> dict:
+    after = record.get("after", {})
+    backend_probe = after.get("backend_probe", {})
+    accelerator_probe = backend_probe.get("accelerator_probe", {})
+    return {
+        "dependency_group": record.get("affected_dependency_group", ""),
+        "status": record.get("status", ""),
+        "repair_result": after.get("repair_result", ""),
+        "backend_probe_kind": backend_probe.get("kind", ""),
+        "cached_runtime_resolution_status": record.get("cached_runtime_resolution_check", {}).get("status", ""),
+        "previous_runtime_resolution_status": after.get("previous_runtime_resolution_check", {}).get("status", ""),
+        "runtime_resolution_path": after.get("runtime_resolution_path", ""),
+        "accelerator_requested": bool(accelerator_probe.get("requested", False)),
+        "accelerator": accelerator_probe.get("accelerator", ""),
+        "accelerator_verified": bool(accelerator_probe.get("ok", False)),
+    }
+
+
+def dependency_resolution_environment(project_root: Path | None = None) -> dict:
+    project_root = project_root or _default_project_root()
+    logs_dir = project_root / "Logs"
+    resolutions = []
+    invalid_resolution_files = []
+    if logs_dir.exists():
+        for path in sorted(logs_dir.glob("dependency_resolution_*.json")):
+            try:
+                resolution = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                invalid_resolution_files.append({"path": str(path), "error": str(exc)})
+                continue
+            if resolution.get("schema") != "easy_asr_bench.runtime_resolution.v1":
+                invalid_resolution_files.append({"path": str(path), "error": "unexpected runtime resolution schema"})
+                continue
+            resolutions.append(_compact_runtime_resolution(path, resolution))
+    summary = {
+        "schema": "easy_asr_bench.dependency_resolution_environment.v1",
+        "resolution_count": len(resolutions),
+        "invalid_resolution_files": len(invalid_resolution_files),
+        "backend_verified": sum(1 for item in resolutions if item["backend_verified"]),
+        "accelerator_requested": sum(1 for item in resolutions if item["accelerator_requested"]),
+        "accelerator_unverified": sum(1 for item in resolutions if item["accelerator_requested"] and not item["accelerator_verified"]),
+    }
+    environment = {
+        "summary": summary,
+        "resolutions": resolutions,
+        "invalid_resolution_files": invalid_resolution_files,
+    }
+    repair_path = logs_dir / "repair_all_safe_last.json"
+    if repair_path.exists():
+        try:
+            repair = json.loads(repair_path.read_text(encoding="utf-8"))
+            environment["last_repair_all_safe"] = {
+                "path": str(repair_path),
+                "mode": repair.get("mode", ""),
+                "summary": dict(repair.get("summary") or {}),
+                "records": [_compact_repair_record(record) for record in repair.get("records", [])],
+            }
+        except (OSError, json.JSONDecodeError) as exc:
+            environment["last_repair_all_safe"] = {"path": str(repair_path), "error": str(exc)}
+    return environment
+
+
+def runtime_environment(project_root: Path | None = None) -> dict:
     environment = {
         "app_version": __version__,
         "release_channel": RELEASE_CHANNEL,
@@ -141,13 +225,12 @@ def runtime_environment() -> dict:
             environment["gpu"] = [torch.cuda.get_device_name(index) for index in range(torch.cuda.device_count())]
     except Exception:
         pass
-    try:
-        import onnxruntime as ort
-
-        environment["onnxruntime_providers"] = ort.get_available_providers()
-    except Exception:
-        environment["onnxruntime_providers"] = []
+    providers, provider_error = onnxruntime_available_providers()
+    environment["onnxruntime_providers"] = providers
+    if provider_error:
+        environment["onnxruntime_provider_probe_error"] = provider_error
     environment["cuda_diagnostics"] = cuda_diagnostics()
+    environment["dependency_resolution_environment"] = dependency_resolution_environment(project_root)
     return environment
 
 
@@ -241,6 +324,13 @@ def build_results(
         metrics.setdefault("media_normalization_seconds", media_seconds)
         metrics.setdefault("audio_seconds_per_wall_second", metrics.get("audio_seconds", 0) / max(0.001, metrics.get("total_wall_seconds", 0.001)))
         metrics.setdefault("peak_vram_mb", None)
+        metrics.setdefault("vram_measurement_source", "unavailable")
+        metrics.setdefault("torch_peak_vram_mb", None)
+        metrics.setdefault("windows_peak_dedicated_vram_mb", None)
+        metrics.setdefault(
+            "vram_measurement_note",
+            "VRAM telemetry was unavailable or not reported by this backend/run.",
+        )
         normalized_errors = [normalize_run_error(error, candidate) for error in result.errors]
         runs.append(
             {
@@ -282,6 +372,7 @@ def build_results(
         "runs": runs,
         "unsupported_models": [candidate_to_dict(candidate) | {"missing_files": candidate.missing_files, "help_text": candidate.help_text} for candidate in unsupported_models],
         "pairwise_differences": pairwise,
+        "runtime_rankings": runtime_rankings({"runs": runs}),
         "errors": errors or [],
     }
     schema_errors = validate_results_schema(results)
@@ -354,7 +445,9 @@ def render_text_report(results: dict) -> str:
         lines.append(
             f"{run['model']['display_name']} | {run['model']['precision']} | "
             f"{metrics.get('audio_seconds_per_wall_second', 0):.3f}x realtime | "
-            f"{metrics.get('peak_process_memory_mb', 0):.0f} MB RAM | errors: {len(run.get('errors', []))}"
+            f"{metrics.get('peak_process_memory_mb', 0):.0f} MB RAM | "
+            f"VRAM: {_format_optional_mb(metrics.get('peak_vram_mb'))} ({metrics.get('vram_measurement_source', 'unavailable')}) | "
+            f"errors: {len(run.get('errors', []))}"
         )
     lines.extend(["", "Transcripts", "-" * 80])
     for run in results["runs"]:
@@ -381,6 +474,15 @@ def render_text_report(results: dict) -> str:
     lines.extend(["", "Pairwise Differences", "-" * 80])
     for name, metrics in results["pairwise_differences"].items():
         lines.append(f"{name}: normalized WER-like difference {metrics['normalized_wer_like_difference']:.4f}, CER difference {metrics['cer_difference']:.4f}")
+    if results.get("runtime_rankings", {}).get("rows"):
+        lines.extend(["", "Runtime-Only Ranking", "-" * 80])
+        lines.append("This ranking compares speed and memory only; it does not measure transcript quality.")
+        for row in results["runtime_rankings"]["rows"]:
+            lines.append(
+                f"#{row['runtime_rank']} {row['display_name']} | "
+                f"speed percentile: {_format_optional_number(row.get('speed_percentile'))} | "
+                f"memory percentile: {_format_optional_number(row.get('memory_percentile_inverse'))}"
+            )
     if results.get("reference_llm"):
         lines.extend(["", "Local GGUF Reference/Correction LLM", "-" * 80])
         lines.append(f"Selected: {results['reference_llm']['display_name']}")
@@ -413,6 +515,10 @@ def write_benchmark_csv(path: Path, results: dict) -> None:
                 "audio_seconds_per_wall_second",
                 "tokens_generated",
                 "peak_process_memory_mb",
+                "peak_vram_mb",
+                "vram_measurement_source",
+                "torch_peak_vram_mb",
+                "windows_peak_dedicated_vram_mb",
                 "errors",
             ],
         )
@@ -433,6 +539,10 @@ def write_benchmark_csv(path: Path, results: dict) -> None:
                     "audio_seconds_per_wall_second": metrics.get("audio_seconds_per_wall_second", 0),
                     "tokens_generated": metrics.get("tokens_generated", 0),
                     "peak_process_memory_mb": metrics.get("peak_process_memory_mb", 0),
+                    "peak_vram_mb": metrics.get("peak_vram_mb"),
+                    "vram_measurement_source": metrics.get("vram_measurement_source", "unavailable"),
+                    "torch_peak_vram_mb": metrics.get("torch_peak_vram_mb"),
+                    "windows_peak_dedicated_vram_mb": metrics.get("windows_peak_dedicated_vram_mb"),
                     "errors": len(run.get("errors", [])),
                 }
             )
@@ -443,6 +553,24 @@ def _atomic_write_text(path: Path, text: str) -> None:
     partial = path.with_suffix(path.suffix + ".partial")
     partial.write_text(text, encoding="utf-8")
     partial.replace(path)
+
+
+def _format_optional_mb(value) -> str:
+    if value is None:
+        return "unavailable"
+    try:
+        return f"{float(value):.0f} MB"
+    except (TypeError, ValueError):
+        return "unavailable"
+
+
+def _format_optional_number(value) -> str:
+    if value is None:
+        return "unavailable"
+    try:
+        return f"{float(value):.3f}"
+    except (TypeError, ValueError):
+        return "unavailable"
 
 
 def write_prompt_packs(output_dir: Path, results: dict, max_chars: int = 24000) -> None:

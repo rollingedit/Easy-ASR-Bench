@@ -8,6 +8,7 @@ from .hf_model_downloader import download_hf_model_interactive, download_recomme
 from .interactive_menu import MenuAction, choose_one
 from .model_scanner import scan_models
 from .model_status import model_status_label
+from .repair_plan import build_repair_plan
 from .version import RELEASE_CHANNEL, RELEASE_COMMIT, TAG
 
 
@@ -98,6 +99,7 @@ def build_first_run_smoke_report(config: dict) -> dict:
     runnable_asr = [candidate for candidate in runnable if candidate.category == "asr"]
     incomplete = [candidate for candidate in unsupported if model_status_label(candidate) == "Recognized incomplete"]
     reference_llms = [candidate for candidate in unsupported if candidate.category == "reference_llm"]
+    repair_plan = build_repair_plan(config)
     return {
         "schema": "easy_asr_bench.first_run_smoke.v1",
         "version": TAG,
@@ -109,6 +111,11 @@ def build_first_run_smoke_report(config: dict) -> dict:
         "incomplete_model_count": len(incomplete),
         "reference_llm_count": len(reference_llms),
         "network_used": False,
+        "repair_plan_schema": repair_plan["schema"],
+        "repair_plan_summary": repair_plan["summary"],
+        "repair_command": "setup.bat --doctor --repair-all-safe",
+        "doctor_command": "setup.bat --doctor --repair-plan",
+        "real_smoke_command": "setup.bat --doctor --validate-real-smoke",
         "available_actions": ["run_now", "download_recommended_baseline", "paste_hugging_face_link", "open_models_folder", "open_input_folder", "quit"],
         "recommended_next_action": "run_now" if runnable_asr else "download_recommended_baseline",
         "dead_end": False,

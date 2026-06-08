@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -54,7 +55,7 @@ class GGUFASRMMProjAdapter:
                     adapter_name=self.name,
                     runnable=runnable,
                     runnable_after_dependency_install=runnable,
-                    dependency_groups=["llama_cpp"],
+                    dependency_groups=["llama_cpp", "llama_mtmd"],
                     missing_files=missing,
                     warnings=warnings if warnings else ["Audio/ASR GGUF package is incomplete or has no matching mmproj."],
                     help_text=(
@@ -71,7 +72,7 @@ class GGUFASRMMProjAdapter:
         return candidates
 
     def required_dependency_groups(self, candidate: ModelCandidate) -> list[str]:
-        return ["llama_cpp"]
+        return ["llama_cpp", "llama_mtmd"]
 
     def load(self, candidate: ModelCandidate, runtime_config: dict):
         self.candidate = candidate
@@ -151,7 +152,7 @@ def find_gguf_asr_pair(folder: Path) -> tuple[Path | None, Path | None, list[str
     manifest_pair = find_manifest_gguf_pair(folder)
     if manifest_pair is not None:
         return manifest_pair
-    projectors = [path for path in ggufs if path.name.lower().startswith(("mmproj", "mmproj-"))]
+    projectors = [path for path in ggufs if is_mmproj_gguf(path)]
     main_models = [path for path in ggufs if path not in projectors]
     asr_named = any(any(signal in path.name.lower() for signal in ["asr", "audio", "whisper"]) for path in ggufs)
     if not projectors and not asr_named:
@@ -208,6 +209,11 @@ def gguf_projector_matches(main_model: Path, projector: Path, main_models: list[
     return len(main_models) == 1 and len(projectors) == 1
 
 
+def is_mmproj_gguf(path: Path) -> bool:
+    name = path.name.lower()
+    return name.endswith(".gguf") and (name.startswith(("mmproj", "mmproj-")) or "mmproj" in name)
+
+
 def gguf_quant_label(name: str) -> str:
     import re
 
@@ -254,7 +260,7 @@ def llama_mtmd_cli_path(runtime_config: dict, model_folder: Path) -> str:
 
 
 def transcribe_with_python_backend(model, audio_path: Path, runtime_config: dict) -> str:
-    prompt = runtime_config.get("transcription", {}).get("ar_prompt", "Transcribe the audio.")
+    prompt = runtime_value(runtime_config, "ar_prompt", "Transcribe the audio.")
     with audio_path.open("rb") as handle:
         encoded = base64.b64encode(handle.read()).decode("utf-8")
     response = model.create_chat_completion(
@@ -262,14 +268,14 @@ def transcribe_with_python_backend(model, audio_path: Path, runtime_config: dict
             {"role": "system", "content": "You are a speech-to-text model. Return only the transcript."},
             {"role": "user", "content": [{"type": "input_audio", "input_audio": {"data": encoded, "format": "wav"}}, {"type": "text", "text": prompt}]},
         ],
-        temperature=float(runtime_config.get("transcription", {}).get("temperature", 0.0)),
-        max_tokens=int(runtime_config.get("transcription", {}).get("ar_max_new_tokens", 1024)),
+        temperature=float(runtime_value(runtime_config, "temperature", 0.0)),
+        max_tokens=int(runtime_value(runtime_config, "ar_max_new_tokens", 1024)),
     )
     return response["choices"][0]["message"]["content"]
 
 
 def transcribe_with_cli_backend(model: dict, audio_path: Path, runtime_config: dict) -> str:
-    prompt = runtime_config.get("transcription", {}).get("ar_prompt", "Transcribe the audio.")
+    prompt = runtime_value(runtime_config, "ar_prompt", "Transcribe the audio.")
     command = [
         str(model["cli"]),
         "-m",
@@ -281,17 +287,38 @@ def transcribe_with_cli_backend(model: dict, audio_path: Path, runtime_config: d
         "-p",
         prompt,
         "-n",
-        str(int(runtime_config.get("transcription", {}).get("ar_max_new_tokens", 1024))),
+        str(int(runtime_value(runtime_config, "ar_max_new_tokens", 1024))),
         "--temp",
-        str(float(runtime_config.get("transcription", {}).get("temperature", 0.0))),
+        str(float(runtime_value(runtime_config, "temperature", 0.0))),
     ]
-    completed = subprocess.run(command, text=True, capture_output=True, timeout=int(runtime_config.get("llama_cpp", {}).get("timeout_seconds", 600)))
+    completed = subprocess.run(command, text=True, capture_output=True, timeout=int(runtime_value(runtime_config, "timeout_seconds", 600, "llama_cpp")))
     if completed.returncode != 0:
         raise RuntimeError((completed.stderr or completed.stdout or f"llama-mtmd-cli exited {completed.returncode}").strip())
-    return extract_cli_transcript(completed.stdout)
+    return extract_cli_transcript(completed.stdout or completed.stderr)
+
+
+def runtime_value(runtime_config: dict, key: str, default, nested_section: str = "transcription"):
+    if key in runtime_config:
+        return runtime_config[key]
+    nested = runtime_config.get(nested_section, {})
+    if isinstance(nested, dict) and key in nested:
+        return nested[key]
+    return default
 
 
 def extract_cli_transcript(output: str) -> str:
     lines = [line.strip() for line in output.splitlines() if line.strip()]
-    transcript_lines = [line for line in lines if not line.lower().startswith(("llama_", "main:", "system_info:", "sampler", "generate:"))]
+    transcript_lines = []
+    for line in lines:
+        lowered = line.lower()
+        if lowered.startswith(("llama_", "main:", "system_info:", "sampler", "generate:", "common_", "mtmd_", "init_", "load:", "print_info:", "warn:")):
+            continue
+        if re.match(r"^\d+(?:\.\d+){3}\s+[iwe]\s+", line, re.IGNORECASE):
+            continue
+        if lowered.startswith(("https://", "http://")):
+            continue
+        line = re.sub(r"^language\s+\w+\s*<asr_text>", "", line, flags=re.IGNORECASE).strip()
+        if not line:
+            continue
+        transcript_lines.append(line)
     return "\n".join(transcript_lines).strip() or output.strip()

@@ -62,6 +62,11 @@ def validate_smoke(
         if require_all_pass and status != "pass":
             errors.append(f"{row_id} status is {status}, expected pass")
         if isinstance(row, dict):
+            if status == "blocked":
+                if not row.get("block_reason"):
+                    errors.append(f"{row_id} blocked row is missing block_reason")
+                if not row.get("external_requirement"):
+                    errors.append(f"{row_id} blocked row is missing external_requirement")
             if require_all_pass:
                 if not row.get("app_version"):
                     errors.append(f"{row_id} is missing app_version")

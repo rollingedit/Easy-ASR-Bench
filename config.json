@@ -1,6 +1,6 @@
 {
   "app": {
-    "version": "0.3.8",
+    "version": "0.3.9",
     "version_channel": "prerelease",
     "check_for_updates_on_setup": true,
     "check_for_updates_on_run": false

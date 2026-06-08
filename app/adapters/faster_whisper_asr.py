@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Sequence
@@ -63,16 +66,7 @@ class FasterWhisperASRAdapter:
         except ModuleNotFoundError as exc:
             raise RuntimeError("faster-whisper support requires requirements/faster_whisper.txt.") from exc
         self.candidate = candidate
-        plan = resolve_runtime_plan("faster_whisper", runtime_config)
-        device = "cuda" if plan.actual_provider == "cuda" and plan.backend_verified else "cpu"
-        compute_aliases = {"fp16": "float16", "f16": "float16", "fp32": "float32", "f32": "float32"}
-        compute_type = compute_aliases.get(candidate.precision.lower(), candidate.precision)
-        compute_type = compute_type if compute_type in {"int8", "int8_float16", "float16", "float32"} else "default"
-        effective_compute_type = compute_type
-        warnings = []
-        if device == "cpu" and compute_type in {"float16", "int8_float16"}:
-            effective_compute_type = "float32" if compute_type == "float16" else "int8"
-            warnings.append(f"Requested {compute_type} on CPU; CTranslate2 uses {effective_compute_type} effectively.")
+        plan, device, compute_type, effective_compute_type, warnings = faster_whisper_runtime_choices(candidate, runtime_config)
         self.device = device
         self.requested_compute_type = compute_type
         self.effective_compute_type = effective_compute_type
@@ -80,6 +74,13 @@ class FasterWhisperASRAdapter:
             warnings.append(plan.fallback_reason)
         self.runtime_plan = plan
         self.load_warnings = warnings
+        probe_error = probe_faster_whisper_load(candidate.path, device, effective_compute_type)
+        if probe_error:
+            raise RuntimeError(
+                "faster-whisper native load probe failed before in-process load. "
+                "Run setup.bat --doctor or reinstall requirements/faster_whisper.txt. "
+                f"Probe detail: {probe_error}"
+            )
         try:
             self.model = WhisperModel(str(candidate.path), device=device, compute_type=effective_compute_type)
         except Exception as exc:
@@ -101,6 +102,10 @@ class FasterWhisperASRAdapter:
             else:
                 raise
         return self
+
+    def preflight_native_load(self, candidate: ModelCandidate, runtime_config: dict) -> str:
+        _plan, device, _compute_type, effective_compute_type, _warnings = faster_whisper_runtime_choices(candidate, runtime_config)
+        return probe_faster_whisper_load(candidate.path, device, effective_compute_type)
 
     def transcribe_chunks(self, chunks: Sequence, chunk_metadata: list[dict]) -> ModelRunResult:
         errors: list[str] = []
@@ -143,3 +148,48 @@ class FasterWhisperASRAdapter:
     def unload(self) -> None:
         self.model = None
         self.candidate = None
+
+
+def probe_faster_whisper_load(model_path: Path, device: str, compute_type: str) -> str:
+    code = f"""
+import ctypes
+import json
+import sys
+if sys.platform == 'win32':
+    ctypes.windll.kernel32.SetErrorMode(0x0001 | 0x0002 | 0x8000)
+try:
+    from faster_whisper import WhisperModel
+    model = WhisperModel({str(model_path)!r}, device={device!r}, compute_type={compute_type!r})
+    del model
+    print(json.dumps({{"ok": True}}))
+except Exception as exc:
+    print(json.dumps({{"ok": False, "error_type": type(exc).__name__, "error": str(exc)}}))
+"""
+    try:
+        completed = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=90)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"{type(exc).__name__}: {exc}"
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or f"exit {completed.returncode}").strip()
+        return f"native probe process exited {completed.returncode}: {detail}"
+    try:
+        payload = json.loads(completed.stdout.strip().splitlines()[-1])
+    except (json.JSONDecodeError, IndexError) as exc:
+        return f"native probe returned invalid JSON: {exc}; stdout={completed.stdout!r}; stderr={completed.stderr!r}"
+    if payload.get("ok"):
+        return ""
+    return f"{payload.get('error_type', 'Error')}: {payload.get('error', '')}"
+
+
+def faster_whisper_runtime_choices(candidate: ModelCandidate, runtime_config: dict):
+    plan = resolve_runtime_plan("faster_whisper", runtime_config)
+    device = "cuda" if plan.actual_provider == "cuda" and plan.backend_verified else "cpu"
+    compute_aliases = {"fp16": "float16", "f16": "float16", "fp32": "float32", "f32": "float32"}
+    compute_type = compute_aliases.get(candidate.precision.lower(), candidate.precision)
+    compute_type = compute_type if compute_type in {"int8", "int8_float16", "float16", "float32"} else "default"
+    effective_compute_type = compute_type
+    warnings = []
+    if device == "cpu" and compute_type in {"float16", "int8_float16"}:
+        effective_compute_type = "float32" if compute_type == "float16" else "int8"
+        warnings.append(f"Requested {compute_type} on CPU; CTranslate2 uses {effective_compute_type} effectively.")
+    return plan, device, compute_type, effective_compute_type, warnings

@@ -49,11 +49,24 @@ def hardware_from_dependency_manager() -> HardwareInfo:
 
 
 def resolve_runtime_plan(model_family: str, runtime_config: dict, hardware: HardwareInfo | None = None) -> ResolvedRuntimePlan:
-    hardware = hardware or hardware_from_dependency_manager()
     runtime = runtime_config.get("runtime", runtime_config)
     requested = str(runtime.get("provider", "auto")).lower()
     prefer_gpu = bool(runtime.get("prefer_gpu", True))
     fallback_allowed = bool(runtime.get("fallback_to_cpu", True))
+
+    if hardware is None and (requested == "cpu" or not prefer_gpu):
+        return ResolvedRuntimePlan(
+            model_family,
+            requested,
+            "cpu",
+            "cpu",
+            None,
+            True,
+            fallback_allowed,
+            "CPU runtime selected without GPU dependency probing.",
+        )
+
+    hardware = hardware or hardware_from_dependency_manager()
 
     if model_family == "faster_whisper":
         wants_cuda = requested == "cuda" or requested == "auto" and prefer_gpu and hardware.nvidia

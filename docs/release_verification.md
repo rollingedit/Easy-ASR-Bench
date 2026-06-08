@@ -17,6 +17,9 @@ python scripts\validate_physical_files.py --zip dist\Easy-ASR-Bench-vX.Y.Z-win.z
 python scripts\write_release_smoke.py --tag vX.Y.Z --commit <commit> --output release-smoke-vX.Y.Z.json
 python scripts\validate_release_smoke.py --smoke release-smoke-vX.Y.Z.json --required tests\fixtures\release_required_rows_v2.json
 cmd /c setup.bat --dry-run --local
+python qa\runtime_matrix\run_row.py --row setup_repair_all_safe --workdir Temp\runtime_matrix_setup_repair_all_safe
+python qa\runtime_matrix\run_row.py --row clean_vm_zero_dependency_bootstrap --workdir Temp\runtime_matrix_clean_vm_bootstrap
+python -m app.doctor --config config.json --validate-real-smoke
 Remove-Item -LiteralPath dist\release-assets -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path dist\release-assets
 Copy-Item dist\Easy-ASR-Bench-vX.Y.Z-win.zip dist\release-assets\
@@ -30,6 +33,12 @@ python -m app.doctor --config config.json --strict
 
 The staged `--asset-dir` check must run before a draft release is published. It validates the same `setup.bat`, `install.ps1`, `manifest.json`, `checksums.json`, and ZIP bytes that will become release assets, without depending on public release URLs.
 
+The `setup_repair_all_safe` runtime-matrix row preflights `app.doctor --repair-plan` and then runs `app.doctor --repair-all-safe` only when safe. If the plan would install dependencies, run it with `--install-deps` only on a machine where dependency repair is intentionally being exercised. The row writes `row.json`, `repair_plan.json`, and `repair_all_safe.json` with backend and accelerator probe summaries. Usable backend records also include `runtime_resolution_path` values pointing to `Logs\dependency_resolution_<group>.json`, which capture the persisted working backend/provider resolution and any requested-but-unverified accelerator state. The repair summary must include `previous_runtime_resolution_valid`, `previous_runtime_resolution_stale`, and `cached_runtime_resolutions` so release evidence shows whether saved resolutions still matched the current package/provider/config state before refresh and whether any valid saved resolutions were consumed.
+
+The `clean_vm_zero_dependency_bootstrap` row is the final fresh-machine proof. On a normal development laptop it must block with an external requirement. In a fresh Windows 11 VM/Sandbox, set `EASY_ASR_BENCH_CLEAN_VM_BOOTSTRAP_PROOF=1` and run it with `--install-deps --allow-downloads`; it then runs `setup.bat --doctor --repair-all-safe`, the `setup_repair_all_safe` subrow, the same-media multi-model SmolLM benchmark, and first-run smoke, writing each subrow/transcript as evidence. The first-run smoke JSON must include the repair-plan schema, repair-plan summary, and setup repair command so a fresh-machine pass proves first-run guidance is connected to the same bootstrapper diagnostics.
+
+`app.doctor --validate-real-smoke` is the local post-repair smoke wrapper. It emits `easy_asr_bench.real_smoke_validation.v1`, includes the `repair_all_safe` JSON, and records each runtime-matrix row status plus its `row.json` path. Use `--no-network` for explicit offline diagnostics, or `--allow-downloads` only when model/media downloads are intentionally permitted.
+
 Public-asset Windows smoke should also capture machine-readable app state from the installed app:
 
 ```powershell
@@ -40,7 +49,7 @@ qa\windows_matrix\run_public_asset_smoke.ps1 -Tag vX.Y.Z -Install
 %LOCALAPPDATA%\Easy-ASR-Bench\setup.bat --doctor --json > doctor-from-setup.json
 ```
 
-The public-asset smoke runner downloads release assets with `gh release download`, verifies the staged setup path, records asset hashes, and writes evidence rows. With `-Install`, it also runs the installed app and captures `doctor.json` plus `first-run-smoke.json`. `doctor.json` records release identity, dependency groups, provider diagnostics, and checked folders. `first-run-smoke.json` verifies the first-run state has actionable next steps without using network or requiring interactive input.
+The public-asset smoke runner downloads release assets with `gh release download`, verifies the staged setup path, records asset hashes, and writes evidence rows. With `-Install`, it also runs the installed app and captures `doctor.json` plus `first-run-smoke.json`. `doctor.json` records release identity, dependency groups, provider diagnostics, and checked folders. `first-run-smoke.json` verifies the first-run state has actionable next steps without using network or requiring interactive input, and includes the repair-plan summary plus `setup.bat --doctor --repair-all-safe` command for recoverable dependency issues.
 
 After collecting evidence rows, merge them into the release smoke artifact that release notes and strict gates consume:
 
@@ -50,6 +59,15 @@ python scripts\validate_release_smoke.py --smoke release-smoke-vX.Y.Z.json --req
 ```
 
 `validate_release_smoke.py` verifies that every required release QA row exists. Public release publication and release-gate verification use `--require-all-pass --require-log-hashes --require-environment-summary`; that means every required row must be `pass` and must include app version, release commit, log/result hash evidence, and environment summary. If real Windows/model/provider/media evidence has not been collected, the correct status is `not_run`, and the release must remain unpublished or draft.
+
+Run the real tiny model smoke before claiming model inference has been verified. This downloads or reuses the recommended faster-whisper baseline, generates a short Windows SAPI speech WAV, runs the normal app report pipeline, and fails unless `results.json`, `results.txt`, `benchmark.csv`, `compare.html`, a non-empty transcript, normalized WER against the known phrase at or below the configured threshold, and VRAM measurement source metadata are produced:
+
+```powershell
+python qa\run_real_tiny_model_smoke.py --install-deps --clean
+python qa\run_real_tiny_model_smoke.py --provider cuda
+```
+
+The first command is the CPU-safe baseline. The CUDA command is an additional hardware row and must be run only on a CUDA machine when claiming GPU smoke coverage.
 
 ## GitHub Release Asset Gate
 
@@ -68,7 +86,7 @@ python scripts\validate_raw_github_files.py --repo rollingedit/Easy-ASR-Bench --
 ```
 
 Raw validation prints byte counts, CRLF/LF/bare-CR counts, physical line counts, and first/last byte hex for each critical public file. Those diagnostics are required because raw GitHub bytes, release assets, and ZIP contents are the trust boundary.
-GitHub raw URLs serve canonical Git blob bytes, which are normally LF-normalized even for files that check out as CRLF on Windows because of `.gitattributes`. For raw GitHub validation, `physical_line_count_universal` is the line-count gate. The CRLF diagnostic count is informational and must not be used to claim a file is collapsed when the universal physical line count is correct.
+GitHub raw URLs serve canonical Git blob bytes, which are normally LF-normalized even for files that check out as CRLF on Windows because of `.gitattributes`. Physical line counts are diagnostics only; truncation protection comes from required file presence, required text markers, parse/compile checks, release ZIP comparison, and setup/bootstrap hashes.
 When a release ZIP is available, run raw validation with `--zip` so critical raw GitHub files are byte-compared against the matching ZIP copies:
 
 ```powershell
@@ -101,6 +119,7 @@ These rows require real machines, VMs, hardware, or model files and cannot be pr
 - repair, update, uninstall, and destructive uninstall confirmation
 - empty `Models`
 - complete HF ASR Safetensors, HF Whisper, faster-whisper, whisper.cpp, generic ONNX manifest, GGUF reference LLM
+- real tiny faster-whisper report smoke using `qa\run_real_tiny_model_smoke.py`
 - unsupported standalone Safetensors, generic ONNX without manifest, HF text LLM Safetensors, unsafe `.pt`
 - WAV, MP3, MP4 with audio, MP4 without audio, corrupt media, long audio
 - CPU-only, NVIDIA CUDA, AMD/Intel DirectML, Intel OpenVINO, Vulkan runtime without SDK, Vulkan runtime with SDK

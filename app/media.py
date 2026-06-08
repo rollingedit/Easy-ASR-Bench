@@ -26,6 +26,7 @@ class MediaProbeResult:
     ok: bool
     has_audio: bool
     ffprobe_available: bool
+    probe_method: str = "ffprobe"
     error: str | None = None
     raw_stdout: str = ""
     raw_stderr: str = ""
@@ -57,11 +58,51 @@ def probe_audio_stream(input_path: Path) -> MediaProbeResult:
     try:
         completed = subprocess.run(command, capture_output=True, text=True)
     except OSError as exc:
-        return MediaProbeResult(False, True, False, f"ffprobe was not available: {exc}")
+        fallback = probe_audio_stream_with_ffmpeg(input_path)
+        if fallback.ok:
+            return fallback
+        return MediaProbeResult(
+            ok=False,
+            has_audio=fallback.has_audio,
+            ffprobe_available=False,
+            probe_method="ffmpeg",
+            error=(
+                "ffprobe was not available and ffmpeg fallback could not inspect audio streams: "
+                f"{exc}; {fallback.error or 'no ffmpeg detail was captured'}"
+            ),
+            raw_stdout=fallback.raw_stdout,
+            raw_stderr=fallback.raw_stderr,
+        )
     if completed.returncode != 0:
         stderr = completed.stderr.strip()
-        return MediaProbeResult(False, True, True, stderr or "ffprobe could not inspect this file.", completed.stdout, completed.stderr)
-    return MediaProbeResult(True, bool(completed.stdout.strip()), True, None, completed.stdout, completed.stderr)
+        return MediaProbeResult(False, True, True, "ffprobe", stderr or "ffprobe could not inspect this file.", completed.stdout, completed.stderr)
+    return MediaProbeResult(True, bool(completed.stdout.strip()), True, "ffprobe", None, completed.stdout, completed.stderr)
+
+
+def probe_audio_stream_with_ffmpeg(input_path: Path) -> MediaProbeResult:
+    command = [ffmpeg_exe(), "-hide_banner", "-i", str(input_path), "-f", "null", "-"]
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True)
+    except OSError as exc:
+        return MediaProbeResult(False, True, False, "ffmpeg", f"ffmpeg was not available: {exc}")
+    combined = "\n".join(part for part in [completed.stdout, completed.stderr] if part)
+    if not combined.strip():
+        return MediaProbeResult(False, True, False, "ffmpeg", "ffmpeg produced no stream information.", completed.stdout, completed.stderr)
+    lower = combined.lower()
+    has_audio = any("stream #" in line and "audio:" in line for line in lower.splitlines())
+    invalid_or_unreadable = any(
+        marker in lower
+        for marker in (
+            "invalid data found",
+            "moov atom not found",
+            "error opening input",
+            "could not find codec parameters",
+            "no such file or directory",
+        )
+    )
+    if invalid_or_unreadable and not has_audio:
+        return MediaProbeResult(False, True, False, "ffmpeg", combined.strip()[-1200:], completed.stdout, completed.stderr)
+    return MediaProbeResult(True, has_audio, False, "ffmpeg", None, completed.stdout, completed.stderr)
 
 
 def has_audio_stream(input_path: Path) -> bool:

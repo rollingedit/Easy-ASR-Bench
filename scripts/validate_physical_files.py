@@ -11,24 +11,55 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKIP_DIRS = {".git", ".venv", "dist", ".pytest_cache", ".pytest_tmp", "__pycache__"}
+SKIP_DIRS = {
+    ".git",
+    ".venv",
+    "dist",
+    ".pytest_cache",
+    ".pytest_tmp",
+    "__pycache__",
+    "Logs",
+    "Output",
+    "Temp",
+    "Cache",
+    "Models",
+    "Input",
+}
 
-MIN_LINES = {
-    "setup.bat": 200,
-    "Run.bat": 5,
-    "Drop_Audio_Or_Folders_Here.bat": 5,
-    "installer/install.ps1": 250,
-    "app/main.py": 100,
-    "app/model_scanner.py": 600,
-    "app/results_writer.py": 100,
-    "app/scoring.py": 80,
-    "app/hf_model_downloader.py": 300,
-    "scripts/validate_physical_files.py": 150,
-    "scripts/verify_github_release.py": 150,
-    ".github/workflows/release-gate.yml": 75,
-    ".github/workflows/publish-release.yml": 50,
-    "requirements/core.txt": 5,
-    "config.json": 20,
+REQUIRED_FILES = {
+    "setup.bat",
+    "Run.bat",
+    "Drop_Audio_Or_Folders_Here.bat",
+    "installer/install.ps1",
+    "app/main.py",
+    "app/model_scanner.py",
+    "app/results_writer.py",
+    "app/scoring.py",
+    "app/hf_model_downloader.py",
+    "scripts/validate_physical_files.py",
+    "scripts/verify_github_release.py",
+    ".github/workflows/release-gate.yml",
+    ".github/workflows/publish-release.yml",
+    "requirements/core.txt",
+    "config.json",
+}
+
+REQUIRED_TEXT_MARKERS = {
+    "setup.bat": ["APP_VERSION=", "--dry-run", "--verify-release", "--local"],
+    "Run.bat": ["python -m app.main", "--doctor", "--first-run-smoke"],
+    "Drop_Audio_Or_Folders_Here.bat": ["app.main"],
+    "installer/install.ps1": ["Move-PreservedUserData", "Restore-MovedUserData", "Assert-StagingPhysicalFiles"],
+    "app/main.py": ["def process_file_with_candidates", "def main()", "build_model_failure_error"],
+    "app/model_scanner.py": ["def scan_models", "ModelCandidate", "indexed_safetensor_missing_files"],
+    "app/results_writer.py": ["def build_results", "def write_all_reports", "runtime_rankings"],
+    "app/scoring.py": ["def edit_distance", "def balanced_score", "def score_against_reference"],
+    "app/hf_model_downloader.py": ["def download_hf_model_from_ref", "RECOMMENDED_BASELINE_REPO", "offer_missing_file_repair"],
+    "scripts/validate_physical_files.py": ["REQUIRED_TEXT_MARKERS", "def validate_root"],
+    "scripts/verify_github_release.py": ["def verify_release", "release-smoke", "checksums.json"],
+    ".github/workflows/release-gate.yml": ["Validate release files", "Run unit tests"],
+    ".github/workflows/publish-release.yml": ["Publish verified release", "gh release upload"],
+    "requirements/core.txt": ["numpy", "huggingface_hub"],
+    "config.json": ['"folders"', '"runtime"', '"chunking"'],
 }
 
 CRLF_SUFFIXES = {".bat", ".cmd", ".ps1"}
@@ -73,14 +104,20 @@ def _iter_files(root: Path) -> list[Path]:
     return [path for path in root.rglob("*") if path.is_file() and not _is_skipped(path, root)]
 
 
-def _validate_line_counts(root: Path) -> None:
-    for rel, minimum in MIN_LINES.items():
+def _validate_required_files(root: Path) -> None:
+    for rel in sorted(REQUIRED_FILES):
         path = root / rel
         if not path.exists():
             raise AssertionError(f"{rel} is missing")
-        count = _physical_lines(path)
-        if count < minimum:
-            raise AssertionError(f"{rel} has {count} physical lines, expected at least {minimum}")
+
+
+def _validate_required_text_markers(root: Path) -> None:
+    for rel, markers in REQUIRED_TEXT_MARKERS.items():
+        path = root / rel
+        text = path.read_text(encoding="utf-8")
+        missing = [marker for marker in markers if marker not in text]
+        if missing:
+            raise AssertionError(f"{rel} is missing required marker(s): {', '.join(missing)}")
 
 
 def _validate_endings(root: Path) -> None:
@@ -127,7 +164,8 @@ def _validate_requirements(root: Path) -> None:
 
 def validate_root(root: Path) -> None:
     root = root.resolve()
-    _validate_line_counts(root)
+    _validate_required_files(root)
+    _validate_required_text_markers(root)
     _validate_endings(root)
     _validate_formats(root)
     _validate_requirements(root)

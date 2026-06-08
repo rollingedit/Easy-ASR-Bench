@@ -10,22 +10,22 @@ from pathlib import Path
 
 
 DEFAULT_EXPECTATIONS = {
-    "setup.bat": 200,
-    "installer/install.ps1": 250,
-    "scripts/validate_physical_files.py": 150,
-    "scripts/verify_github_release.py": 150,
-    ".github/workflows/release-gate.yml": 75,
-    ".github/workflows/publish-release.yml": 50,
-    "app/model_scanner.py": 600,
-    "app/results_writer.py": 100,
-    "app/scoring.py": 80,
+    "setup.bat": "any",
+    "installer/install.ps1": "any",
+    "scripts/validate_physical_files.py": "lf",
+    "scripts/verify_github_release.py": "lf",
+    ".github/workflows/release-gate.yml": "lf",
+    ".github/workflows/publish-release.yml": "lf",
+    "app/model_scanner.py": "lf",
+    "app/results_writer.py": "lf",
+    "app/scoring.py": "lf",
 }
 
 
 @dataclass(frozen=True)
 class Expectation:
     path: str
-    minimum_lines: int
+    minimum_lines: int | None = None
     line_ending: str = "any"
 
 
@@ -46,17 +46,27 @@ class ByteDiagnostics:
 def parse_expectation(value: str) -> Expectation:
     try:
         parts = value.rsplit(":", 2)
-        if len(parts) == 2:
-            path, minimum = parts
+        if len(parts) == 1:
+            path = parts[0]
+            minimum = None
             line_ending = "any"
+        elif len(parts) == 2:
+            path, second = parts
+            if second.lower() in {"any", "crlf", "lf"}:
+                minimum = None
+                line_ending = second
+            else:
+                minimum = int(second)
+                line_ending = "any"
         else:
             path, minimum, line_ending = parts
+            minimum = int(minimum)
         line_ending = line_ending.lower()
         if line_ending not in {"any", "crlf", "lf"}:
             raise ValueError
-        return Expectation(path=path, minimum_lines=int(minimum), line_ending=line_ending)
+        return Expectation(path=path, minimum_lines=minimum, line_ending=line_ending)
     except ValueError as exc:
-        raise argparse.ArgumentTypeError("--expect values must look like path:min_lines[:any|crlf|lf]") from exc
+        raise argparse.ArgumentTypeError("--expect values must look like path[:min_lines][:any|crlf|lf]") from exc
 
 
 def raw_url(repo: str, ref: str, path: str) -> str:
@@ -107,20 +117,22 @@ def format_diagnostics(diagnostics: ByteDiagnostics) -> str:
             f"  physical_line_count_universal: {diagnostics.physical_line_count_universal}",
             f"  first_32_bytes_hex: {diagnostics.first_32_bytes_hex}",
             f"  last_32_bytes_hex: {diagnostics.last_32_bytes_hex}",
-            "  note: raw GitHub serves canonical Git blob bytes; universal physical line count is the release gate.",
+            "  note: raw GitHub serves canonical Git blob bytes; line counts are diagnostics, not behavior proof.",
         ]
     )
 
 
-def validate_bytes(path: str, data: bytes, minimum_lines: int, line_ending: str = "any") -> ByteDiagnostics:
+def validate_bytes(path: str, data: bytes, minimum_lines: int | None = None, line_ending: str = "any") -> ByteDiagnostics:
     diagnostics = byte_diagnostics(path, data)
+    if diagnostics.byte_count == 0:
+        raise AssertionError(f"{path} is empty in raw GitHub bytes")
     if b"\r" in data.replace(b"\r\n", b""):
         raise AssertionError(f"{path} contains CR-only line endings in raw GitHub bytes")
     if line_ending == "crlf" and diagnostics.bare_lf_count:
         raise AssertionError(f"{path} must use CRLF line endings in raw GitHub bytes")
     if line_ending == "lf" and diagnostics.crlf_count:
         raise AssertionError(f"{path} must use LF line endings in raw GitHub bytes")
-    if diagnostics.physical_line_count_universal < minimum_lines:
+    if minimum_lines is not None and diagnostics.physical_line_count_universal < minimum_lines:
         raise AssertionError(
             f"{path} has {diagnostics.physical_line_count_universal} raw physical lines, expected at least {minimum_lines}"
         )
@@ -168,15 +180,15 @@ def main() -> int:
     parser.add_argument("--repo", required=True, help="owner/repo")
     parser.add_argument("--commit", help="Commit SHA to fetch from raw.githubusercontent.com")
     parser.add_argument("--ref", help="Tag, branch, or commit to fetch from raw.githubusercontent.com")
-    parser.add_argument("--expect", action="append", type=parse_expectation, help="path:min_lines[:any|crlf|lf]; may be repeated")
+    parser.add_argument("--expect", action="append", type=parse_expectation, help="path[:min_lines][:any|crlf|lf]; may be repeated")
     parser.add_argument("--zip", type=Path, help="Optional release ZIP whose matching source files must byte-match raw GitHub")
     args = parser.parse_args()
     ref = args.ref or args.commit
     if not ref:
         parser.error("--ref or --commit is required")
     expectations = args.expect or [
-        Expectation(path, lines, "any" if path.endswith((".bat", ".cmd", ".ps1")) else "lf")
-        for path, lines in DEFAULT_EXPECTATIONS.items()
+        Expectation(path, None, line_ending)
+        for path, line_ending in DEFAULT_EXPECTATIONS.items()
     ]
     try:
         diagnostics, raw_files = validate_with_data(args.repo, ref, expectations)

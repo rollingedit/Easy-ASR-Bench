@@ -2,16 +2,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import importlib.util
+import importlib.metadata
+import json
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 from .dependency_specs import CORE_IMPORTS
+from .dependency_specs import parse_requirement_packages
 from .ctranslate2_probe import ctranslate2_cuda_available
+
+
+VC_REDIST_PACKAGE_ID = "Microsoft.VCRedist.2015+.x64"
+VC_REDIST_REPAIR_COMMAND = f"winget install -e --id {VC_REDIST_PACKAGE_ID} --accept-package-agreements --accept-source-agreements"
+VC_REDIST_REGISTRY_KEYS = (
+    r"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64",
+    r"SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\x64",
+)
 
 
 @dataclass(frozen=True)
@@ -19,6 +31,7 @@ class DependencyGroup:
     modules: tuple[str, ...]
     requirement_file: str
     description: str
+    install_kind: str = "pip"
 
 
 @dataclass(frozen=True)
@@ -49,7 +62,7 @@ DEPENDENCY_GROUPS = {
         "Hugging Face safetensors ASR support with common audio/tokenizer extras",
     ),
     "faster_whisper": DependencyGroup(
-        ("faster_whisper", "ctranslate2"),
+        ("faster_whisper", "ctranslate2", "pkg_resources"),
         "requirements/faster_whisper.txt",
         "faster-whisper / CTranslate2 ASR support",
     ),
@@ -66,7 +79,13 @@ DEPENDENCY_GROUPS = {
     "llama_cpp": DependencyGroup(
         ("llama_cpp",),
         "requirements/llama_cpp.txt",
-        "GGUF ASR+mmproj and text LLM reference/correction support",
+        "GGUF text LLM reference/correction support",
+    ),
+    "llama_mtmd": DependencyGroup(
+        (),
+        "",
+        "GGUF ASR+mmproj native MTMD runtime support",
+        install_kind="native_tool",
     ),
 }
 
@@ -127,12 +146,91 @@ ACCELERATOR_OVERRIDES = {
     },
 }
 
+ACCELERATOR_PACKAGE_CONFLICTS = {
+    ("onnx", "cuda"): ("onnxruntime", "onnxruntime-directml", "onnxruntime-openvino"),
+    ("onnx", "directml"): ("onnxruntime", "onnxruntime-gpu", "onnxruntime-openvino"),
+    ("onnx", "openvino"): ("onnxruntime", "onnxruntime-gpu", "onnxruntime-directml"),
+}
+
+ACCELERATOR_REPLACED_REQUIREMENTS = {
+    ("onnx", "cuda"): ("onnxruntime",),
+    ("onnx", "directml"): ("onnxruntime",),
+    ("onnx", "openvino"): ("onnxruntime",),
+}
+
+ACCELERATOR_FORCE_REINSTALL = {
+    ("onnx", "cuda"),
+    ("onnx", "directml"),
+    ("onnx", "openvino"),
+}
+
+ONNX_PROVIDER_COMPATIBILITY = {
+    ("onnx", "cuda"): {
+        "package": "onnxruntime-gpu",
+        "provider": "CUDAExecutionProvider",
+        "config_key": "onnxruntime_cuda_compatibility_versions",
+        "versions": ("1.24.0", "1.23.2", "1.22.0", "1.21.1", "1.20.2", "1.19.2", "1.18.1", "1.17.3"),
+    },
+    ("onnx", "directml"): {
+        "package": "onnxruntime-directml",
+        "provider": "DmlExecutionProvider",
+        "config_key": "onnxruntime_directml_compatibility_versions",
+        "versions": ("1.24.4", "1.24.3", "1.24.2", "1.24.1", "1.23.0", "1.22.0", "1.21.1", "1.20.1", "1.19.2", "1.18.1", "1.17.3"),
+    },
+    ("onnx", "openvino"): {
+        "package": "onnxruntime-openvino",
+        "provider": "OpenVINOExecutionProvider",
+        "config_key": "onnxruntime_openvino_compatibility_versions",
+        "versions": ("1.24.0", "1.23.0", "1.22.0", "1.21.1", "1.20.1", "1.19.2", "1.18.1", "1.17.3"),
+    },
+}
+
 
 def missing_modules(group: str) -> list[str]:
     metadata = DEPENDENCY_GROUPS.get(group)
     if metadata is None:
         return []
+    if metadata.install_kind == "native_tool":
+        if group == "llama_mtmd" and not gguf_asr_runtime_available():
+            return ["llama-mtmd-cli or llama-cpp-python Qwen3ASRChatHandler"]
+        return []
+    missing = _missing_import_modules(metadata)
+    missing.extend(requirement_version_issues([metadata.requirement_file]))
+    return sorted(set(missing))
+
+
+def _missing_import_modules(metadata: DependencyGroup) -> list[str]:
     return [module for module in metadata.modules if not module_available(module)]
+
+
+def requirement_version_issues(requirement_files: list[str], ignored_packages: set[str] | None = None) -> list[str]:
+    project_root = Path(__file__).resolve().parent.parent
+    issues: list[str] = []
+    ignored = {package.lower() for package in (ignored_packages or set())}
+    for requirement_file in requirement_files:
+        path = project_root / requirement_file
+        if not path.exists():
+            continue
+        for requirement in parse_requirement_packages(path.read_text(encoding="utf-8")):
+            try:
+                from packaging.requirements import Requirement
+            except Exception:
+                continue
+            try:
+                parsed = Requirement(requirement.raw)
+            except Exception:
+                continue
+            if parsed.name.lower() in ignored:
+                continue
+            if not parsed.specifier:
+                continue
+            try:
+                installed = importlib.metadata.version(parsed.name)
+            except importlib.metadata.PackageNotFoundError:
+                continue
+            if installed not in parsed.specifier:
+                issues.append(f"{parsed.name}{parsed.specifier} (installed {installed})")
+    return issues
 
 
 def module_available(module: str) -> bool:
@@ -142,12 +240,37 @@ def module_available(module: str) -> bool:
         return False
 
 
+def distribution_installed(package: str) -> bool:
+    try:
+        importlib.metadata.version(package)
+        return True
+    except importlib.metadata.PackageNotFoundError:
+        return False
+
+
 def missing_modules_for_config(group: str, config: dict) -> list[str]:
-    missing = missing_modules(group)
+    metadata = DEPENDENCY_GROUPS.get(group)
+    if metadata is None:
+        return []
+    if metadata.install_kind == "native_tool":
+        if group == "llama_mtmd" and not gguf_asr_runtime_available(config):
+            return ["llama-mtmd-cli or llama-cpp-python Qwen3ASRChatHandler"]
+        return []
     decision = acceleration_install_decision(config, group)
     accelerator = decision.get("accelerator")
+    ignored_base_requirements = (
+        set(ACCELERATOR_REPLACED_REQUIREMENTS.get((group, str(accelerator)), ()))
+        if decision["use_accelerator"]
+        else set()
+    )
+    missing = _missing_import_modules(metadata)
+    missing.extend(requirement_version_issues([metadata.requirement_file], ignored_packages=ignored_base_requirements))
     if not decision["use_accelerator"]:
         return missing
+    for package in ACCELERATOR_PACKAGE_CONFLICTS.get((group, str(accelerator)), ()):
+        if distribution_installed(package):
+            missing.append(f"{package} conflicts with {accelerator} package")
+    missing.extend(requirement_version_issues(list(decision.get("requirement_files", []))))
     if accelerator == "cuda" and group in {"transformers_cpu", "openai_whisper"} and not torch_cuda_available():
         missing.append("torch CUDA wheel")
     elif accelerator == "cuda" and group == "onnx" and not onnx_provider_available("CUDAExecutionProvider"):
@@ -162,7 +285,12 @@ def missing_modules_for_config(group: str, config: dict) -> list[str]:
                 missing.append(module)
         if not ctranslate2_cuda_available():
             missing.append("CTranslate2 CUDA backend")
-    elif accelerator in {"cuda", "vulkan"} and group == "llama_cpp" and not llama_cpp_gpu_capable():
+    elif (
+        accelerator in {"cuda", "vulkan"}
+        and group == "llama_cpp"
+        and (accelerator == "cuda" or provider_explicitly_requested(config, accelerator))
+        and not llama_cpp_gpu_capable()
+    ):
         missing.append("llama-cpp-python GPU offload build")
     return sorted(set(missing))
 
@@ -183,14 +311,175 @@ def onnx_cuda_provider_available() -> bool:
 
 
 def onnx_provider_available(provider: str) -> bool:
-    if importlib.util.find_spec("onnxruntime") is None:
-        return False
-    try:
-        import onnxruntime as ort
+    providers, _message = onnxruntime_available_providers()
+    return provider in providers
 
-        return provider in list(ort.get_available_providers())
+
+def _windows_error_mode_prefix() -> str:
+    return (
+        "import sys\n"
+        "if sys.platform == 'win32':\n"
+        "    import ctypes\n"
+        "    ctypes.windll.kernel32.SetErrorMode(0x0001 | 0x0002 | 0x8000)\n"
+    )
+
+
+def _run_json_python_probe(code: str, timeout: int = 15) -> tuple[dict, str]:
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-c", _windows_error_mode_prefix() + code],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {}, f"{type(exc).__name__}: {exc}"
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or f"exit {completed.returncode}").strip()
+        return {}, detail
+    try:
+        return json.loads(completed.stdout.strip().splitlines()[-1]), ""
+    except (json.JSONDecodeError, IndexError) as exc:
+        return {}, f"{type(exc).__name__}: {exc}"
+
+
+def onnxruntime_available_providers() -> tuple[list[str], str]:
+    if importlib.util.find_spec("onnxruntime") is None:
+        return [], "onnxruntime is not installed."
+    payload, error = _run_json_python_probe(
+        """
+import json
+try:
+    import onnxruntime as ort
+    print(json.dumps({"ok": True, "providers": list(ort.get_available_providers())}))
+except Exception as exc:
+    print(json.dumps({"ok": False, "providers": [], "error": str(exc), "error_type": type(exc).__name__}))
+"""
+    )
+    if not payload:
+        return [], f"ONNX Runtime provider probe failed in isolated process: {error}"
+    providers = list(payload.get("providers", []) or [])
+    if payload.get("ok"):
+        return providers, ""
+    return providers, f"ONNX Runtime provider probe failed: {payload.get('error_type', 'Error')}: {payload.get('error', '')}"
+
+
+def visual_cpp_redistributable_status(include_winget: bool = False) -> dict:
+    status = {
+        "installed": False,
+        "version": "",
+        "source": "",
+        "repair_command": VC_REDIST_REPAIR_COMMAND,
+        "details": [],
+    }
+    if sys.platform != "win32":
+        return {**status, "source": "not_windows", "details": ["Visual C++ Redistributable probing is only applicable on Windows."]}
+    try:
+        import winreg
+    except Exception as exc:
+        status["details"].append(f"winreg unavailable: {type(exc).__name__}: {exc}")
+    else:
+        for key_path in VC_REDIST_REGISTRY_KEYS:
+            try:
+                with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path) as key:
+                    installed = int(winreg.QueryValueEx(key, "Installed")[0])
+                    version = str(winreg.QueryValueEx(key, "Version")[0])
+            except OSError as exc:
+                status["details"].append(f"{key_path}: {type(exc).__name__}: {exc}")
+                continue
+            if installed:
+                return {
+                    **status,
+                    "installed": True,
+                    "version": version,
+                    "source": "registry",
+                    "details": [f"{key_path}: Installed={installed}; Version={version}"],
+                }
+    if include_winget:
+        try:
+            completed = subprocess.run(
+                ["winget", "list", "-e", "--id", VC_REDIST_PACKAGE_ID],
+                text=True,
+                capture_output=True,
+                timeout=20,
+            )
+        except Exception as exc:
+            status["details"].append(f"winget list failed: {type(exc).__name__}: {exc}")
+        else:
+            output = "\n".join(line.rstrip() for line in (completed.stdout + completed.stderr).splitlines() if line.strip())
+            status["details"].append(output[-2000:])
+            if completed.returncode == 0 and VC_REDIST_PACKAGE_ID.lower() in output.lower():
+                version = ""
+                for line in output.splitlines():
+                    if VC_REDIST_PACKAGE_ID in line:
+                        parts = line.split()
+                        version = next((part for part in parts if part[:2].isdigit() and "." in part), "")
+                        break
+                return {**status, "installed": True, "version": version, "source": "winget", "details": status["details"]}
+    return status
+
+
+def _huggingface_cache_dir() -> str:
+    hub_cache = os.environ.get("HF_HUB_CACHE")
+    if hub_cache:
+        return hub_cache
+    hf_home = os.environ.get("HF_HOME")
+    if hf_home:
+        return str(Path(hf_home) / "hub")
+    try:
+        from huggingface_hub import constants
+
+        return str(constants.HF_HUB_CACHE)
     except Exception:
-        return False
+        return str(Path.home() / ".cache" / "huggingface" / "hub")
+
+
+def _symlink_supported_in_temp() -> tuple[bool | None, str]:
+    if sys.platform != "win32":
+        return True, "not_windows"
+    try:
+        with tempfile.TemporaryDirectory(prefix="easy_asr_hf_symlink_probe_") as temp_dir:
+            temp_path = Path(temp_dir)
+            source = temp_path / "source.txt"
+            link = temp_path / "link.txt"
+            source.write_text("probe", encoding="utf-8")
+            os.symlink(source, link)
+            return link.exists(), "temp_probe"
+    except OSError as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+    except Exception as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+
+
+def huggingface_cache_status() -> dict:
+    disabled_warning = os.environ.get("HF_HUB_DISABLE_SYMLINKS_WARNING", "").strip().lower() in {"1", "true", "yes", "on"}
+    symlink_supported, probe_detail = _symlink_supported_in_temp()
+    status = {
+        "available": module_available("huggingface_hub"),
+        "cache_dir": _huggingface_cache_dir(),
+        "platform": sys.platform,
+        "symlink_supported": symlink_supported,
+        "symlink_probe": probe_detail,
+        "symlink_warning_disabled": disabled_warning,
+        "severity": "ok",
+        "messages": [],
+        "repair_guidance": "",
+    }
+    if sys.platform == "win32" and symlink_supported is False and not disabled_warning:
+        status["severity"] = "note"
+        status["repair_guidance"] = (
+            "Hugging Face downloads still work, but the cache may duplicate files and use more disk space. "
+            "Enable Windows Developer Mode or run setup from an elevated shell to allow symlinks, or move HF_HOME/HF_HUB_CACHE to a roomy disk."
+        )
+        status["messages"].append(
+            "Hugging Face Hub cache symlinks are not available for this user. This is a cache-space/performance note, not an ASR runtime failure."
+        )
+    elif sys.platform == "win32" and symlink_supported is False:
+        status["severity"] = "note"
+        status["messages"].append(
+            "Hugging Face Hub cache symlinks are not available, but HF_HUB_DISABLE_SYMLINKS_WARNING suppresses the upstream warning."
+        )
+    return status
 
 
 def llama_cpp_cuda_capable() -> bool:
@@ -211,6 +500,71 @@ def llama_cpp_gpu_capable() -> bool:
         return False
 
 
+LLAMA_MTMD_CLI_NAMES = ("llama-mtmd-cli.exe", "llama-mtmd-cli")
+LLAMA_CPP_WINGET_PACKAGE_ID = "ggml.llamacpp"
+LLAMA_MTMD_REPAIR_COMMAND = (
+    f"winget install -e --id {LLAMA_CPP_WINGET_PACKAGE_ID} "
+    "--accept-package-agreements --accept-source-agreements"
+)
+
+
+def llama_cpp_qwen3_asr_handler_available() -> bool:
+    try:
+        from llama_cpp.llama_chat_format import Qwen3ASRChatHandler  # noqa: F401
+
+        return True
+    except Exception:
+        return False
+
+
+def llama_mtmd_cli_status(config: dict | None = None) -> dict:
+    configured = ""
+    if config:
+        llama_cpp_config = config.get("llama_cpp", {})
+        if isinstance(llama_cpp_config, dict):
+            configured = str(llama_cpp_config.get("mtmd_cli_path", "") or "")
+    candidates: list[tuple[str, str]] = []
+    if configured:
+        candidates.append(("config", configured))
+    for name in LLAMA_MTMD_CLI_NAMES:
+        found = shutil.which(name)
+        if found:
+            candidates.append(("path", found))
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        packages_root = Path(local_app_data) / "Microsoft" / "WinGet" / "Packages"
+        if packages_root.exists():
+            for name in LLAMA_MTMD_CLI_NAMES:
+                candidates.extend(("winget_packages", str(path)) for path in packages_root.glob(f"ggml.llamacpp*/*{name}"))
+    checked: list[str] = []
+    for source, candidate in candidates:
+        if not candidate:
+            continue
+        checked.append(candidate)
+        path = Path(candidate)
+        if path.exists() and path.is_file():
+            return {
+                "available": True,
+                "path": str(path),
+                "source": source,
+                "repair_command": LLAMA_MTMD_REPAIR_COMMAND,
+                "checked": checked,
+                "qwen3_asr_handler_available": llama_cpp_qwen3_asr_handler_available(),
+            }
+    return {
+        "available": False,
+        "path": "",
+        "source": "",
+        "repair_command": LLAMA_MTMD_REPAIR_COMMAND,
+        "checked": checked,
+        "qwen3_asr_handler_available": llama_cpp_qwen3_asr_handler_available(),
+    }
+
+
+def gguf_asr_runtime_available(config: dict | None = None) -> bool:
+    return llama_cpp_qwen3_asr_handler_available() or bool(llama_mtmd_cli_status(config).get("available"))
+
+
 def group_available(group: str) -> bool:
     return not missing_modules(group)
 
@@ -218,6 +572,20 @@ def group_available(group: str) -> bool:
 def install_group(group: str, project_root: Path, use_cuda: bool = False) -> None:
     if group not in DEPENDENCY_GROUPS:
         raise KeyError(f"Unknown dependency group: {group}")
+    if group == "llama_mtmd":
+        if not gguf_asr_runtime_available():
+            subprocess.check_call(
+                [
+                    "winget",
+                    "install",
+                    "-e",
+                    "--id",
+                    LLAMA_CPP_WINGET_PACKAGE_ID,
+                    "--accept-package-agreements",
+                    "--accept-source-agreements",
+                ]
+            )
+        return
     requirement_files = [DEPENDENCY_GROUPS[group].requirement_file]
     override = CUDA_INSTALL_OVERRIDES.get(group) if use_cuda else None
     if override:
@@ -229,7 +597,78 @@ def install_group(group: str, project_root: Path, use_cuda: bool = False) -> Non
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", str(req)])
 
 
+def _run_dependency_command(command: list[str], env: dict[str, str] | None, log_handle) -> None:
+    if log_handle is None:
+        subprocess.check_call(command, env=env)
+        return
+    log_handle.write(f"\n> {' '.join(command)}\n")
+    completed = subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    log_handle.write(completed.stdout or "")
+    if completed.returncode != 0:
+        raise subprocess.CalledProcessError(completed.returncode, command, output=completed.stdout)
+
+
+def _repair_onnx_provider_compatibility(group: str, decision: dict, config: dict, env: dict[str, str] | None, log_handle) -> dict:
+    accelerator = str(decision.get("accelerator"))
+    metadata = ONNX_PROVIDER_COMPATIBILITY.get((group, accelerator))
+    if metadata is None:
+        return decision
+    provider = str(metadata["provider"])
+    providers, provider_error = onnxruntime_available_providers()
+    if provider in providers:
+        return {**decision, "provider_probe_error": provider_error}
+    versions = config.get("dependency_install", {}).get(str(metadata["config_key"])) or list(metadata["versions"])
+    errors: list[str] = []
+    for version in versions:
+        package_spec = f"{metadata['package']}=={version}"
+        command = [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", "--no-deps", package_spec]
+        _run_dependency_command(command, env, log_handle)
+        providers, provider_error = onnxruntime_available_providers()
+        if provider in providers:
+            _run_dependency_command([sys.executable, "-m", "pip", "install", package_spec], env, log_handle)
+            return {
+                **decision,
+                "provider_compatibility_repair": package_spec,
+                "provider_probe_error": "",
+            }
+        errors.append(f"{package_spec}: {provider_error or f'{provider} not listed in {providers}'}")
+    return {
+        **decision,
+        "provider_compatibility_failed": errors,
+        "provider_probe_error": errors[-1] if errors else provider_error,
+    }
+
+
 def install_group_for_config(group: str, project_root: Path, config: dict, log_path: Path | None = None) -> dict:
+    if group == "llama_mtmd":
+        log_handle = None
+        if log_path is not None:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_handle = log_path.open("a", encoding="utf-8", newline="\n")
+            log_handle.write("Installing native dependency group llama_mtmd\n")
+        try:
+            if gguf_asr_runtime_available(config):
+                return {"use_accelerator": False, "accelerator": None, "native_tool": "llama-mtmd-cli", "already_available": True}
+            command = [
+                "winget",
+                "install",
+                "-e",
+                "--id",
+                LLAMA_CPP_WINGET_PACKAGE_ID,
+                "--accept-package-agreements",
+                "--accept-source-agreements",
+            ]
+            _run_dependency_command(command, None, log_handle)
+            return {
+                "use_accelerator": False,
+                "accelerator": None,
+                "native_tool": "llama-mtmd-cli",
+                "repair_command": LLAMA_MTMD_REPAIR_COMMAND,
+                "post_install_status": llama_mtmd_cli_status(config),
+            }
+        finally:
+            if log_handle is not None:
+                log_handle.close()
     decision = acceleration_install_decision(config, group)
     requirement_files = [DEPENDENCY_GROUPS[group].requirement_file]
     pip_args: list[str] | None = None
@@ -268,23 +707,23 @@ def install_group_for_config(group: str, project_root: Path, config: dict, log_p
             log_handle.write(f"Requirement files: {', '.join(requirement_files)}\n")
     try:
         commands: list[list[str]] = []
+        for package in ACCELERATOR_PACKAGE_CONFLICTS.get((group, str(decision.get("accelerator"))), ()):
+            if distribution_installed(package):
+                commands.append([sys.executable, "-m", "pip", "uninstall", "-y", package])
         if pip_args:
-            commands.append([sys.executable, "-m", "pip", "install", *pip_args])
+            install_command = [sys.executable, "-m", "pip", "install", *pip_args]
+            commands.append(install_command)
         else:
             for requirement_file in requirement_files:
                 req = project_root / requirement_file
                 if not req.exists():
                     raise FileNotFoundError(f"Missing dependency requirement file: {req}")
-                commands.append([sys.executable, "-m", "pip", "install", "-r", str(req)])
+                install_command = [sys.executable, "-m", "pip", "install", "-r", str(req)]
+                commands.append(install_command)
         for command in commands:
-            if log_handle is None:
-                subprocess.check_call(command, env=env)
-            else:
-                log_handle.write(f"\n> {' '.join(command)}\n")
-                completed = subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-                log_handle.write(completed.stdout or "")
-                if completed.returncode != 0:
-                    raise subprocess.CalledProcessError(completed.returncode, command, output=completed.stdout)
+            _run_dependency_command(command, env, log_handle)
+        if decision["use_accelerator"]:
+            decision = _repair_onnx_provider_compatibility(group, decision, config, env, log_handle)
     finally:
         if log_handle is not None:
             log_handle.close()
@@ -294,6 +733,10 @@ def install_group_for_config(group: str, project_root: Path, config: dict, log_p
 def recovery_command(group: str, use_cuda: bool = False) -> str:
     metadata = DEPENDENCY_GROUPS.get(group)
     if metadata is None:
+        return ""
+    if metadata.install_kind == "native_tool":
+        if group == "llama_mtmd":
+            return LLAMA_MTMD_REPAIR_COMMAND
         return ""
     requirement_files = [metadata.requirement_file]
     if use_cuda and group in CUDA_INSTALL_OVERRIDES:
@@ -444,6 +887,9 @@ def llama_cpp_wheel_index_available(index_url: str, timeout_seconds: int = 10) -
 
 
 def recovery_command_for_config(group: str, config: dict) -> str:
+    metadata = DEPENDENCY_GROUPS.get(group)
+    if metadata and metadata.install_kind == "native_tool":
+        return recovery_command(group)
     decision = acceleration_install_decision(config, group)
     if not decision["use_accelerator"]:
         return recovery_command(group)
@@ -543,6 +989,11 @@ def cuda_requested(config: dict) -> bool:
     return provider in {"auto", "cuda"} or bool(runtime.get("prefer_gpu", True))
 
 
+def provider_explicitly_requested(config: dict, provider: str) -> bool:
+    runtime = config.get("runtime", {})
+    return str(runtime.get("provider", "auto")).lower() == provider
+
+
 def cuda_install_decision(config: dict, group: str) -> dict:
     decision = acceleration_install_decision(config, group)
     return {
@@ -638,10 +1089,13 @@ def dependency_status(config: dict | None = None) -> dict[str, dict]:
             "missing": missing,
             "description": metadata.description,
             "requirement_file": metadata.requirement_file,
+            "install_kind": metadata.install_kind,
             "recovery_command": recovery_command(group),
             "cuda_recovery_command": cuda_recovery,
             "accelerator_recovery_command": recovery_command_for_config(group, config) if config is not None else "",
         }
+        if group == "llama_mtmd":
+            status[group]["runtime_status"] = llama_mtmd_cli_status(config)
     return status
 
 
@@ -666,7 +1120,10 @@ def cuda_diagnostics() -> dict:
         "vulkan_detected": vulkan_detected(),
         "vulkan_sdk_detected": vulkan_sdk_detected(),
         "vulkan_build_tooling_detected": vulkan_build_tooling_detected(),
+        "visual_cpp_redistributable": visual_cpp_redistributable_status(),
+        "huggingface_cache": huggingface_cache_status(),
         "ctranslate2_cuda_available": ctranslate2_cuda_available(),
+        "llama_mtmd_cli": llama_mtmd_cli_status(),
     }
     if diagnostics["torch_installed"]:
         try:
@@ -679,22 +1136,23 @@ def cuda_diagnostics() -> dict:
         except Exception as exc:  # pragma: no cover - defensive around third-party import failures.
             diagnostics["messages"].append(f"Torch CUDA check failed: {exc}")
     if diagnostics["onnxruntime_installed"]:
-        try:
-            import onnxruntime as ort
-
-            providers = list(ort.get_available_providers())
-            diagnostics["onnxruntime_providers"] = providers
-            diagnostics["onnx_cuda_available"] = "CUDAExecutionProvider" in providers
-            diagnostics["onnx_directml_available"] = "DmlExecutionProvider" in providers
-            diagnostics["onnx_openvino_available"] = "OpenVINOExecutionProvider" in providers
-        except Exception as exc:  # pragma: no cover - defensive around third-party import failures.
-            diagnostics["messages"].append(f"ONNX Runtime provider check failed: {exc}")
+        providers, provider_error = onnxruntime_available_providers()
+        diagnostics["onnxruntime_providers"] = providers
+        diagnostics["onnx_cuda_available"] = "CUDAExecutionProvider" in providers
+        diagnostics["onnx_directml_available"] = "DmlExecutionProvider" in providers
+        diagnostics["onnx_openvino_available"] = "OpenVINOExecutionProvider" in providers
+        if provider_error:
+            diagnostics["messages"].append(provider_error)
     if diagnostics["torch_installed"] and not diagnostics["torch_cuda_available"]:
         diagnostics["messages"].append("Torch is installed, but Torch CUDA is not available. Transformers models will run on CPU.")
     if diagnostics["onnxruntime_installed"] and not diagnostics["onnx_cuda_available"]:
         diagnostics["messages"].append("ONNX Runtime is installed, but CUDAExecutionProvider is not available. ONNX models will run on CPUExecutionProvider.")
     if diagnostics["vulkan_detected"] and not diagnostics["vulkan_sdk_detected"]:
         diagnostics["messages"].append("Vulkan runtime is visible. GGUF Vulkan setup will try the prebuilt llama-cpp-python Vulkan wheel first; local source builds require the Vulkan SDK.")
+    if sys.platform == "win32" and not diagnostics["visual_cpp_redistributable"]["installed"]:
+        diagnostics["messages"].append("Microsoft Visual C++ 2015-2022 Redistributable x64 was not detected. Native ASR backends such as CTranslate2, ONNX Runtime, and llama-cpp-python may fail to import until it is installed.")
+    for message in diagnostics.get("huggingface_cache", {}).get("messages", []):
+        diagnostics["messages"].append(message)
     if module_available("ctranslate2") and not diagnostics["ctranslate2_cuda_available"]:
         diagnostics["messages"].append("CTranslate2 is installed, but its CUDA backend is not available. faster-whisper will run on CPU.")
     return diagnostics

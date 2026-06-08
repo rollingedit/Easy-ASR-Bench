@@ -52,6 +52,12 @@ def strict_words(text: str) -> list[str]:
 
 
 def edit_distance(a: list[str] | str, b: list[str] | str) -> int:
+    if a == b:
+        return 0
+    if not a:
+        return len(b)
+    if not b:
+        return len(a)
     previous = list(range(len(b) + 1))
     for i, left in enumerate(a, 1):
         current = [i]

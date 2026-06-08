@@ -17,7 +17,7 @@ Easy ASR Bench gives you a practical answer to:
 Which local transcription model is best for my files, on my machine?
 ```
 
-It runs every selected ASR model on the same normalized audio and the same chunk boundaries, then compares transcript differences, speed, RAM, VRAM when CUDA metrics are available, and errors.
+It runs every selected ASR model on the same normalized audio and the same chunk boundaries, then compares transcript differences, speed, RAM, VRAM when Windows GPU counters or Torch CUDA metrics are available, and errors.
 
 ## Supported Model Types
 
@@ -177,7 +177,7 @@ Workflow:
 6. Paste that JSON into the reference box.
 7. Click **Validate Reference and Score Models**.
 
-The HTML report scores all models against that LLM-corrected reference and shows strict WER, normalized WER, CER, timing, memory, and pairwise differences.
+The HTML report scores all models against that LLM-corrected reference and shows strict WER, normalized WER, CER, balanced rank, timing, memory, and pairwise differences. Before a corrected reference is pasted, the report shows a runtime-only speed/memory ranking and labels it as not measuring transcript quality.
 
 This is a useful benchmark reference, not human ground truth.
 

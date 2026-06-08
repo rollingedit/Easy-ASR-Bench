@@ -1,0 +1,34 @@
+{
+  "schema": "easy_asr_bench.runtime_matrix.real_media_fixtures.v1",
+  "fixtures": {
+    "wikimedia_cc0_word_wav": {
+      "kind": "real_audio_wav",
+      "source_page": "https://es.wiktionary.org/wiki/Archivo:LL-Q1321_(spa)-Rodrigo5260-Kabul.wav",
+      "license": "CC0 / public domain dedication as reported by Wikimedia Commons file page",
+      "notes": "Small real spoken-word WAV fixture. Use for media normalization and ASR smoke when a known transcript is needed.",
+      "expected_text": "Kabul"
+    },
+    "wikimedia_public_domain_speech_ogg": {
+      "kind": "real_audio_ogg",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Alexander_Graham_Bell_speaking.ogg",
+      "license": "Public Domain Mark 1.0 as reported by Wikimedia Commons file page",
+      "notes": "Historic real speech OGG fixture. Useful for decode/normalization coverage, not modern ASR WER thresholds."
+    },
+    "samplefile_h264_aac_mp4": {
+      "kind": "real_video_mp4_with_audio",
+      "source_page": "https://samplefile.com/samples/video/mp4/",
+      "download_url": "https://samplefile.com/samples/download/video/mp4/mp4_h264_aac_360p_sample.mp4/",
+      "license": "SampleFile.com public sample fixture; verify current site terms before release use.",
+      "expected_sha256_prefix": "67a9b99747df",
+      "notes": "Small H.264 + AAC MP4 fixture with audio track."
+    },
+    "samplefile_h264_no_audio_mp4": {
+      "kind": "real_video_mp4_no_audio",
+      "source_page": "https://samplefile.com/samples/video/mp4/",
+      "download_url": "https://samplefile.com/samples/download/video/mp4/mp4_h264_no_audio_240p_sample.mp4/",
+      "license": "SampleFile.com public sample fixture; verify current site terms before release use.",
+      "expected_sha256_prefix": "d61f476d5774",
+      "notes": "Small valid MP4 fixture with no audio track for no-audio failure rows."
+    }
+  }
+}

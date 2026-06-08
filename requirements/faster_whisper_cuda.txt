@@ -1,4 +1,5 @@
-faster-whisper
-ctranslate2
+faster-whisper>=1.2,<1.3
+ctranslate2>=4.4,<4.9
+setuptools>=65,<81
 nvidia-cublas-cu12
 nvidia-cudnn-cu12

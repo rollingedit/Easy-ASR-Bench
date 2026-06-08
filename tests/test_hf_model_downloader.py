@@ -175,6 +175,38 @@ def test_build_choices_pairs_asr_gguf_with_matching_projector():
     assert "No matching mmproj" in q4.notes[0]
 
 
+def test_build_choices_pairs_real_qwen_infix_mmproj_projector():
+    files = [
+        "Qwen3-ASR-0.6B.Q4_K_M.gguf",
+        "Qwen3-ASR-0.6B.mmproj-Q8_0.gguf",
+        "Qwen3-ASR-0.6B.Q2_K.gguf",
+    ]
+
+    choices = build_download_choices(files, HFModelRef("mradermacher/Qwen3-ASR-0.6B-GGUF"))
+
+    q4 = next(choice for choice in choices if "Q4_K_M" in choice.label)
+    assert q4.task_hint == "asr_audio"
+    assert q4.files == ("Qwen3-ASR-0.6B.Q4_K_M.gguf", "Qwen3-ASR-0.6B.mmproj-Q8_0.gguf")
+    assert "mmproj-Q8_0" in q4.label
+
+
+def test_build_choices_splits_real_qwen_multiple_projectors_into_exact_pairs():
+    files = [
+        "Qwen3-ASR-0.6B.Q4_K_M.gguf",
+        "Qwen3-ASR-0.6B.mmproj-Q8_0.gguf",
+        "Qwen3-ASR-0.6B.mmproj-f16.gguf",
+    ]
+
+    choices = build_download_choices(files, HFModelRef("mradermacher/Qwen3-ASR-0.6B-GGUF"))
+
+    q4_choices = [choice for choice in choices if "Q4_K_M" in choice.label and choice.task_hint == "asr_audio"]
+    assert len(q4_choices) == 2
+    assert {choice.files for choice in q4_choices} == {
+        ("Qwen3-ASR-0.6B.Q4_K_M.gguf", "Qwen3-ASR-0.6B.mmproj-Q8_0.gguf"),
+        ("Qwen3-ASR-0.6B.Q4_K_M.gguf", "Qwen3-ASR-0.6B.mmproj-f16.gguf"),
+    }
+
+
 def test_build_choices_marks_regular_gguf_as_reference_llm():
     files = ["BF16/Qwen3.5-27B-BF16.gguf", "Q4_K_M/Qwen3.5-27B-Q4_K_M.gguf"]
 
@@ -329,6 +361,33 @@ def test_download_choice_expands_sharded_safetensors_index(tmp_path: Path, monke
     assert tmp_path / "model-00002-of-00002.safetensors" in downloaded
 
 
+def test_download_choice_writes_manifest_for_real_qwen_asr_gguf_pair(tmp_path: Path, monkeypatch):
+    def fake_download(repo_id: str, revision: str | None, filename: str, destination: Path, relative_name: str | None = None) -> Path:
+        path = destination / (relative_name or filename)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"gguf")
+        return path
+
+    monkeypatch.setattr("app.hf_model_downloader._download_file", fake_download)
+    choice = DownloadChoice(
+        label="Audio/ASR GGUF: Qwen3-ASR-0.6B.Q4_K_M + Qwen3-ASR-0.6B.mmproj-Q8_0.gguf",
+        kind="gguf",
+        primary_files=("Qwen3-ASR-0.6B.Q4_K_M.gguf",),
+        files=("Qwen3-ASR-0.6B.Q4_K_M.gguf", "Qwen3-ASR-0.6B.mmproj-Q8_0.gguf"),
+        task_hint="asr_audio",
+    )
+
+    downloaded = download_choice(HFModelRef("mradermacher/Qwen3-ASR-0.6B-GGUF"), choice, tmp_path, print_func=lambda _: None)
+
+    manifest_path = tmp_path / "model_package.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest_path in downloaded
+    assert payload["artifacts"] == {
+        "main_model": "Qwen3-ASR-0.6B.Q4_K_M.gguf",
+        "projector": "Qwen3-ASR-0.6B.mmproj-Q8_0.gguf",
+    }
+
+
 def test_download_choice_skips_existing_local_files(tmp_path: Path, monkeypatch):
     (tmp_path / "config.json").write_text("already here", encoding="utf-8")
     downloaded: list[str] = []
@@ -416,6 +475,42 @@ def test_destination_for_split_gguf_removes_part_suffix(tmp_path: Path):
     destination = destination_for(tmp_path, HFModelRef("unsloth/Qwen3.5-27B-GGUF", "main", "BF16"), choice)
 
     assert destination == tmp_path / "unsloth__Qwen3.5-27B-GGUF__Qwen3.5-27B-BF16"
+
+
+def test_destination_for_bounds_long_repo_and_package_names(tmp_path: Path):
+    choice = DownloadChoice(
+        label="Audio/ASR GGUF",
+        kind="gguf",
+        primary_files=("Qwen3-ASR-0.6B.Q4_K_M.gguf",),
+        files=("Qwen3-ASR-0.6B.Q4_K_M.gguf", "Qwen3-ASR-0.6B.mmproj-Q8_0.gguf"),
+        task_hint="asr_audio",
+    )
+
+    destination = destination_for(
+        tmp_path,
+        HFModelRef("very-long-owner-name-for-windows-path-testing/Qwen3-ASR-0.6B-GGUF-with-extra-long-repo-suffix"),
+        choice,
+    )
+
+    assert len(destination.name) <= 96
+    assert destination.name.startswith("very-long-owner-name")
+    assert "Qwen3-ASR-0.6B.Q4_K_M" in destination.name
+
+
+def test_destination_for_shrinks_further_under_deep_roots(tmp_path: Path):
+    choice = DownloadChoice(
+        label="Audio/ASR GGUF",
+        kind="gguf",
+        primary_files=("Qwen3-ASR-0.6B.Q4_K_M.gguf",),
+        files=("Qwen3-ASR-0.6B.Q4_K_M.gguf", "Qwen3-ASR-0.6B.mmproj-Q8_0.gguf"),
+        task_hint="asr_audio",
+    )
+    deep_root = tmp_path / ("deep_path_segment_" * 4) / "Models"
+
+    destination = destination_for(deep_root, HFModelRef("mradermacher/Qwen3-ASR-0.6B-GGUF"), choice)
+    longest_target = destination / "Qwen3-ASR-0.6B.mmproj-Q8_0.gguf"
+
+    assert len(str(longest_target if longest_target.is_absolute() else Path.cwd() / longest_target)) <= 240
 
 
 def test_interactive_download_requires_confirmation_for_large_choice(tmp_path: Path, monkeypatch):

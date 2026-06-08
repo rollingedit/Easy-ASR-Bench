@@ -89,6 +89,7 @@ pre {{ white-space:pre-wrap; word-break:break-word; background:#f7f8fa; border:1
     <button onclick="downloadScored()">Download scored_report.json</button>
     <div id="referenceStatus"></div>
     <h2>Scoreboard</h2><div id="scoreboard"></div>
+    <h2>Runtime Ranking</h2><div id="runtimeRanking"></div>
   </section>
   <section id="pairwise"><h2>Pairwise Differences</h2><div id="pairwiseBody"></div></section>
   <section id="transcripts"><h2>Transcript Comparison</h2><div id="transcriptsBody"></div></section>
@@ -172,6 +173,7 @@ function alignment(a,b) {{
   return out.reverse();
 }}
 function balancedScore(score, metrics) {{
+  if (Number.isFinite(Number(score?.balanced_score))) return Number(score.balanced_score);
   if (!Number.isFinite(score?.normalized_wer)) return NaN;
   const quality = Math.max(0, 1 - score.normalized_wer);
   const speed = Math.min(1, Math.max(0, Number(metrics?.audio_seconds_per_wall_second || 0) / 10));
@@ -182,6 +184,7 @@ function balancedScore(score, metrics) {{
 function wer(ref,hyp,norm=true) {{ const r=words(ref,norm), h=words(hyp,norm); return edit(r,h)/Math.max(1,r.length); }}
 function fullText(run) {{ return (run.transcript_chunks || []).map(c=>c.text || '').join('\\n'); }}
 function fmt(n) {{ return Number.isFinite(n) ? n.toFixed(3) : 'n/a'; }}
+function fmtMb(n) {{ return Number.isFinite(Number(n)) ? Number(n).toFixed(0) : 'unavailable'; }}
 function renderOverview() {{
   const source = results.source || {{}};
   const runs = results.runs || [];
@@ -209,9 +212,18 @@ function renderScoreboard(scores=null) {{
     const m = run.metrics || {{}};
     const s = scores?.[run.model.candidate_id] || {{}};
     const errorBadge = run.errors?.length ? `<span class="badge error">${{run.errors.length}} error(s)</span>` : '<span class="badge ok">ok</span>';
-    return `<tr><td><span class="model-name">${{safe(run.model.display_name)}}</span><br><span class="badge">${{safe(run.model.precision)}}</span> ${{errorBadge}}</td><td>${{safe(run.model.backend)}}</td><td>${{fmt(s.normalized_wer)}}</td><td>${{fmt(s.strict_wer)}}</td><td>${{fmt(s.cer)}}</td><td>${{s.substitutions ?? 'n/a'}}</td><td>${{s.insertions ?? 'n/a'}}</td><td>${{s.deletions ?? 'n/a'}}</td><td>${{fmt(balancedScore(s,m))}}</td><td>${{fmt(m.audio_seconds_per_wall_second)}}</td><td>${{fmt(m.total_wall_seconds)}}</td><td>${{fmt(m.peak_process_memory_mb)}}</td><td>${{fmt(m.peak_vram_mb)}}</td></tr>`;
+    const vramSource = m.vram_measurement_source || 'unavailable';
+    const rank = s.balanced_rank ? `#${{safe(s.balanced_rank)}}` : 'n/a';
+    return `<tr><td><span class="model-name">${{safe(run.model.display_name)}}</span><br><span class="badge">${{safe(run.model.precision)}}</span> ${{errorBadge}}</td><td>${{safe(run.model.backend)}}</td><td>${{rank}}</td><td>${{fmt(s.normalized_wer)}}</td><td>${{fmt(s.strict_wer)}}</td><td>${{fmt(s.cer)}}</td><td>${{s.substitutions ?? 'n/a'}}</td><td>${{s.insertions ?? 'n/a'}}</td><td>${{s.deletions ?? 'n/a'}}</td><td>${{fmt(balancedScore(s,m))}}</td><td>${{fmt(m.audio_seconds_per_wall_second)}}</td><td>${{fmt(m.total_wall_seconds)}}</td><td>${{fmtMb(m.peak_process_memory_mb)}}</td><td>${{fmtMb(m.peak_vram_mb)}}<br><span class="badge">${{safe(vramSource)}}</span></td></tr>`;
   }}).join('');
-  document.getElementById('scoreboard').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Model</th><th>Backend</th><th>Norm WER</th><th>Strict WER</th><th>CER</th><th>Sub</th><th>Ins</th><th>Del</th><th>Balanced</th><th>x Real-time</th><th>Wall s</th><th>RAM MB</th><th>VRAM MB</th></tr></thead><tbody>${{rows}}</tbody></table></div>`;
+  document.getElementById('scoreboard').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Model</th><th>Backend</th><th>Balanced Rank</th><th>Norm WER</th><th>Strict WER</th><th>CER</th><th>Sub</th><th>Ins</th><th>Del</th><th>Balanced</th><th>x Real-time</th><th>Wall s</th><th>RAM MB</th><th>VRAM MB</th></tr></thead><tbody>${{rows}}</tbody></table></div><p class="empty">Balanced rank requires a corrected reference. Runtime-only rank below compares speed and memory only. VRAM uses Windows GPU Adapter Memory counters when available, which cover NVIDIA, AMD, and Intel adapters. Torch-only fallback is labeled separately.</p>`;
+  renderRuntimeRanking();
+}}
+function renderRuntimeRanking() {{
+  const ranking = results.runtime_rankings?.rows || [];
+  if (!ranking.length) {{ document.getElementById('runtimeRanking').innerHTML = '<p class="empty">No runtime ranking is available.</p>'; return; }}
+  const rows = ranking.map(row => `<tr><td>#${{safe(row.runtime_rank)}}</td><td>${{safe(row.display_name)}}</td><td>${{fmt(row.speed_percentile)}}</td><td>${{fmt(row.memory_percentile_inverse)}}</td><td>${{fmt(row.speed_audio_seconds_per_wall_second)}}</td><td>${{fmtMb(row.peak_process_memory_mb)}}</td><td>${{fmtMb(row.peak_vram_mb)}}</td></tr>`).join('');
+  document.getElementById('runtimeRanking').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Rank</th><th>Model</th><th>Speed Percentile</th><th>Memory Percentile</th><th>x Real-time</th><th>RAM MB</th><th>VRAM MB</th></tr></thead><tbody>${{rows}}</tbody></table></div><p class="empty">${{safe(results.runtime_rankings?.note || 'Runtime ranking does not measure transcript quality.')}}</p>`;
 }}
 function renderPairwise() {{
   const rows = Object.entries(results.pairwise_differences || {{}}).map(([k,v]) => `<tr><td>${{safe(k)}}</td><td>${{fmt(v.normalized_wer_like_difference)}}</td><td>${{fmt(v.cer_difference)}}</td></tr>`).join('');
