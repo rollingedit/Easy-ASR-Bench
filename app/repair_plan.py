@@ -219,6 +219,32 @@ def _probe_runtime_path(probe: dict) -> str:
     return str(runtime_status.get("path") or runtime_status.get("ffmpeg_path") or "")
 
 
+def _llama_mtmd_cached_runtime_path_mismatches(runtime_path: str, config: dict) -> list[str]:
+    if not runtime_path:
+        return []
+    mismatches = []
+    if not Path(runtime_path).is_absolute():
+        mismatches.append("runtime_path_relative")
+    configured = str(config.get("llama_cpp", {}).get("mtmd_cli_path") or "")
+    if configured:
+        try:
+            if Path(runtime_path).resolve() == Path(configured).resolve():
+                return mismatches
+        except OSError:
+            if runtime_path == configured:
+                return mismatches
+    cache_root = str(config.get("folders", {}).get("cache") or "")
+    if not cache_root:
+        return mismatches
+    try:
+        staged_root = (Path(cache_root) / "native_tools" / "llama_mtmd").resolve()
+        resolved_runtime = Path(runtime_path).resolve()
+        resolved_runtime.relative_to(staged_root)
+    except (OSError, ValueError):
+        mismatches.append("runtime_path_not_staged")
+    return mismatches
+
+
 def build_runtime_resolution(record: dict, config: dict, project_root: Path) -> dict:
     group = str(record["affected_dependency_group"])
     after = record.get("after", {})
@@ -439,6 +465,7 @@ def reusable_saved_runtime_resolution(group: str, config: dict, project_root: Pa
     if runtime_path:
         if group == "llama_mtmd":
             runtime_path_missing = not Path(runtime_path).exists()
+            mismatches.extend(_llama_mtmd_cached_runtime_path_mismatches(runtime_path, config))
         else:
             runtime_path_missing = True
     if runtime_path_missing:

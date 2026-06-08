@@ -12,6 +12,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import zipfile
 from pathlib import Path
 
 from .dependency_specs import CORE_IMPORTS
@@ -573,6 +574,7 @@ LLAMA_MTMD_REPAIR_COMMAND = (
     f"winget install -e --id {LLAMA_CPP_WINGET_PACKAGE_ID} "
     "--accept-package-agreements --accept-source-agreements"
 )
+LLAMA_CPP_RELEASES_API = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"
 
 
 def llama_cpp_qwen3_asr_handler_available() -> bool:
@@ -615,14 +617,19 @@ def probe_llama_mtmd_cli_path(path: str | Path) -> dict:
 
 
 def _llama_mtmd_stage_dir(config: dict | None, source: Path) -> Path:
+    root = _native_tools_cache_root(config)
+    safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in source.parent.name) or "llama_mtmd"
+    return root / "llama_mtmd" / safe_name
+
+
+def _native_tools_cache_root(config: dict | None) -> Path:
     cache_root = ""
     if config:
         folders = config.get("folders", {})
         if isinstance(folders, dict):
             cache_root = str(folders.get("cache") or "")
-    root = Path(cache_root) if cache_root else Path.cwd() / "Cache"
-    safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in source.parent.name) or "llama_mtmd"
-    return root / "native_tools" / "llama_mtmd" / safe_name
+    root = (Path(cache_root) if cache_root else Path.cwd() / "Cache").resolve()
+    return root / "native_tools"
 
 
 def _stage_llama_mtmd_runtime_copy(path: str | Path, config: dict | None = None) -> dict:
@@ -635,17 +642,146 @@ def _stage_llama_mtmd_runtime_copy(path: str | Path, config: dict | None = None)
             return {"ok": True, "path": str(source), "source_path": str(source), "reason": "already_staged"}
     except OSError:
         pass
-    try:
-        destination_dir.mkdir(parents=True, exist_ok=True)
-        for item in source.parent.iterdir():
-            if item.is_file():
-                shutil.copy2(item, destination_dir / item.name)
-    except Exception as exc:
-        return {"ok": False, "reason": "stage_copy_failed", "source_path": str(source), "stage_dir": str(destination_dir), "error": f"{type(exc).__name__}: {exc}"}
+    copy_failures: list[dict] = []
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    for item in source.parent.iterdir():
+        if not item.is_file():
+            continue
+        destination = destination_dir / item.name
+        try:
+            shutil.copy2(item, destination)
+        except Exception as exc:
+            if not destination.exists():
+                copy_failures.append({"path": str(item), "error": f"{type(exc).__name__}: {exc}"})
     staged = destination_dir / source.name
     if not staged.exists():
-        return {"ok": False, "reason": "staged_executable_missing", "source_path": str(source), "stage_dir": str(destination_dir)}
-    return {"ok": True, "path": str(staged), "source_path": str(source), "stage_dir": str(destination_dir), "reason": "staged_copy"}
+        return {
+            "ok": False,
+            "reason": "staged_executable_missing",
+            "source_path": str(source),
+            "stage_dir": str(destination_dir),
+            "copy_failures": copy_failures,
+        }
+    return {
+        "ok": True,
+        "path": str(staged),
+        "source_path": str(source),
+        "stage_dir": str(destination_dir),
+        "reason": "staged_copy",
+        "copy_failures": copy_failures,
+    }
+
+
+def _llama_cpp_release_asset_priority(name: str, *, prefer_vulkan: bool) -> tuple[int, str]:
+    lowered = name.lower()
+    if not (lowered.endswith(".zip") and "bin-win" in lowered and "x64" in lowered):
+        return (100, lowered)
+    if lowered.startswith("cudart-") or "server" in lowered:
+        return (90, lowered)
+    if prefer_vulkan and "vulkan" in lowered:
+        return (0, lowered)
+    if "cpu" in lowered:
+        return (1, lowered)
+    if "avx2" in lowered:
+        return (2, lowered)
+    if all(marker not in lowered for marker in ("cuda", "hip", "sycl", "kompute")):
+        return (3, lowered)
+    return (20, lowered)
+
+
+def _select_llama_cpp_windows_asset(release: dict, *, prefer_vulkan: bool) -> dict | None:
+    assets = [asset for asset in release.get("assets", []) if isinstance(asset, dict)]
+    candidates = []
+    for asset in assets:
+        name = str(asset.get("name") or "")
+        url = str(asset.get("browser_download_url") or "")
+        priority = _llama_cpp_release_asset_priority(name, prefer_vulkan=prefer_vulkan)
+        if priority[0] < 20 and url:
+            candidates.append((priority, asset))
+    if not candidates:
+        return None
+    return sorted(candidates, key=lambda item: item[0])[0][1]
+
+
+def _safe_extract_zip(archive_path: Path, destination: Path) -> None:
+    destination.mkdir(parents=True, exist_ok=True)
+    destination_root = destination.resolve()
+    with zipfile.ZipFile(archive_path) as archive:
+        for member in archive.infolist():
+            target = destination / member.filename
+            try:
+                target.resolve().relative_to(destination_root)
+            except ValueError as exc:
+                raise ValueError(f"Unsafe zip member path: {member.filename}") from exc
+        archive.extractall(destination)
+
+
+def _download_url(url: str, destination: Path, *, timeout_seconds: int = 120) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    request = urllib.request.Request(url, headers={"User-Agent": "Easy-ASR-Bench-native-tool-repair"})
+    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+        with destination.open("wb") as handle:
+            shutil.copyfileobj(response, handle)
+
+
+def _install_llama_mtmd_portable_release(config: dict | None, log_handle=None) -> dict:
+    cache_root = _native_tools_cache_root(config) / "llama_mtmd"
+    downloads = cache_root / "downloads"
+    try:
+        request = urllib.request.Request(LLAMA_CPP_RELEASES_API, headers={"User-Agent": "Easy-ASR-Bench-native-tool-repair"})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            release = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        return {"ok": False, "reason": "release_lookup_failed", "error": f"{type(exc).__name__}: {exc}", "api_url": LLAMA_CPP_RELEASES_API}
+    prefer_vulkan = vulkan_detected()
+    asset = _select_llama_cpp_windows_asset(release, prefer_vulkan=prefer_vulkan)
+    if asset is None:
+        return {
+            "ok": False,
+            "reason": "no_windows_x64_asset",
+            "release_tag": str(release.get("tag_name") or ""),
+            "asset_names": [str(item.get("name") or "") for item in release.get("assets", []) if isinstance(item, dict)],
+        }
+    name = str(asset.get("name") or "llama.cpp-windows-x64.zip")
+    url = str(asset.get("browser_download_url") or "")
+    tag = str(release.get("tag_name") or "latest")
+    safe_tag = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in tag)
+    safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in Path(name).stem)
+    archive_path = downloads / name
+    extract_dir = cache_root / f"github_{safe_tag}_{safe_name}"
+    if log_handle is not None:
+        log_handle.write(f"\nFalling back to official llama.cpp GitHub release asset: {tag} / {name}\n")
+    try:
+        if not archive_path.exists():
+            _download_url(url, archive_path)
+        _safe_extract_zip(archive_path, extract_dir)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "reason": "portable_release_install_failed",
+            "error": f"{type(exc).__name__}: {exc}",
+            "release_tag": tag,
+            "asset_name": name,
+            "asset_url": url,
+            "archive_path": str(archive_path),
+            "extract_dir": str(extract_dir),
+        }
+    cli = next((path for cli_name in LLAMA_MTMD_CLI_NAMES for path in extract_dir.rglob(cli_name) if path.is_file()), None)
+    if cli is None:
+        return {"ok": False, "reason": "llama_mtmd_cli_missing_in_release_asset", "release_tag": tag, "asset_name": name, "extract_dir": str(extract_dir)}
+    probe = probe_llama_mtmd_cli_path(cli)
+    return {
+        "ok": bool(probe.get("ok")),
+        "reason": "portable_release_probe_ok" if probe.get("ok") else "portable_release_probe_failed",
+        "path": str(cli),
+        "probe": probe,
+        "release_tag": tag,
+        "asset_name": name,
+        "asset_url": url,
+        "archive_path": str(archive_path),
+        "extract_dir": str(extract_dir),
+        "prefer_vulkan": prefer_vulkan,
+    }
 
 
 def _cached_llama_mtmd_status_after_transient_denial(config: dict | None, rejected: list[dict]) -> dict | None:
@@ -692,8 +828,6 @@ def _cached_llama_mtmd_status_after_transient_denial(config: dict | None, reject
             resolved_runtime_path = str(Path(runtime_path).resolve()).lower()
         except OSError:
             resolved_runtime_path = runtime_path.lower()
-        if resolved_runtime_path not in denied_paths:
-            continue
         if (
             saved.get("schema") == "easy_asr_bench.runtime_resolution.v1"
             and saved.get("dependency_group") == "llama_mtmd"
@@ -702,10 +836,16 @@ def _cached_llama_mtmd_status_after_transient_denial(config: dict | None, reject
             and Path(runtime_path).exists()
             and Path(runtime_path).is_file()
         ):
+            path_was_denied = resolved_runtime_path in denied_paths
+            if not path_was_denied:
+                alternate_probe = probe_llama_mtmd_cli_path(runtime_path)
+                if not alternate_probe.get("ok"):
+                    continue
             return {
                 "path": runtime_path,
                 "source_resolution_path": str(path),
                 "resolution": saved,
+                "path_was_denied": path_was_denied,
             }
     return None
 
@@ -719,6 +859,10 @@ def llama_mtmd_cli_status(config: dict | None = None) -> dict:
     candidates: list[tuple[str, str]] = []
     if configured:
         candidates.append(("config", configured))
+    cache_root = _native_tools_cache_root(config) / "llama_mtmd"
+    if cache_root.exists():
+        for name in LLAMA_MTMD_CLI_NAMES:
+            candidates.extend(("native_tools_cache", str(path)) for path in cache_root.glob(f"github*/**/{name}"))
     for name in LLAMA_MTMD_CLI_NAMES:
         found = shutil.which(name)
         if found:
@@ -768,6 +912,23 @@ def llama_mtmd_cli_status(config: dict | None = None) -> dict:
                     else:
                         rejected.append({"source": "staged_copy", "ok": False, **staged})
                 continue
+            if config and isinstance(config.get("folders"), dict) and config["folders"].get("cache") and source != "config":
+                staged = _stage_llama_mtmd_runtime_copy(path, config)
+                if staged.get("ok"):
+                    staged_probe = probe_llama_mtmd_cli_path(staged["path"])
+                    if staged_probe.get("ok"):
+                        return {
+                            "available": True,
+                            "path": str(staged["path"]),
+                            "source": "staged_copy",
+                            "probe": staged_probe,
+                            "source_probe": probe,
+                            "staged_runtime": staged,
+                            "repair_command": LLAMA_MTMD_REPAIR_COMMAND,
+                            "checked": checked,
+                            "rejected": rejected,
+                            "qwen3_asr_handler_available": llama_cpp_qwen3_asr_handler_available(),
+                        }
             return {
                 "available": True,
                 "path": str(path),
@@ -789,6 +950,18 @@ def llama_mtmd_cli_status(config: dict | None = None) -> dict:
             if staged_probe.get("ok"):
                 path = str(staged["path"])
                 source = "staged_cached_runtime_resolution_after_permission_denied"
+        if cached.get("path_was_denied") and source != "staged_cached_runtime_resolution_after_permission_denied":
+            rejected.append({"source": source, "ok": False, "reason": "cached_runtime_denied_and_staging_failed", "path": path, "staged_runtime": staged})
+            return {
+                "available": False,
+                "path": "",
+                "source": "",
+                "repair_command": LLAMA_MTMD_REPAIR_COMMAND,
+                "checked": checked,
+                "rejected": rejected,
+                "cached_runtime_resolution": cached["resolution"],
+                "qwen3_asr_handler_available": llama_cpp_qwen3_asr_handler_available(),
+            }
         return {
             "available": True,
             "path": path,
@@ -914,13 +1087,40 @@ def install_group_for_config(group: str, project_root: Path, config: dict, log_p
                 "--accept-package-agreements",
                 "--accept-source-agreements",
             ]
-            _run_dependency_command(command, None, log_handle)
+            winget_error = ""
+            try:
+                _run_dependency_command(command, None, log_handle)
+            except Exception as exc:
+                winget_error = f"{type(exc).__name__}: {exc}"
+                if log_handle is not None:
+                    log_handle.write(f"\nwinget llama.cpp repair failed: {winget_error}\n")
+            post_install_status = llama_mtmd_cli_status(config)
+            portable_repair = {}
+            if not post_install_status.get("available"):
+                portable_repair = _install_llama_mtmd_portable_release(config, log_handle=log_handle)
+                post_install_status = llama_mtmd_cli_status(config)
+                if not post_install_status.get("available") and portable_repair.get("ok"):
+                    post_install_status = {
+                        "available": True,
+                        "path": str(portable_repair.get("path") or ""),
+                        "source": "github_portable_release",
+                        "probe": portable_repair.get("probe", {}),
+                        "repair_command": LLAMA_MTMD_REPAIR_COMMAND,
+                        "checked": [],
+                        "rejected": [],
+                        "portable_repair": portable_repair,
+                        "qwen3_asr_handler_available": llama_cpp_qwen3_asr_handler_available(),
+                    }
+            if not post_install_status.get("available") and winget_error:
+                raise OSError(winget_error)
             return {
                 "use_accelerator": False,
                 "accelerator": None,
                 "native_tool": "llama-mtmd-cli",
                 "repair_command": LLAMA_MTMD_REPAIR_COMMAND,
-                "post_install_status": llama_mtmd_cli_status(config),
+                "winget_error": winget_error,
+                "portable_repair": portable_repair,
+                "post_install_status": post_install_status,
             }
         finally:
             if log_handle is not None:
