@@ -16,6 +16,7 @@ from app.results_writer import build_results, write_all_reports
 from app.scoring import wer
 from qa.run_real_tiny_model_smoke import REFERENCE_TEXT, generate_windows_sapi_wav, smoke_config
 from qa.runtime_matrix.common import dependency_resolution_report_failures, package_versions, write_row
+from qa.runtime_matrix.rows.real_public_media_faster_whisper_smollm import _download_fixture
 from qa.runtime_matrix.rows.hf_safetensors_tiny import _download_repo, _repo_for_row
 from qa.runtime_matrix.rows.smollm_reference_grading_report import SMOLLM_PATH, _smollm_candidate
 
@@ -24,7 +25,12 @@ HF_CTC_QUALITY_REPO = "facebook/wav2vec2-base-960h"
 HF_WHISPER_SHARDED_REPO = "optimum-internal-testing/tiny-random-whisper"
 
 
-def _reference_for(results: dict, text: str) -> dict:
+def _reference_for(
+    results: dict,
+    text: str,
+    uncertain_note: str = "structural tiny Safetensors fixture; not a quality-bearing human reference",
+    global_note: str = "Reference text is derived from the tiny fixture output for stable structural scoring only.",
+) -> dict:
     return {
         "schema": "easy_asr_bench.llm_reference.v1",
         "source_sha256": results["source"]["sha256"],
@@ -35,11 +41,11 @@ def _reference_for(results: dict, text: str) -> dict:
                 "start_seconds": chunk["start_seconds"],
                 "end_seconds": chunk["end_seconds"],
                 "text": text,
-                "uncertain": ["structural tiny Safetensors fixture; not a quality-bearing human reference"],
+                "uncertain": [uncertain_note],
             }
             for chunk in results.get("chunk_plan", {}).get("chunks", [])
         ],
-        "global_notes": ["Reference text is derived from the tiny fixture output for stable structural scoring only."],
+        "global_notes": [global_note],
     }
 
 
@@ -79,9 +85,32 @@ def _ensure_transformers_deps(row_id: str, evidence_dir: Path, install_deps: boo
     return None
 
 
+def _find_cached_repo(repo_id: str) -> Path | None:
+    folder_name = repo_id.replace("/", "__")
+    for root_name in ("Temp", "Models", "Cache"):
+        root = Path.cwd() / root_name
+        if not root.exists():
+            continue
+        for candidate in root.rglob(folder_name):
+            if candidate.is_dir() and list(candidate.glob("*.safetensors")):
+                return candidate
+    return None
+
+
+def _copy_cached_repo(source: Path, destination: Path) -> None:
+    if destination.exists():
+        shutil.rmtree(destination)
+    ignore = shutil.ignore_patterns(".hf_cache", "__pycache__")
+    shutil.copytree(source, destination, ignore=ignore)
+
+
 def _ensure_repo(row_id: str, evidence_dir: Path, repo_id: str, allow_downloads: bool, artifacts: list[Path]) -> dict | Path:
     model_dir = evidence_dir / "Models" / repo_id.replace("/", "__")
     if list(model_dir.glob("*.safetensors")):
+        return model_dir
+    cached = _find_cached_repo(repo_id)
+    if cached is not None:
+        _copy_cached_repo(cached, model_dir)
         return model_dir
     if not allow_downloads:
         return write_row(
@@ -263,6 +292,147 @@ def _run_whisper_quality(row_id: str, evidence_dir: Path, install_deps: bool, al
     )
 
 
+def _run_whisper_public_media(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bool) -> dict:
+    dependency_block = _ensure_transformers_deps(row_id, evidence_dir, install_deps, [SMOLLM_PATH])
+    if dependency_block is not None:
+        return dependency_block
+    model_dir_or_row = _ensure_repo(row_id, evidence_dir, HF_WHISPER_QUALITY_REPO, allow_downloads, [SMOLLM_PATH])
+    if isinstance(model_dir_or_row, dict):
+        return model_dir_or_row
+    model_dir = model_dir_or_row
+    source, fixture_details, fixture_error = _download_fixture("wikimedia_cc0_word_wav", evidence_dir, allow_downloads)
+    if fixture_error or source is None:
+        return write_row(
+            row_id,
+            "blocked" if not allow_downloads else "fail",
+            evidence_dir,
+            summary="Real public media fixture is not available for HF Whisper Safetensors ASR+SmolLM validation.",
+            block_reason=fixture_error if not allow_downloads else None,
+            external_requirement="rerun with --allow-downloads after source/license review" if not allow_downloads else None,
+            details={"repo_id": HF_WHISPER_QUALITY_REPO, **fixture_details},
+            artifacts=[SMOLLM_PATH, *model_dir.glob("*.safetensors")],
+        )
+    config = smoke_config(evidence_dir, "cpu")
+    config["runtime"]["llm_context_tokens"] = 1024
+    config["runtime"]["llm_reference_max_tokens"] = 128
+    config["runtime"]["llm_reference_temperature"] = 0.0
+    runnable, unsupported = scan_models(model_dir)
+    candidates = [candidate for candidate in runnable if candidate.adapter_name == "hf_whisper_asr"]
+    if not candidates:
+        return write_row(
+            row_id,
+            "fail",
+            evidence_dir,
+            summary=f"{HF_WHISPER_QUALITY_REPO} did not scan as a runnable HF Whisper Safetensors model.",
+            details={
+                "repo_id": HF_WHISPER_QUALITY_REPO,
+                **fixture_details,
+                "runnable": [candidate.adapter_name for candidate in runnable],
+                "unsupported": [{"adapter_name": candidate.adapter_name, "missing": candidate.missing_files, "warnings": candidate.warnings} for candidate in unsupported],
+            },
+            artifacts=[SMOLLM_PATH, *model_dir.glob("*.safetensors"), source],
+        )
+    llm_candidate, scan_details = _smollm_candidate()
+    if llm_candidate is None:
+        return write_row(
+            row_id,
+            "fail",
+            evidence_dir,
+            summary="SmolLM GGUF was not classified as a reference/correction LLM candidate.",
+            details={"repo_id": HF_WHISPER_QUALITY_REPO, **fixture_details, **scan_details},
+            artifacts=[SMOLLM_PATH, *model_dir.glob("*.safetensors"), source],
+        )
+    output_dir = process_file_with_candidates(source, [candidates[0]], config, unsupported, reference_llm=llm_candidate)
+    if output_dir is None:
+        return write_row(
+            row_id,
+            "fail",
+            evidence_dir,
+            summary="HF Whisper Safetensors real public-media row did not produce a report directory.",
+            details={"repo_id": HF_WHISPER_QUALITY_REPO, **fixture_details, **scan_details},
+            artifacts=[SMOLLM_PATH, *model_dir.glob("*.safetensors"), source],
+        )
+    results = json.loads((output_dir / "results.json").read_text(encoding="utf-8"))
+    runs = results.get("runs", [])
+    transcript = "\n".join(chunk.get("text", "") for run in runs for chunk in run.get("transcript_chunks", []))
+    expected_text = fixture_details["fixture"].get("expected_text") or ""
+    normalized_wer = wer(expected_text, transcript, normalized=True) if expected_text and transcript.strip() else 1.0
+    reference = _reference_for(
+        results,
+        expected_text,
+        uncertain_note="single-word public media smoke; WER is recorded but not release-gated",
+        global_note="Reference text comes from the public real-media fixture manifest.",
+    )
+    scored = import_llm_reference(results, "SmolLM corrected reference fixture:\n```json\n" + json.dumps(reference) + "\n```")
+    scored_path = output_dir / "scored_report.json"
+    scored_path.write_text(json.dumps(scored, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    scored_results = dict(results)
+    if scored.get("status") == "scored":
+        scored_results["reference_scores"] = scored["scores"]
+    scored_html = output_dir / "compare_scored.html"
+    scored_html.write_text(build_html_report(scored_results), encoding="utf-8", newline="\n")
+
+    dependency_report_failures, dependency_report_details = dependency_resolution_report_failures(results, expected_groups={"transformers_cpu", "llama_cpp"})
+    failures: list[str] = list(dependency_report_failures)
+    if not transcript.strip():
+        failures.append("HF Whisper Safetensors public-media transcript was empty")
+    for name in ["results.json", "results.txt", "benchmark.csv", "compare.html", "scored_report.json", "compare_scored.html"]:
+        if not (output_dir / name).exists():
+            failures.append(f"missing report artifact {name}")
+    scored_html_text = scored_html.read_text(encoding="utf-8")
+    if "Loaded precomputed LLM-corrected reference scores" not in scored_html_text:
+        failures.append("compare_scored.html missing precomputed score marker")
+    run_id = runs[0]["model"]["candidate_id"] if runs else ""
+    score = scored.get("scores", {}).get(run_id, {})
+    if scored.get("status") != "scored" or score.get("normalized_wer") is None:
+        failures.append("HF Whisper Safetensors public-media scored reference was not produced")
+
+    return write_row(
+        row_id,
+        "pass" if not failures else "fail",
+        evidence_dir,
+        summary=(
+            "HF Whisper Safetensors transcribed real public Wikimedia media, then SmolLM scoring/report validation completed."
+            if not failures
+            else "HF Whisper Safetensors real public-media SmolLM grading validation failed."
+        ),
+        details={
+            "repo_id": HF_WHISPER_QUALITY_REPO,
+            "adapter_name": "hf_whisper_asr",
+            **fixture_details,
+            **scan_details,
+            "transcript": transcript,
+            "expected_text": expected_text,
+            "normalized_wer": normalized_wer,
+            "quality_bearing": True,
+            "quality_note": "Single-word public-media WER is recorded but not release-gated.",
+            "output_dir": str(output_dir),
+            "score_status": scored.get("status"),
+            "hf_whisper_safetensors_score": {
+                "candidate_id": run_id,
+                "normalized_wer": score.get("normalized_wer"),
+                "balanced_score": score.get("balanced_score"),
+                "balanced_rank": score.get("balanced_rank"),
+                "alignment_mode": score.get("alignment_mode"),
+            },
+            "dependency_versions": package_versions(["torch", "transformers", "safetensors", "sentencepiece", "tokenizers", "torchaudio", "llama-cpp-python"]),
+            **dependency_report_details,
+            "failures": failures,
+        },
+        artifacts=[
+            SMOLLM_PATH,
+            *model_dir.glob("*.safetensors"),
+            source,
+            output_dir / "results.json",
+            output_dir / "results.txt",
+            output_dir / "benchmark.csv",
+            output_dir / "compare.html",
+            scored_path,
+            scored_html,
+        ],
+    )
+
+
 def _run_ctc_quality(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bool) -> dict:
     dependency_block = _ensure_transformers_deps(row_id, evidence_dir, install_deps, [SMOLLM_PATH])
     if dependency_block is not None:
@@ -394,6 +564,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
         "hf_whisper_sharded_safetensors_smollm_grading_cpu",
         "hf_safetensors_asr_smollm_grading_cpu",
         "hf_whisper_safetensors_quality_smollm_grading_cpu",
+        "real_public_media_hf_whisper_safetensors_smollm_grading_cpu",
         "hf_safetensors_asr_quality_smollm_grading_cpu",
     }:
         return write_row(
@@ -427,6 +598,8 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
         )
     if row_id == "hf_whisper_safetensors_quality_smollm_grading_cpu":
         return _run_whisper_quality(row_id, evidence_dir, install_deps, allow_downloads)
+    if row_id == "real_public_media_hf_whisper_safetensors_smollm_grading_cpu":
+        return _run_whisper_public_media(row_id, evidence_dir, install_deps, allow_downloads)
     if row_id == "hf_safetensors_asr_quality_smollm_grading_cpu":
         return _run_ctc_quality(row_id, evidence_dir, install_deps, allow_downloads)
     try:

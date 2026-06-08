@@ -34,6 +34,7 @@ python qa\runtime_matrix\run_row.py --row real_public_media_openai_whisper_pt_sm
 python qa\runtime_matrix\run_row.py --row whisper_cpp_ggml_speech_smollm_grading --workdir Temp\runtime_matrix_whisper_cpp_speech_smollm_grading --allow-downloads
 python qa\runtime_matrix\run_row.py --row real_public_media_whisper_cpp_ggml_smollm_grading --workdir Temp\runtime_matrix_real_public_media_whisper_cpp --allow-downloads
 python qa\runtime_matrix\run_row.py --row hf_whisper_safetensors_quality_smollm_grading_cpu --workdir Temp\runtime_matrix_hf_whisper_safetensors_quality_smollm --allow-downloads
+python qa\runtime_matrix\run_row.py --row real_public_media_hf_whisper_safetensors_smollm_grading_cpu --workdir Temp\runtime_matrix_real_public_media_hf_whisper_safetensors --allow-downloads
 python qa\runtime_matrix\run_row.py --row hf_safetensors_asr_quality_smollm_grading_cpu --workdir Temp\runtime_matrix_hf_safetensors_ctc_quality_smollm --allow-downloads
 python qa\runtime_matrix\run_row.py --row hf_whisper_sharded_safetensors_smollm_grading_cpu --workdir Temp\runtime_matrix_hf_whisper_sharded_safetensors_smollm --allow-downloads
 python qa\runtime_matrix\run_row.py --row setup_repair_all_safe --workdir Temp\runtime_matrix_setup_repair_all_safe
@@ -122,6 +123,8 @@ The `whisper_cpp_ggml_speech_smollm_grading` row is the required quality-bearing
 The `real_public_media_whisper_cpp_ggml_smollm_grading` row adds real web-media coverage for the same whisper.cpp GGML fixture. It reuses or downloads the Wikimedia CC0 WAV fixture, verifies the public-media source/hash metadata, runs whisper.cpp through the normal app report pipeline, records single-word WER without using it as a release gate, then validates SmolLM 135M GGUF scoring/report artifacts.
 
 The required Safetensors rows split quality and structure deliberately. `hf_whisper_safetensors_quality_smollm_grading_cpu` runs `openai/whisper-tiny` Safetensors on generated Windows SAPI speech with a non-empty transcript and WER threshold, then runs SmolLM 135M GGUF scoring/report validation. `hf_safetensors_asr_quality_smollm_grading_cpu` runs `facebook/wav2vec2-base-960h` as the non-Whisper CTC Safetensors quality proof with the same reporting and SmolLM scoring checks. `hf_whisper_sharded_safetensors_smollm_grading_cpu` materializes a complete sharded Safetensors folder plus index from the tiny random Whisper fixture and validates the app/report/SmolLM path as structural sharded-loading evidence, not transcript-quality evidence.
+
+The `real_public_media_hf_whisper_safetensors_smollm_grading_cpu` row adds real web-media coverage for the HF Whisper Safetensors path. It reuses or downloads the Wikimedia CC0 WAV fixture, verifies public-media source/hash metadata, runs `openai/whisper-tiny` Safetensors through the normal app report pipeline, records single-word WER without using it as a release gate, then validates SmolLM 135M GGUF scoring/report artifacts.
 
 Public-asset Windows smoke should also capture machine-readable app state from the installed app:
 
