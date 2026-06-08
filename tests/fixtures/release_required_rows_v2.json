@@ -19,6 +19,7 @@
     "hf_whisper_safetensors_cpu",
     "faster_whisper_cpu",
     "faster_whisper_pkg_resources_repair",
+    "faster_whisper_ctranslate2_candidate_fallback_repair",
     "faster_whisper_cuda_unavailable_cpu_fallback",
     "generic_onnx_manifest_cpu",
     "generic_onnx_without_manifest_rejected",
