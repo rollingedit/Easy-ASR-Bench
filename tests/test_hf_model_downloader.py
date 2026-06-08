@@ -6,6 +6,7 @@ from app.hf_model_downloader import (
     DownloadChoice,
     HFModelRef,
     RECOMMENDED_BASELINE_REPO,
+    build_missing_file_repair_plan,
     build_download_choices,
     build_smart_download_choices,
     destination_for,
@@ -653,6 +654,89 @@ def test_offer_missing_file_repair_downloads_exact_repo_matches(tmp_path: Path, 
 
     assert "config.json" in downloaded
     assert "preprocessor_config.json" in downloaded
+
+
+def test_build_missing_file_repair_plan_records_exact_sidecars(tmp_path: Path):
+    destination = tmp_path / "model"
+    destination.mkdir()
+    choice = DownloadChoice(
+        label="Safetensors",
+        kind="safetensors",
+        primary_files=("model.safetensors",),
+        files=("model.safetensors",),
+        task_hint="metadata_required",
+    )
+    missing_candidate = ModelCandidate(
+        candidate_id="incomplete",
+        display_name="Incomplete",
+        family_name="Incomplete",
+        backend="transformers",
+        container_format="safetensors",
+        task="unknown",
+        precision="unknown",
+        quantization_label="Unknown precision",
+        path=destination,
+        adapter_name="hf_transformers_asr",
+        runnable=False,
+        missing_files=["config.json", "preprocessor_config.json"],
+    )
+
+    plan = build_missing_file_repair_plan(
+        HFModelRef("owner/asr"),
+        choice,
+        ["model.safetensors", "config.json", "preprocessor_config.json", "tokenizer.json"],
+        destination,
+        [missing_candidate],
+    )
+
+    record = plan["records"][0]
+    assert plan["schema"] == "easy_asr_bench.model_layout_repair_plan.v1"
+    assert plan["summary"] == {"total": 1, "needs_repair": 1, "can_auto_repair": 1, "blocked": 0}
+    assert record["issue_id"] == "model_layout:incomplete"
+    assert record["repair_action"] == "download_exact_missing_files"
+    assert record["can_auto_repair"] is True
+    assert record["requires_confirmation"] is True
+    assert record["safe_download_files"] == ["config.json", "preprocessor_config.json"]
+
+
+def test_build_missing_file_repair_plan_records_audit_blocker(tmp_path: Path):
+    destination = tmp_path / "model"
+    destination.mkdir()
+    choice = DownloadChoice(
+        label="Safetensors",
+        kind="safetensors",
+        primary_files=("model.safetensors",),
+        files=("model.safetensors",),
+        task_hint="metadata_required",
+    )
+    missing_candidate = ModelCandidate(
+        candidate_id="ambiguous",
+        display_name="Ambiguous",
+        family_name="Ambiguous",
+        backend="transformers",
+        container_format="safetensors",
+        task="unknown",
+        precision="unknown",
+        quantization_label="Unknown precision",
+        path=destination,
+        adapter_name="hf_transformers_asr",
+        runnable=False,
+        missing_files=["custom processor sidecar"],
+    )
+
+    plan = build_missing_file_repair_plan(
+        HFModelRef("owner/asr"),
+        choice,
+        ["model.safetensors", "README.md"],
+        destination,
+        [missing_candidate],
+    )
+
+    record = plan["records"][0]
+    assert plan["summary"]["blocked"] == 1
+    assert record["repair_action"] == "write_llm_file_audit_request"
+    assert record["can_auto_repair"] is False
+    assert "No exact or conservative" in record["block_reason"]
 
 
 def test_offer_missing_file_repair_writes_structured_llm_audit_request_when_ambiguous(tmp_path: Path, monkeypatch):

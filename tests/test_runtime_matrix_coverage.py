@@ -706,6 +706,10 @@ def test_hf_downloader_supported_outcome_taxonomy_row(tmp_path):
     cases = row["details"]["cases"]
     assert any(item["adapter_name"] == "faster_whisper" for item in cases["complete_runnable_asr"]["runnable"])
     assert {"config.json", "preprocessor_config.json"} <= set(cases["missing_sidecar_repair"]["files"])
+    repair_plan = cases["missing_sidecar_repair"]["structured_repair_plan"]
+    assert repair_plan["schema"] == "easy_asr_bench.model_layout_repair_plan.v1"
+    assert repair_plan["records"][0]["repair_action"] == "download_exact_missing_files"
+    assert set(repair_plan["records"][0]["safe_download_files"]) == {"config.json", "preprocessor_config.json"}
     assert any(item["adapter_name"] == "gguf_llm_reference" for item in cases["gguf_reference_llm"]["unsupported"])
     assert cases["unsafe_or_unknown_inspection"]["runnable"] == []
 

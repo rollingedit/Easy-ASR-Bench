@@ -5,7 +5,17 @@ from pathlib import Path
 
 from app.adapters.base import ModelCandidate
 from app import hf_model_downloader
-from app.hf_model_downloader import HFModelRef, DownloadChoice, build_download_choices, build_smart_download_choices, download_choice, download_hf_model_from_ref, list_repo_files, offer_missing_file_repair
+from app.hf_model_downloader import (
+    HFModelRef,
+    DownloadChoice,
+    build_download_choices,
+    build_missing_file_repair_plan,
+    build_smart_download_choices,
+    download_choice,
+    download_hf_model_from_ref,
+    list_repo_files,
+    offer_missing_file_repair,
+)
 from app.model_scanner import scan_models
 from qa.runtime_matrix.common import ROOT, sha256, write_row
 from qa.runtime_matrix.rows.gguf_asr_mmproj import run_qwen3_asr_model_dir
@@ -730,7 +740,7 @@ def _run_supported_outcome_taxonomy(row_id: str, evidence_dir: Path) -> dict:
     original_scan = model_scanner.scan_models
     model_scanner.scan_models = repair_scan
     try:
-        offer_missing_file_repair(
+        interactive_repair_plan = offer_missing_file_repair(
             HFModelRef("owner/hf-asr"),
             repair_choice,
             ["model.safetensors", "config.json", "preprocessor_config.json", "tokenizer.json"],
@@ -742,6 +752,28 @@ def _run_supported_outcome_taxonomy(row_id: str, evidence_dir: Path) -> dict:
         hf_model_downloader._download_file = original_download
         model_scanner.scan_models = original_scan
 
+    structured_repair_plan = build_missing_file_repair_plan(
+        HFModelRef("owner/hf-asr"),
+        repair_choice,
+        ["model.safetensors", "config.json", "preprocessor_config.json", "tokenizer.json"],
+        repair_dir,
+        [
+            ModelCandidate(
+                candidate_id="incomplete",
+                display_name="Incomplete",
+                family_name="Incomplete",
+                backend="transformers",
+                container_format="safetensors",
+                task="automatic-speech-recognition",
+                precision="unknown",
+                quantization_label="Unknown precision",
+                path=repair_dir,
+                adapter_name="hf_transformers_asr",
+                runnable=False,
+                missing_files=["config.json", "preprocessor_config.json"],
+            )
+        ],
+    )
     repair_files = sorted(path.name for path in repair_dir.iterdir())
     cases["missing_sidecar_repair"] = {
         "destination": str(repair_dir),
@@ -749,9 +781,18 @@ def _run_supported_outcome_taxonomy(row_id: str, evidence_dir: Path) -> dict:
         "messages": repair_messages,
         "files": repair_files,
         "scan_calls": repair_state["calls"],
+        "interactive_repair_plan": interactive_repair_plan,
+        "structured_repair_plan": structured_repair_plan,
     }
     if not {"config.json", "preprocessor_config.json"} <= set(repair_files):
         failures.append("missing-sidecar repair did not download exact metadata matches")
+    plan_record = structured_repair_plan["records"][0] if structured_repair_plan["records"] else {}
+    if structured_repair_plan.get("schema") != "easy_asr_bench.model_layout_repair_plan.v1":
+        failures.append("missing-sidecar repair plan used the wrong schema")
+    if plan_record.get("repair_action") != "download_exact_missing_files":
+        failures.append("missing-sidecar repair plan did not choose exact missing-file repair")
+    if set(plan_record.get("safe_download_files", [])) != {"config.json", "preprocessor_config.json"}:
+        failures.append("missing-sidecar repair plan did not record exact safe sidecar downloads")
 
     reference_dest, reference_prompts, reference_messages = _patched_downloader_flow(
         evidence_dir / "reference_llm",
