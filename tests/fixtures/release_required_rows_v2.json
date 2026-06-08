@@ -7,6 +7,7 @@
     "setup_verify_release_bad_checksum",
     "setup_doctor_strict",
     "setup_repair_all_safe",
+    "repair_all_safe_failure_isolation",
     "setup_repair_model_layouts",
     "windows_vc_runtime_repair_contract",
     "python_packaging_tools_repair_contract",
