@@ -103,9 +103,111 @@ def _run_without_manifest_rejection(row_id: str, evidence_dir: Path) -> dict:
     )
 
 
+def _run_requested_provider_fallback(row_id: str, evidence_dir: Path, provider: str) -> dict:
+    diagnostics = cuda_diagnostics()
+    try:
+        import onnx  # noqa: F401
+        import onnxruntime as ort  # noqa: F401
+    except ModuleNotFoundError as exc:
+        return write_row(
+            row_id,
+            "blocked",
+            evidence_dir,
+            summary="ONNX dependency group is not installed, so provider fallback cannot be validated.",
+            block_reason=f"missing {exc.name}",
+            external_requirement="python -m pip install -r requirements/onnx.txt",
+            details={"dependency_versions": package_versions(["onnx", "onnxruntime", "onnxruntime-openvino"])},
+        )
+
+    model_dir = evidence_dir / f"tiny_onnx_{provider}_fallback"
+    artifacts = _write_tiny_ctc_fixture(model_dir)
+    runnable, unsupported = scan_models(model_dir)
+    candidates = [candidate for candidate in runnable if candidate.adapter_name == "generic_onnx_manifest"]
+    if not candidates:
+        return write_row(
+            row_id,
+            "fail",
+            evidence_dir,
+            summary="Tiny ONNX CTC manifest fixture was not discovered as runnable for provider fallback validation.",
+            details={"runnable_count": len(runnable), "unsupported_count": len(unsupported)},
+            artifacts=artifacts,
+        )
+
+    adapter = GenericOnnxManifestAdapter()
+    try:
+        adapter.load(candidates[0], {"provider": provider, "prefer_gpu": True, "cpu_threads": 1})
+        result = adapter.transcribe_chunks(
+            [SimpleNamespace(samples=np.zeros(1600, dtype=np.float32))],
+            [{"chunk_id": "0001", "start_seconds": 0.0, "end_seconds": 0.1}],
+        )
+    except Exception as exc:
+        return write_row(
+            row_id,
+            "fail",
+            evidence_dir,
+            summary=f"Tiny ONNX CTC fixture failed while validating {provider} provider fallback.",
+            details={
+                "provider": provider,
+                "error": {"type": type(exc).__name__, "message": str(exc)},
+                "cuda_provider_checks": diagnostics,
+                "dependency_versions": package_versions(["onnx", "onnxruntime", "onnxruntime-openvino"]),
+            },
+            artifacts=artifacts,
+        )
+
+    transcript = result.transcript_chunks[0].text if result.transcript_chunks else ""
+    metrics = result.metrics
+    summary = metrics.get("provider_summary", {})
+    provider_key = "openvino" if provider == "openvino" else provider
+    requested_key = f"{provider_key}_requested"
+    active_key = f"{provider_key}_active"
+    provider_available = {
+        "openvino": "OpenVINOExecutionProvider" in diagnostics.get("onnxruntime_providers", []),
+        "cuda": "CUDAExecutionProvider" in diagnostics.get("onnxruntime_providers", []),
+        "directml": "DmlExecutionProvider" in diagnostics.get("onnxruntime_providers", []),
+    }.get(provider, False)
+    failures = []
+    if transcript != "ab":
+        failures.append(f"decoded transcript was {transcript!r}, expected 'ab'")
+    if summary.get("requested_runtime_provider") != provider:
+        failures.append("provider summary did not preserve the requested runtime provider")
+    if not summary.get(requested_key, False):
+        failures.append(f"provider summary did not mark {provider} as requested")
+    if provider_available and not summary.get(active_key, False):
+        failures.append(f"{provider} provider was available but did not become active")
+    if not provider_available and not summary.get("provider_fallback", False):
+        failures.append("provider fallback was not recorded when requested provider was unavailable")
+    if not provider_available and summary.get("active_providers") != ["CPUExecutionProvider"]:
+        failures.append("requested provider was unavailable but active providers were not CPU-only")
+
+    return write_row(
+        row_id,
+        "pass" if not failures else "fail",
+        evidence_dir,
+        summary=(
+            f"Generic ONNX CTC requested {provider} and preserved explicit provider fallback metadata while decoding the tiny fixture."
+            if not failures
+            else f"Generic ONNX CTC {provider} fallback metadata validation failed."
+        ),
+        details={
+            "provider": provider,
+            "provider_available": provider_available,
+            "transcript": transcript,
+            "metrics": metrics,
+            "provider_summary": summary,
+            "cuda_provider_checks": diagnostics,
+            "dependency_versions": package_versions(["onnx", "onnxruntime", "onnxruntime-openvino", "onnxruntime-gpu", "onnxruntime-directml"]),
+            "failures": failures,
+        },
+        artifacts=artifacts,
+    )
+
+
 def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: bool) -> dict:
     if row_id == "generic_onnx_without_manifest_rejected":
         return _run_without_manifest_rejection(row_id, evidence_dir)
+    if row_id == "generic_onnx_openvino_unavailable_cpu_fallback":
+        return _run_requested_provider_fallback(row_id, evidence_dir, "openvino")
     diagnostics = cuda_diagnostics()
     if "intel_directml" in row_id and not diagnostics.get("intel_gpu_or_npu_detected", False):
         return write_row(

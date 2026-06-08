@@ -113,6 +113,7 @@ ROWS: dict[str, RowDefinition] = {
     "openai_pt_unverified_blocked": row("openai_pt_unverified_blocked", "qa.runtime_matrix.rows.openai_whisper_pt_safety"),
     "generic_onnx_ctc_manifest_v1": row("generic_onnx_ctc_manifest_v1", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"),
     "generic_onnx_manifest_cpu": row("generic_onnx_manifest_cpu", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"),
+    "generic_onnx_openvino_unavailable_cpu_fallback": row("generic_onnx_openvino_unavailable_cpu_fallback", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"),
     "generic_onnx_smollm_grading_cpu": row("generic_onnx_smollm_grading_cpu", "qa.runtime_matrix.rows.generic_onnx_smollm_grading"),
     "generic_onnx_smollm_grading_directml": row("generic_onnx_smollm_grading_directml", "qa.runtime_matrix.rows.generic_onnx_smollm_grading", hardware="directml"),
     "generic_onnx_ctc_quality_smollm_grading_cpu": row("generic_onnx_ctc_quality_smollm_grading_cpu", "qa.runtime_matrix.rows.generic_onnx_smollm_grading"),

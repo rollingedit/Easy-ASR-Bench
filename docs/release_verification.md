@@ -38,6 +38,7 @@ python qa\runtime_matrix\run_row.py --row clean_vm_zero_dependency_bootstrap --w
 python qa\runtime_matrix\run_row.py --row report_atomic_write_failure_cleanup --workdir Temp\runtime_matrix_report_atomic_write_failure_cleanup
 python qa\runtime_matrix\run_row.py --row model_fixture_quality_claims --workdir Temp\runtime_matrix_model_fixture_quality_claims
 python qa\runtime_matrix\run_row.py --row hf_downloader_package_variant_taxonomy --workdir Temp\runtime_matrix_hf_downloader_package_variant_taxonomy
+python qa\runtime_matrix\run_row.py --row generic_onnx_openvino_unavailable_cpu_fallback --workdir Temp\runtime_matrix_generic_onnx_openvino_unavailable_cpu_fallback
 python -m app.doctor --config config.json --validate-real-smoke
 Remove-Item -LiteralPath dist\release-assets -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path dist\release-assets
@@ -93,6 +94,8 @@ The `report_atomic_write_failure_cleanup` row forces simulated replace failures 
 The `model_fixture_quality_claims` row validates `qa\runtime_matrix\model_fixtures.json` so structural tiny/random/generated fixtures are explicitly marked as not quality-bearing, same-media mixed rows disclose structural inclusions, and quality-bearing fixtures have WER/transcript-oriented runtime rows. This prevents structural smoke fixtures from being counted as accuracy evidence.
 
 The `hf_downloader_package_variant_taxonomy` row validates fixture-backed Hugging Face package selection for sharded Safetensors indexes, multi-variant ONNX folders, and split GGUF reference LLMs. It verifies sharded Safetensors indexes expand into shard downloads, ONNX precision/quant variants do not pull sibling variants, and split GGUF parts stay grouped as one reference/correction LLM choice.
+
+The `generic_onnx_openvino_unavailable_cpu_fallback` row requests OpenVINO for the tiny Generic ONNX CTC fixture and validates provider fallback metadata. It passes when OpenVINO is active on an OpenVINO machine, or when OpenVINO is unavailable and the adapter records `requested_runtime_provider=openvino`, `openvino_requested=true`, `provider_fallback=true`, active CPU providers, and the expected transcript.
 
 Public-asset Windows smoke should also capture machine-readable app state from the installed app:
 

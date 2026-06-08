@@ -616,6 +616,7 @@ def test_nested_models_runtime_row_generates_unique_candidate_ids(tmp_path):
 def test_runtime_matrix_maps_generic_onnx_rows_to_real_tiny_ctc_fixture():
     assert ROWS["generic_onnx_ctc_manifest_v1"].module == "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"
     assert ROWS["generic_onnx_manifest_cpu"].module == "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"
+    assert ROWS["generic_onnx_openvino_unavailable_cpu_fallback"].module == "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"
     assert ROWS["generic_onnx_smollm_grading_cpu"].module == "qa.runtime_matrix.rows.generic_onnx_smollm_grading"
     assert ROWS["generic_onnx_smollm_grading_directml"].module == "qa.runtime_matrix.rows.generic_onnx_smollm_grading"
     assert ROWS["generic_onnx_ctc_quality_smollm_grading_cpu"].module == "qa.runtime_matrix.rows.generic_onnx_smollm_grading"
@@ -677,6 +678,21 @@ def test_intel_openvino_row_has_explicit_provider_block_or_pass(tmp_path):
     assert row["status"] in {"pass", "blocked"}
     if row["status"] == "blocked":
         assert "OpenVINOExecutionProvider" in row["block_reason"] or "OpenVINOExecutionProvider" in row["external_requirement"]
+
+
+def test_generic_onnx_openvino_fallback_row_preserves_requested_provider(tmp_path):
+    from qa.runtime_matrix.rows import generic_onnx_ctc_tiny
+
+    row = generic_onnx_ctc_tiny.run("generic_onnx_openvino_unavailable_cpu_fallback", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    summary = row["details"]["provider_summary"]
+    assert summary["requested_runtime_provider"] == "openvino"
+    assert summary["openvino_requested"] is True
+    assert row["details"]["transcript"] == "ab"
+    if not row["details"]["provider_available"]:
+        assert summary["provider_fallback"] is True
+        assert summary["active_providers"] == ["CPUExecutionProvider"]
 
 
 def test_cuda_combined_row_has_real_detector(tmp_path):

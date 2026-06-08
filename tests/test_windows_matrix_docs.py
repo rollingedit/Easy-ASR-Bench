@@ -155,6 +155,15 @@ def test_release_verification_documents_transformers_cuda_fallback_row():
     assert "explicit CPU fallback" in text
 
 
+def test_release_verification_documents_generic_onnx_openvino_fallback_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row generic_onnx_openvino_unavailable_cpu_fallback" in text
+    assert "requested_runtime_provider=openvino" in text
+    assert "openvino_requested=true" in text
+    assert "provider_fallback=true" in text
+
+
 def test_release_verification_documents_faster_whisper_pkg_resources_repair_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 
