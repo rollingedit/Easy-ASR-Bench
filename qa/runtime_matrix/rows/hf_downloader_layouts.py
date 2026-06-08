@@ -834,6 +834,7 @@ def _run_supported_outcome_taxonomy(row_id: str, evidence_dir: Path) -> dict:
     if runnable:
         failures.append("unknown/unsafe repo produced runnable candidates")
 
+    artifacts = [repair_plan_path] if repair_plan_path.exists() else []
     return write_row(
         row_id,
         "fail" if failures else "pass",
@@ -844,5 +845,5 @@ def _run_supported_outcome_taxonomy(row_id: str, evidence_dir: Path) -> dict:
             else "HF downloader supported-outcome taxonomy validation failed."
         ),
         details={"cases": cases, "failures": failures},
-        artifacts=[],
+        artifacts=artifacts,
     )
