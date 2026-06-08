@@ -113,7 +113,7 @@ def _same_media_evidence_failures(payload: dict) -> list[str]:
     if int(dependency_summary.get("invalid_resolution_files", 0) or 0) != 0:
         failures.append("same-media benchmark evidence reported invalid dependency-resolution files")
     dependency_groups = set(details.get("dependency_resolution_groups") or [])
-    required_groups = {"media_tools", "faster_whisper", "onnx", "transformers_cpu", "whisper_cpp", "openai_whisper", "llama_cpp", "llama_mtmd"}
+    required_groups = {"python_packaging", "media_tools", "faster_whisper", "onnx", "transformers_cpu", "whisper_cpp", "openai_whisper", "llama_cpp", "llama_mtmd"}
     missing_groups = sorted(required_groups - dependency_groups)
     if missing_groups:
         failures.append("same-media benchmark evidence missing dependency-resolution groups: " + ", ".join(missing_groups))
