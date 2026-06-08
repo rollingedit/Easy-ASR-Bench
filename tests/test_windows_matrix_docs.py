@@ -80,6 +80,15 @@ def test_release_verification_documents_repair_all_safe_runtime_row():
     assert "--install-deps" in text
 
 
+def test_release_verification_documents_vc_runtime_repair_contract_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row windows_vc_runtime_repair_contract" in text
+    assert "Microsoft.VCRedist.2015+.x64" in text
+    assert "--accept-package-agreements" in text
+    assert "post-repair redistributable probe passes" in text
+
+
 def test_release_verification_documents_directml_conflict_repair_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 

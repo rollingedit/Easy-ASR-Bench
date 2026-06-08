@@ -8,6 +8,7 @@
     "setup_doctor_strict",
     "setup_repair_all_safe",
     "setup_repair_model_layouts",
+    "windows_vc_runtime_repair_contract",
     "directml_provider_conflict_repair",
     "repair_broken_venv",
     "uninstall_preserve_user_data",
