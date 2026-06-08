@@ -51,6 +51,11 @@ DEPENDENCY_GROUPS = {
         "requirements/core.txt",
         "base app, media conversion, scoring, and reports",
     ),
+    "media_tools": DependencyGroup(
+        (),
+        "requirements/core.txt",
+        "FFmpeg media conversion/probing executable provided by imageio-ffmpeg",
+    ),
     "onnx": DependencyGroup(
         ("onnxruntime", "tokenizers", "jinja2"),
         "requirements/onnx.txt",
@@ -190,6 +195,9 @@ def missing_modules(group: str) -> list[str]:
     metadata = DEPENDENCY_GROUPS.get(group)
     if metadata is None:
         return []
+    if group == "media_tools":
+        status = media_tools_status()
+        return [] if status["available"] else list(status["missing"])
     if metadata.install_kind == "native_tool":
         if group == "llama_mtmd" and not gguf_asr_runtime_available():
             return ["llama-mtmd-cli or llama-cpp-python Qwen3ASRChatHandler"]
@@ -240,6 +248,50 @@ def module_available(module: str) -> bool:
         return False
 
 
+def media_tools_status() -> dict:
+    status = {
+        "available": False,
+        "ffmpeg_path": "",
+        "ffprobe_path": "",
+        "ffprobe_available": False,
+        "probe_method": "ffmpeg_fallback",
+        "missing": [],
+        "messages": [],
+        "repair_command": recovery_command("core"),
+    }
+    if not module_available("imageio_ffmpeg"):
+        return {
+            **status,
+            "missing": ["imageio_ffmpeg"],
+            "messages": ["imageio-ffmpeg is not importable; media conversion cannot be bootstrapped."],
+        }
+    try:
+        import imageio_ffmpeg
+
+        ffmpeg = Path(imageio_ffmpeg.get_ffmpeg_exe())
+    except Exception as exc:
+        return {
+            **status,
+            "missing": ["imageio_ffmpeg ffmpeg executable"],
+            "messages": [f"imageio-ffmpeg could not resolve an ffmpeg executable: {type(exc).__name__}: {exc}"],
+        }
+    ffprobe = ffmpeg.with_name("ffprobe.exe" if ffmpeg.suffix.lower() == ".exe" else "ffprobe")
+    status.update(
+        {
+            "available": ffmpeg.exists(),
+            "ffmpeg_path": str(ffmpeg),
+            "ffprobe_path": str(ffprobe),
+            "ffprobe_available": ffprobe.exists(),
+        }
+    )
+    if not ffmpeg.exists():
+        status["missing"] = ["ffmpeg executable"]
+        status["messages"].append(f"imageio-ffmpeg resolved {ffmpeg}, but the executable does not exist.")
+    elif not ffprobe.exists():
+        status["messages"].append("ffprobe is not beside ffmpeg; Easy ASR Bench will use FFmpeg stream diagnostics as fallback.")
+    return status
+
+
 def distribution_installed(package: str) -> bool:
     try:
         importlib.metadata.version(package)
@@ -252,6 +304,9 @@ def missing_modules_for_config(group: str, config: dict) -> list[str]:
     metadata = DEPENDENCY_GROUPS.get(group)
     if metadata is None:
         return []
+    if group == "media_tools":
+        status = media_tools_status()
+        return [] if status["available"] else list(status["missing"])
     if metadata.install_kind == "native_tool":
         if group == "llama_mtmd" and not gguf_asr_runtime_available(config):
             return ["llama-mtmd-cli or llama-cpp-python Qwen3ASRChatHandler"]
@@ -1096,6 +1151,8 @@ def dependency_status(config: dict | None = None) -> dict[str, dict]:
         }
         if group == "llama_mtmd":
             status[group]["runtime_status"] = llama_mtmd_cli_status(config)
+        if group == "media_tools":
+            status[group]["runtime_status"] = media_tools_status()
     return status
 
 

@@ -181,6 +181,15 @@ def backend_probe_for_group(group: str, config: dict) -> dict:
             "ok": bool(status.get("available") or status.get("qwen3_asr_handler_available")),
             "runtime_status": status,
         }
+    if group == "media_tools":
+        from .dependency_manager import media_tools_status
+
+        status = media_tools_status()
+        return {
+            "kind": "media_tools_ffmpeg_probe",
+            "ok": bool(status.get("available")),
+            "runtime_status": status,
+        }
     modules = GROUP_IMPORT_PROBES.get(group)
     if modules:
         probe = _isolated_import_probe(modules)
@@ -200,6 +209,13 @@ def _probe_versions(probe: dict) -> dict[str, str]:
     if isinstance(ctranslate2, dict) and ctranslate2.get("version"):
         versions["ctranslate2"] = str(ctranslate2["version"])
     return versions
+
+
+def _probe_runtime_path(probe: dict) -> str:
+    runtime_status = probe.get("runtime_status", {}) if isinstance(probe, dict) else {}
+    if not isinstance(runtime_status, dict):
+        return ""
+    return str(runtime_status.get("path") or runtime_status.get("ffmpeg_path") or "")
 
 
 def build_runtime_resolution(record: dict, config: dict, project_root: Path) -> dict:
@@ -235,7 +251,7 @@ def build_runtime_resolution(record: dict, config: dict, project_root: Path) -> 
         "repair_command": record.get("repair_command", ""),
         "versions": _probe_versions(probe) if isinstance(probe, dict) else {},
         "providers": probe.get("providers", []) if isinstance(probe, dict) else [],
-        "runtime_path": probe.get("runtime_status", {}).get("path", "") if isinstance(probe.get("runtime_status", {}), dict) else "",
+        "runtime_path": _probe_runtime_path(probe) if isinstance(probe, dict) else "",
         "config_runtime": {
             "provider": config.get("runtime", {}).get("provider", ""),
             "prefer_gpu": config.get("runtime", {}).get("prefer_gpu", ""),
