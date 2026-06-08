@@ -25,6 +25,7 @@ def test_every_release_manual_row_has_runtime_matrix_script_definition():
 def test_release_manual_matrix_includes_repair_all_safe_row():
     assert "setup_repair_all_safe" in _manual_row_ids()
     assert "repair_all_safe_failure_isolation" in _manual_row_ids()
+    assert "repair_plan_issue_classification_contract" in _manual_row_ids()
 
 
 def test_every_required_release_row_has_runtime_matrix_script_definition():
@@ -38,6 +39,7 @@ def test_required_release_rows_include_bootstrapper_diagnostics_and_repair():
     assert "setup_doctor_strict" in data["rows"]
     assert "setup_repair_all_safe" in data["rows"]
     assert "repair_all_safe_failure_isolation" in data["rows"]
+    assert "repair_plan_issue_classification_contract" in data["rows"]
     assert "setup_repair_model_layouts" in data["rows"]
 
 
@@ -329,6 +331,7 @@ def test_runtime_matrix_maps_safe_installer_validation_rows():
     assert ROWS["setup_doctor_strict"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["setup_repair_all_safe"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["repair_all_safe_failure_isolation"].module == "qa.runtime_matrix.rows.installer_validation"
+    assert ROWS["repair_plan_issue_classification_contract"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["setup_repair_model_layouts"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["update_preserves_user_data"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["repair_broken_venv"].module == "qa.runtime_matrix.rows.installer_validation"
@@ -439,6 +442,18 @@ def test_repair_all_safe_failure_isolation_row_runs_product_executor(tmp_path):
     assert row["details"]["repaired_attempt"]["status"] == "pass"
     artifact_names = {Path(artifact["path"]).name for artifact in row["artifacts"]}
     assert {"repair_all_safe_failure_isolation.json", "repair_all_safe_last.json", "dependency_install_onnx.log"} <= artifact_names
+
+
+def test_repair_plan_issue_classification_contract_row_maps_issue_classes(tmp_path):
+    from qa.runtime_matrix.rows import installer_validation
+
+    row = installer_validation.run("repair_plan_issue_classification_contract", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    assert row["details"]["actions"]["python_packaging"] == "repair_corrupt_install"
+    assert row["details"]["actions"]["faster_whisper"] == "replace_incompatible"
+    assert row["details"]["actions"]["onnx"] == "replace_conflicting"
+    assert row["details"]["actions"]["manual_blocker"] == "block_no_safe_repair"
 
 
 def test_setup_repair_model_layouts_row_executes_persisted_sidecar_plan(tmp_path):

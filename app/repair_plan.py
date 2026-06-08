@@ -525,6 +525,10 @@ def classify_repair_action(missing: list[str], can_auto_repair: bool) -> str:
     if not can_auto_repair:
         return "block_no_safe_repair"
     text = " ".join(str(item).lower() for item in missing)
+    if any(marker in text for marker in ["corrupt", "corrupted", "broken install", "damaged", "invalid install", "native load failed", "import crash"]):
+        return "repair_corrupt_install"
+    if any(marker in text for marker in ["incompatible", "abi", "wrong architecture", "unsupported python", "too new", "newer than supported", "outside supported range"]):
+        return "replace_incompatible"
     if any(marker in text for marker in ["outdated", "too old", "stale", "version outside", "wrong version", "upgrade"]):
         return "upgrade_outdated"
     if any(marker in text for marker in ["conflict", "conflicting", "cpu-only", "wrong provider", "provider hidden", "replace"]):

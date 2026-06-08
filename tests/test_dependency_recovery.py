@@ -253,6 +253,18 @@ def test_repair_plan_classifies_update_and_conflict_actions(monkeypatch, tmp_pat
                 "install_kind": "pip",
                 "recovery_command": "python -m pip install -r requirements/faster_whisper.txt",
             },
+            "python_packaging": {
+                "available": False,
+                "missing": ["pip install is corrupted and import crash prevents bootstrap repair"],
+                "install_kind": "pip",
+                "recovery_command": "python -m pip install -r requirements/python_packaging.txt",
+            },
+            "whisper_cpp": {
+                "available": False,
+                "missing": ["pywhispercpp wheel ABI incompatible with this Python runtime"],
+                "install_kind": "pip",
+                "recovery_command": "python -m pip install -r requirements/whisper_cpp.txt",
+            },
             "onnx": {
                 "available": False,
                 "missing": ["provider package conflict hides DmlExecutionProvider"],
@@ -274,6 +286,8 @@ def test_repair_plan_classifies_update_and_conflict_actions(monkeypatch, tmp_pat
 
     assert actions["core"] == "verify_cached"
     assert actions["faster_whisper"] == "upgrade_outdated"
+    assert actions["python_packaging"] == "repair_corrupt_install"
+    assert actions["whisper_cpp"] == "replace_incompatible"
     assert actions["onnx"] == "replace_conflicting"
     assert actions["manual"] == "block_no_safe_repair"
 
