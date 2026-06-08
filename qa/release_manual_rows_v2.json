@@ -2,6 +2,7 @@
   "schema": "easy_asr_bench.release_manual_rows.v2",
   "manual_matrix": {
     "win11_clean_no_python_setup": "not_run",
+    "windows_sandbox_clean_bootstrap_deploy": "not_run",
     "clean_vm_zero_dependency_bootstrap": "not_run",
     "win10_existing_python_setup": "not_run",
     "first_run_smoke_json": "not_run",

@@ -216,6 +216,8 @@ def test_release_manual_matrix_includes_granular_cuda_rows():
 
 def test_runtime_matrix_maps_setup_environment_rows():
     assert ROWS["win11_clean_no_python_setup"].module == "qa.runtime_matrix.rows.setup_environment"
+    assert ROWS["windows_sandbox_clean_bootstrap_deploy"].module == "qa.runtime_matrix.rows.clean_vm_bootstrap"
+    assert ROWS["windows_sandbox_clean_bootstrap_deploy"].hardware == "clean_windows_vm"
     assert ROWS["clean_vm_zero_dependency_bootstrap"].module == "qa.runtime_matrix.rows.clean_vm_bootstrap"
     assert ROWS["clean_vm_zero_dependency_bootstrap"].hardware == "clean_windows_vm"
     assert ROWS["win10_existing_python_setup"].module == "qa.runtime_matrix.rows.setup_environment"
@@ -240,6 +242,28 @@ def test_clean_vm_bootstrap_row_blocks_without_clean_vm_marker(tmp_path, monkeyp
         "python qa/runtime_matrix/run_row.py --row same_media_multi_model_smollm_benchmark --install-deps --allow-downloads",
         "python -m app.main --first-run-smoke --json",
     ]
+
+
+def test_windows_sandbox_deploy_row_generates_launch_bundle(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import clean_vm_bootstrap
+
+    monkeypatch.delenv(clean_vm_bootstrap.SANDBOX_LAUNCH_ENV, raising=False)
+    evidence_dir = ROOT / "Temp" / f"pytest_windows_sandbox_deploy_{tmp_path.name}"
+    row = clean_vm_bootstrap.run("windows_sandbox_clean_bootstrap_deploy", evidence_dir, False, False)
+
+    assert row["status"] == "blocked"
+    assert clean_vm_bootstrap.SANDBOX_LAUNCH_ENV in row["block_reason"]
+    script = Path(row["details"]["bundle"]["script_path"])
+    config = Path(row["details"]["bundle"]["config_path"])
+    assert script.exists()
+    assert config.exists()
+    script_text = script.read_text(encoding="utf-8")
+    assert "prebootstrap-python-probe.json" in script_text
+    assert "EASY_ASR_BENCH_PREBOOTSTRAP_PROBE" in script_text
+    assert "$exe = $Command[0]" in script_text
+    assert "clean_vm_zero_dependency_bootstrap" in script_text
+    assert "validate_release_smoke.py" in script_text
+    assert "MappedFolder" in config.read_text(encoding="utf-8")
 
 
 def test_clean_vm_bootstrap_requires_first_run_repair_evidence():
@@ -347,6 +371,34 @@ def test_setup_environment_rows_emit_concrete_setup_evidence(tmp_path):
         assert row["details"]["setup_static_contract"]["missing_markers"] == []
         assert row["details"]["setup_dry_run_local"]["exit_code"] == 0
         assert "python_visible_on_path" in row["details"]["python_probe"]
+
+
+def test_win11_clean_setup_accepts_prebootstrap_no_python_probe(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import setup_environment
+
+    probe = tmp_path / "prebootstrap.json"
+    probe.write_text(
+        json.dumps(
+            {
+                "system": "Windows",
+                "release": "11",
+                "python_visible_on_path": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv(setup_environment.PREBOOTSTRAP_PROBE_ENV, str(probe))
+    monkeypatch.setattr(setup_environment.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(setup_environment.platform, "release", lambda: "11")
+    monkeypatch.setattr(setup_environment.platform, "version", lambda: "10.0.22621")
+    monkeypatch.setattr(setup_environment.platform, "machine", lambda: "AMD64")
+    monkeypatch.setattr(setup_environment, "_python_probe", lambda: {"python_visible_on_path": True})
+    monkeypatch.setattr(setup_environment, "_dry_run_local", lambda _evidence_dir: {"exit_code": 0, "stdout_tail": "", "stderr_tail": ""})
+
+    row = setup_environment.run("win11_clean_no_python_setup", tmp_path / "win11", False, False)
+
+    assert row["status"] == "pass"
+    assert row["details"]["prebootstrap_probe"]["python_visible_on_path"] is False
 
 
 def test_first_run_smoke_json_row_emits_repair_and_action_evidence(tmp_path):

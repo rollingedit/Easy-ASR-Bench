@@ -5,12 +5,118 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from qa.runtime_matrix.common import ROOT, write_row
 from qa.runtime_matrix.rows import setup_environment
 
 
 PROOF_ENV = "EASY_ASR_BENCH_CLEAN_VM_BOOTSTRAP_PROOF"
+SANDBOX_LAUNCH_ENV = "EASY_ASR_BENCH_LAUNCH_WINDOWS_SANDBOX"
+SANDBOX_ROW_ID = "windows_sandbox_clean_bootstrap_deploy"
+
+
+def _sandbox_script_text() -> str:
+    return r'''$ErrorActionPreference = "Stop"
+$Repo = "C:\Users\WDAGUtilityAccount\Desktop\Easy-ASR-Bench"
+$Evidence = Join-Path $Repo "Temp\windows_sandbox_clean_bootstrap_evidence"
+New-Item -ItemType Directory -Force -Path $Evidence | Out-Null
+Set-Location $Repo
+
+function Invoke-ProbeCommand {
+  param([string[]]$Command)
+  $resolved = Get-Command $Command[0] -ErrorAction SilentlyContinue
+  $output = ""
+  $exitCode = $null
+  if ($resolved) {
+    try {
+      $exe = $Command[0]
+      $args = @()
+      if ($Command.Length -gt 1) {
+        $args = $Command[1..($Command.Length - 1)]
+      }
+      $output = (& $exe @args 2>&1 | Out-String).Trim()
+      $exitCode = $LASTEXITCODE
+    } catch {
+      $output = $_.Exception.Message
+      $exitCode = -1
+    }
+  }
+  [ordered]@{
+    command = $Command
+    resolved = if ($resolved) { $resolved.Source } else { "" }
+    exit_code = $exitCode
+    output = $output
+    reports_python = [bool]($resolved -and $exitCode -eq 0 -and $output -match "Python \d+\.\d+")
+  }
+}
+
+$probeCommands = @(
+  @("python", "--version"),
+  @("py", "--version"),
+  @("py", "-3.12", "--version")
+)
+$probeResults = @()
+foreach ($command in $probeCommands) {
+  $probeResults += Invoke-ProbeCommand -Command $command
+}
+$preProbe = [ordered]@{
+  schema = "easy_asr_bench.prebootstrap_python_probe.v1"
+  system = "Windows"
+  release = "11"
+  python_visible_on_path = [bool]($probeResults | Where-Object { $_.reports_python })
+  path_python_commands = $probeResults
+}
+$preProbePath = Join-Path $Evidence "prebootstrap-python-probe.json"
+$preProbe | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 -Path $preProbePath
+
+$env:EASY_ASR_BENCH_PREBOOTSTRAP_PROBE = $preProbePath
+$env:EASY_ASR_BENCH_CLEAN_VM_BOOTSTRAP_PROOF = "1"
+
+$setupRepairLog = Join-Path $Evidence "setup-repair-all-safe.log"
+$modelRepairLog = Join-Path $Evidence "setup-repair-model-layouts.log"
+$win11RowLog = Join-Path $Evidence "win11-clean-no-python-row.log"
+$cleanVmRowLog = Join-Path $Evidence "clean-vm-bootstrap-row.log"
+$writeSmokeLog = Join-Path $Evidence "write-release-smoke.log"
+$mergeSmokeLog = Join-Path $Evidence "merge-release-evidence.log"
+$validateSmokeLog = Join-Path $Evidence "validate-release-smoke-evidence.log"
+cmd /c setup.bat --doctor --repair-all-safe *> $setupRepairLog
+cmd /c setup.bat --doctor --repair-model-layouts --allow-downloads *> $modelRepairLog
+python qa\runtime_matrix\run_row.py --row win11_clean_no_python_setup --workdir Temp\windows_sandbox_clean_bootstrap_evidence *> $win11RowLog
+python qa\runtime_matrix\run_row.py --row clean_vm_zero_dependency_bootstrap --workdir Temp\windows_sandbox_clean_bootstrap_evidence --install-deps --allow-downloads *> $cleanVmRowLog
+python scripts\write_release_smoke.py --tag v0.3.9 --output release-smoke-v0.3.9-sandbox.json *> $writeSmokeLog
+python scripts\merge_release_evidence.py --smoke release-smoke-v0.3.9-sandbox.json --evidence-dir Temp --output release-smoke-v0.3.9-sandbox.json --ignore-unknown *> $mergeSmokeLog
+python scripts\validate_release_smoke.py --smoke release-smoke-v0.3.9-sandbox.json --required tests\fixtures\release_required_rows_v2.json --require-log-hashes --require-environment-summary *> $validateSmokeLog
+'''
+
+
+def _sandbox_config_text(script_path: Path) -> str:
+    host_folder = escape(str(ROOT.resolve()))
+    script_relative = script_path.resolve().relative_to(ROOT.resolve())
+    sandbox_script = escape(r"C:\Users\WDAGUtilityAccount\Desktop\Easy-ASR-Bench" + "\\" + script_relative.as_posix().replace("/", "\\"))
+    return (
+        "<Configuration>\n"
+        "  <MappedFolders>\n"
+        "    <MappedFolder>\n"
+        f"      <HostFolder>{host_folder}</HostFolder>\n"
+        "      <SandboxFolder>C:\\Users\\WDAGUtilityAccount\\Desktop\\Easy-ASR-Bench</SandboxFolder>\n"
+        "      <ReadOnly>false</ReadOnly>\n"
+        "    </MappedFolder>\n"
+        "  </MappedFolders>\n"
+        "  <LogonCommand>\n"
+        f"    <Command>powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"{sandbox_script}\"</Command>\n"
+        "  </LogonCommand>\n"
+        "</Configuration>\n"
+    )
+
+
+def _write_windows_sandbox_bundle(evidence_dir: Path) -> dict:
+    script_path = evidence_dir / "Start-CleanVmValidation.ps1"
+    config_path = evidence_dir / "Easy-ASR-Bench-Clean-Validation.wsb"
+    script_path.parent.mkdir(parents=True, exist_ok=True)
+    script_path.write_text(_sandbox_script_text(), encoding="utf-8", newline="\r\n")
+    config_path.write_text(_sandbox_config_text(script_path), encoding="utf-8", newline="\n")
+    return {"script_path": str(script_path), "config_path": str(config_path)}
 
 
 def _run_command(command: list[str], evidence_dir: Path, name: str, timeout: int = 3600) -> dict:
@@ -125,6 +231,8 @@ def _same_media_evidence_failures(payload: dict) -> list[str]:
 
 
 def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bool) -> dict:
+    if row_id == SANDBOX_ROW_ID:
+        return _run_windows_sandbox_deploy(row_id, evidence_dir)
     evidence_dir.mkdir(parents=True, exist_ok=True)
     setup_probe = setup_environment.run("win11_clean_no_python_setup", evidence_dir / "win11_clean_no_python_setup", False, False)
     details = {
@@ -285,6 +393,62 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
             "Clean VM bootstrap repaired dependencies, ran first-run smoke, and completed the same-media multi-model SmolLM benchmark."
             if not failures
             else "Clean VM bootstrap validation failed."
+        ),
+        details=details,
+        artifacts=artifacts,
+    )
+
+
+def _run_windows_sandbox_deploy(row_id: str, evidence_dir: Path) -> dict:
+    bundle = _write_windows_sandbox_bundle(evidence_dir)
+    artifacts = [Path(bundle["script_path"]), Path(bundle["config_path"])]
+    details = {
+        "launch_env": SANDBOX_LAUNCH_ENV,
+        "launch_env_value": os.environ.get(SANDBOX_LAUNCH_ENV, ""),
+        "proof_env": PROOF_ENV,
+        "prebootstrap_probe_env": setup_environment.PREBOOTSTRAP_PROBE_ENV,
+        "bundle": bundle,
+        "expected_sandbox_evidence_dir": "Temp\\windows_sandbox_clean_bootstrap_evidence",
+    }
+    if sys.platform != "win32":
+        return write_row(
+            row_id,
+            "blocked",
+            evidence_dir,
+            summary="Windows Sandbox deployment can only run on Windows.",
+            block_reason=f"current platform is {sys.platform}",
+            external_requirement="Run this row on Windows with Windows Sandbox enabled.",
+            details=details,
+            artifacts=artifacts,
+        )
+    if os.environ.get(SANDBOX_LAUNCH_ENV) != "1":
+        return write_row(
+            row_id,
+            "blocked",
+            evidence_dir,
+            summary="Windows Sandbox clean-bootstrap deployment bundle was generated but launch was not requested.",
+            block_reason=f"{SANDBOX_LAUNCH_ENV}=1 is not set",
+            external_requirement=(
+                f"Enable Windows Sandbox, set {SANDBOX_LAUNCH_ENV}=1, then run "
+                "python qa\\runtime_matrix\\run_row.py --row windows_sandbox_clean_bootstrap_deploy "
+                "--workdir Temp\\runtime_matrix_windows_sandbox_clean_bootstrap_deploy"
+            ),
+            details=details,
+            artifacts=artifacts,
+        )
+    completed = subprocess.run(["cmd", "/c", "start", "", str(Path(bundle["config_path"]).resolve())], cwd=ROOT, text=True, capture_output=True, timeout=60)
+    details["launch_command"] = ["cmd", "/c", "start", "", str(Path(bundle["config_path"]).resolve())]
+    details["launch_exit_code"] = completed.returncode
+    details["launch_stdout_tail"] = completed.stdout[-2000:]
+    details["launch_stderr_tail"] = completed.stderr[-2000:]
+    return write_row(
+        row_id,
+        "pass" if completed.returncode == 0 else "fail",
+        evidence_dir,
+        summary=(
+            "Windows Sandbox clean-bootstrap validation was launched; collect sandbox row evidence from the mapped Temp folder when it finishes."
+            if completed.returncode == 0
+            else "Windows Sandbox launch command failed."
         ),
         details=details,
         artifacts=artifacts,

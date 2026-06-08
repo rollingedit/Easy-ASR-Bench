@@ -10,6 +10,8 @@ from pathlib import Path
 
 from qa.runtime_matrix.common import ROOT, write_row
 
+PREBOOTSTRAP_PROBE_ENV = "EASY_ASR_BENCH_PREBOOTSTRAP_PROBE"
+
 
 def _python_probe() -> dict:
     commands = [
@@ -39,6 +41,23 @@ def _python_probe() -> dict:
         "path_python_commands": results,
         "python_visible_on_path": any(item.get("resolved") for item in results),
     }
+
+
+def _load_prebootstrap_probe() -> dict:
+    path = os.environ.get(PREBOOTSTRAP_PROBE_ENV, "")
+    if not path:
+        return {"path": "", "available": False}
+    probe_path = Path(path)
+    try:
+        payload = json.loads(probe_path.read_text(encoding="utf-8-sig"))
+    except Exception as exc:
+        return {"path": path, "available": False, "error": f"{type(exc).__name__}: {exc}"}
+    if not isinstance(payload, dict):
+        return {"path": path, "available": False, "error": "probe payload is not a JSON object"}
+    payload = dict(payload)
+    payload["path"] = path
+    payload["available"] = True
+    return payload
 
 
 def _setup_static_contract() -> dict:
@@ -83,6 +102,7 @@ def _base_details(evidence_dir: Path) -> dict:
             "machine": platform.machine(),
         },
         "python_probe": _python_probe(),
+        "prebootstrap_probe": _load_prebootstrap_probe(),
         "setup_static_contract": _setup_static_contract(),
         "setup_dry_run_local": _dry_run_local(evidence_dir),
     }
@@ -97,6 +117,13 @@ def _win11_clean_no_python(row_id: str, evidence_dir: Path) -> dict:
         failures.append("setup.bat dry-run local failed")
     is_win11 = details["platform"]["system"] == "Windows" and details["platform"]["release"] == "11"
     python_visible = bool(details["python_probe"]["python_visible_on_path"])
+    prebootstrap = details["prebootstrap_probe"]
+    prebootstrap_proves_no_python = bool(
+        prebootstrap.get("available")
+        and prebootstrap.get("system") == "Windows"
+        and str(prebootstrap.get("release")) == "11"
+        and prebootstrap.get("python_visible_on_path") is False
+    )
     if failures:
         return write_row(
             row_id,
@@ -105,12 +132,12 @@ def _win11_clean_no_python(row_id: str, evidence_dir: Path) -> dict:
             summary="Clean Win11 setup row found broken setup contract markers or dry-run behavior.",
             details={**details, "failures": failures},
         )
-    if is_win11 and not python_visible:
+    if is_win11 and (not python_visible or prebootstrap_proves_no_python):
         return write_row(
             row_id,
             "pass",
             evidence_dir,
-            summary="This environment matches clean Windows 11 with no Python on PATH, and setup dry-run proves bootstrap inputs.",
+            summary="Clean Windows 11 no-Python bootstrap inputs were proven, and setup dry-run proves bootstrap inputs.",
             details={**details, "failures": failures},
         )
     return write_row(
@@ -119,7 +146,10 @@ def _win11_clean_no_python(row_id: str, evidence_dir: Path) -> dict:
         evidence_dir,
         summary="Clean Windows 11 no-Python setup proof requires a VM/Sandbox state this machine does not currently match.",
         block_reason=f"current environment is Windows {details['platform']['release']} with python_visible_on_path={python_visible}",
-        external_requirement="Windows 11 VM/Sandbox with no python/py launcher visible on PATH, then run python qa\\runtime_matrix\\run_row.py --row win11_clean_no_python_setup",
+        external_requirement=(
+            "Windows 11 VM/Sandbox with no python/py launcher visible before setup; capture a pre-bootstrap probe JSON, set "
+            f"{PREBOOTSTRAP_PROBE_ENV} to it after setup installs Python, then run python qa\\runtime_matrix\\run_row.py --row win11_clean_no_python_setup"
+        ),
         details={**details, "failures": failures},
     )
 

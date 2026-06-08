@@ -21,6 +21,7 @@ ROWS: dict[str, RowDefinition] = {
     "directml_provider_conflict_repair": row("directml_provider_conflict_repair", "qa.runtime_matrix.rows.windows_directml_provider"),
     "windows_vulkan_runtime": row("windows_vulkan_runtime", "qa.runtime_matrix.rows.windows_vulkan_runtime"),
     "win11_clean_no_python_setup": row("win11_clean_no_python_setup", "qa.runtime_matrix.rows.setup_environment", hardware="clean_windows_vm"),
+    "windows_sandbox_clean_bootstrap_deploy": row("windows_sandbox_clean_bootstrap_deploy", "qa.runtime_matrix.rows.clean_vm_bootstrap", hardware="clean_windows_vm"),
     "clean_vm_zero_dependency_bootstrap": row("clean_vm_zero_dependency_bootstrap", "qa.runtime_matrix.rows.clean_vm_bootstrap", hardware="clean_windows_vm"),
     "win10_existing_python_setup": row("win10_existing_python_setup", "qa.runtime_matrix.rows.setup_environment", hardware="win10_vm"),
     "first_run_smoke_json": row("first_run_smoke_json", "qa.runtime_matrix.rows.setup_environment"),
