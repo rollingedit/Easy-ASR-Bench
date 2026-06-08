@@ -182,6 +182,15 @@ def test_release_verification_documents_generic_onnx_cuda_fallback_row():
     assert "normal Generic ONNX adapter does not silently hide a CUDA-to-CPU fallback" in text
 
 
+def test_release_verification_documents_whisper_cpp_speech_smollm_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row whisper_cpp_ggml_speech_smollm_grading" in text
+    assert "required quality-bearing whisper.cpp release proof" in text
+    assert "generated Windows SAPI speech" in text
+    assert "GPU/offload validation belongs to llama.cpp GGUF rows" in text
+
+
 def test_release_verification_documents_faster_whisper_pkg_resources_repair_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 
