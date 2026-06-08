@@ -938,6 +938,29 @@ def test_runtime_matrix_real_media_manifest_has_required_fixture_kinds():
 
 def test_runtime_matrix_maps_real_media_download_cache_row():
     assert ROWS["real_media_download_cache"].module == "qa.runtime_matrix.rows.real_media_download_cache"
+    assert ROWS["real_public_media_faster_whisper_smollm_grading"].module == "qa.runtime_matrix.rows.real_public_media_faster_whisper_smollm"
+    assert ROWS["real_public_media_faster_whisper_smollm_grading"].hardware == "network"
+
+
+def test_real_public_media_faster_whisper_smollm_row_blocks_without_network(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import real_public_media_faster_whisper_smollm
+
+    smollm = tmp_path / "SmolLM-135M.Q4_K_M.gguf"
+    smollm.write_bytes(b"fixture")
+    monkeypatch.setattr(real_public_media_faster_whisper_smollm, "SMOLLM_PATH", smollm)
+    monkeypatch.setattr(real_public_media_faster_whisper_smollm, "_repair_dependencies", lambda *_args: ([], {}, []))
+    monkeypatch.setattr(real_public_media_faster_whisper_smollm, "execute_repair_plan", lambda *_args, **_kwargs: {"summary": {}})
+
+    row = real_public_media_faster_whisper_smollm.run(
+        "real_public_media_faster_whisper_smollm_grading",
+        tmp_path,
+        False,
+        False,
+    )
+
+    assert row["status"] == "blocked"
+    assert "--allow-downloads" in row["external_requirement"]
+    assert row["details"]["fixture"]["expected_text"] == "Kabul"
 
 
 def test_runtime_matrix_maps_same_media_multi_model_row():
@@ -1179,12 +1202,14 @@ def test_runtime_fixture_manifest_covers_core_runtime_formats():
     assert "openai_whisper_pt" in kinds
     assert "gguf_asr_mmproj_candidate" in kinds
     assert "same_media_multi_model_benchmark_directml" in kinds
+    assert "real_public_audio_fixture" in kinds
     assert "generic_onnx_ctc_fixture" in fixtures["same_media_multi_model_cpu_set"]["includes"]
     assert "generic_onnx_ctc_fixture" in fixtures["same_media_multi_model_directml_set"]["includes"]
     assert "qwen3_asr_0_6b_gguf" in fixtures["same_media_multi_model_cpu_set"]["includes"]
     assert "qwen3_asr_0_6b_gguf" in fixtures["same_media_multi_model_directml_set"]["includes"]
     assert "hf_whisper_sharded_safetensors_smollm_grading_cpu" in fixtures["hf_tiny_random_whisper_sharded_safetensors"]["rows"]
     assert "llama_cpp_vulkan_smollm_smoke" in fixtures["smollm_135m_gguf"]["rows"]
+    assert "real_public_media_faster_whisper_smollm_grading" in fixtures["wikimedia_cc0_word_wav"]["rows"]
 
     fixture_ids = set(fixtures)
     for fixture_id, fixture in fixtures.items():

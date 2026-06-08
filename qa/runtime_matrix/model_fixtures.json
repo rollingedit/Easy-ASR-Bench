@@ -43,8 +43,19 @@
         "cpu_model_smoke",
         "faster_whisper_ctranslate2",
         "real_tiny_faster_whisper_report_smoke",
-        "faster_whisper_cpu"
+        "faster_whisper_cpu",
+        "real_public_media_faster_whisper_smollm_grading"
       ]
+    },
+    "wikimedia_cc0_word_wav": {
+      "source_url": "https://commons.wikimedia.org/wiki/Special:FilePath/LL-Q1321%20(spa)-Rodrigo5260-Kabul.wav",
+      "kind": "real_public_audio_fixture",
+      "expected_text": "Kabul",
+      "rows": [
+        "real_media_download_cache",
+        "real_public_media_faster_whisper_smollm_grading"
+      ],
+      "notes": "CC0/public-domain-dedicated spoken-word WAV from Wikimedia Commons. Used for real web-media normalization and faster-whisper plus SmolLM scored-report validation; WER is recorded but not release-gated because this is a single-word public-media smoke fixture."
     },
     "smollm_135m_gguf": {
       "repo": "HuggingFaceTB/SmolLM-135M-GGUF",
@@ -54,6 +65,7 @@
         "gguf_reference_llm",
         "gguf_text_llm_reference_only",
         "smollm_reference_grading_report",
+        "real_public_media_faster_whisper_smollm_grading",
         "llama_cpp_cuda_smollm_smoke",
         "llama_cpp_vulkan_smollm_smoke"
       ]
