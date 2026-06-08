@@ -206,6 +206,8 @@ def _run_requested_provider_fallback(row_id: str, evidence_dir: Path, provider: 
 def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: bool) -> dict:
     if row_id == "generic_onnx_without_manifest_rejected":
         return _run_without_manifest_rejection(row_id, evidence_dir)
+    if row_id == "generic_onnx_cuda_unavailable_cpu_fallback":
+        return _run_requested_provider_fallback(row_id, evidence_dir, "cuda")
     if row_id == "generic_onnx_openvino_unavailable_cpu_fallback":
         return _run_requested_provider_fallback(row_id, evidence_dir, "openvino")
     diagnostics = cuda_diagnostics()
