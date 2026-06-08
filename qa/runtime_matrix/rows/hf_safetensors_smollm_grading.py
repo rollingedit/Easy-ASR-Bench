@@ -23,6 +23,10 @@ from qa.runtime_matrix.rows.smollm_reference_grading_report import SMOLLM_PATH, 
 HF_WHISPER_QUALITY_REPO = "openai/whisper-tiny"
 HF_CTC_QUALITY_REPO = "facebook/wav2vec2-base-960h"
 HF_WHISPER_SHARDED_REPO = "optimum-internal-testing/tiny-random-whisper"
+HF_WHISPER_PUBLIC_MEDIA_FIXTURES = {
+    "real_public_media_hf_whisper_safetensors_smollm_grading_cpu": "wikimedia_cc0_word_wav",
+    "real_public_video_hf_whisper_safetensors_smollm_grading_cpu": "wikimedia_public_domain_spoken_words_webm",
+}
 
 
 def _reference_for(
@@ -300,7 +304,8 @@ def _run_whisper_public_media(row_id: str, evidence_dir: Path, install_deps: boo
     if isinstance(model_dir_or_row, dict):
         return model_dir_or_row
     model_dir = model_dir_or_row
-    source, fixture_details, fixture_error = _download_fixture("wikimedia_cc0_word_wav", evidence_dir, allow_downloads)
+    fixture_id = HF_WHISPER_PUBLIC_MEDIA_FIXTURES[row_id]
+    source, fixture_details, fixture_error = _download_fixture(fixture_id, evidence_dir, allow_downloads)
     if fixture_error or source is None:
         return write_row(
             row_id,
@@ -360,7 +365,7 @@ def _run_whisper_public_media(row_id: str, evidence_dir: Path, install_deps: boo
     reference = _reference_for(
         results,
         expected_text,
-        uncertain_note="single-word public media smoke; WER is recorded but not release-gated",
+        uncertain_note="short public media smoke; WER is recorded but not release-gated",
         global_note="Reference text comes from the public real-media fixture manifest.",
     )
     scored = import_llm_reference(results, "SmolLM corrected reference fixture:\n```json\n" + json.dumps(reference) + "\n```")
@@ -405,7 +410,7 @@ def _run_whisper_public_media(row_id: str, evidence_dir: Path, install_deps: boo
             "expected_text": expected_text,
             "normalized_wer": normalized_wer,
             "quality_bearing": True,
-            "quality_note": "Single-word public-media WER is recorded but not release-gated.",
+            "quality_note": "Short public-media WER is recorded but not release-gated.",
             "output_dir": str(output_dir),
             "score_status": scored.get("status"),
             "hf_whisper_safetensors_score": {
@@ -565,6 +570,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
         "hf_safetensors_asr_smollm_grading_cpu",
         "hf_whisper_safetensors_quality_smollm_grading_cpu",
         "real_public_media_hf_whisper_safetensors_smollm_grading_cpu",
+        "real_public_video_hf_whisper_safetensors_smollm_grading_cpu",
         "hf_safetensors_asr_quality_smollm_grading_cpu",
     }:
         return write_row(
@@ -598,7 +604,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
         )
     if row_id == "hf_whisper_safetensors_quality_smollm_grading_cpu":
         return _run_whisper_quality(row_id, evidence_dir, install_deps, allow_downloads)
-    if row_id == "real_public_media_hf_whisper_safetensors_smollm_grading_cpu":
+    if row_id in HF_WHISPER_PUBLIC_MEDIA_FIXTURES:
         return _run_whisper_public_media(row_id, evidence_dir, install_deps, allow_downloads)
     if row_id == "hf_safetensors_asr_quality_smollm_grading_cpu":
         return _run_ctc_quality(row_id, evidence_dir, install_deps, allow_downloads)

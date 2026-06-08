@@ -25,6 +25,7 @@ DEFAULT_FULL_REAL_SMOKE_ROWS = [
     "real_public_media_whisper_cpp_ggml_smollm_grading",
     "real_public_video_whisper_cpp_ggml_smollm_grading",
     "real_public_media_hf_whisper_safetensors_smollm_grading_cpu",
+    "real_public_video_hf_whisper_safetensors_smollm_grading_cpu",
     "real_public_media_generic_onnx_ctc_smollm_grading_cpu",
     "real_public_video_generic_onnx_ctc_smollm_grading_cpu",
     "real_public_media_gguf_asr_mmproj_smollm_grading",

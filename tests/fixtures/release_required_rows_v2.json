@@ -26,6 +26,7 @@
     "standalone_safetensors_incomplete",
     "hf_whisper_safetensors_cpu",
     "hf_whisper_safetensors_quality_smollm_grading_cpu",
+    "real_public_video_hf_whisper_safetensors_smollm_grading_cpu",
     "hf_safetensors_asr_quality_smollm_grading_cpu",
     "hf_whisper_sharded_safetensors_smollm_grading_cpu",
     "faster_whisper_cpu",
