@@ -28,12 +28,14 @@ def _merge_duplicate_row(existing: dict, incoming: dict) -> dict:
     return output
 
 
-def evidence_rows(evidence_dir: Path) -> dict[str, dict]:
+def evidence_rows(evidence_dir: Path, *, ignore_malformed: bool = False) -> dict[str, dict]:
     rows: dict[str, dict] = {}
     for row_path in sorted(evidence_dir.rglob("row.json")):
         row = _row_with_source(load_json(row_path), row_path)
         row_id = row.get("id")
         if not isinstance(row_id, str) or not row_id:
+            if ignore_malformed:
+                continue
             raise SystemExit(f"Evidence row missing id: {row_path}")
         if row_id in rows:
             rows[row_id] = _merge_duplicate_row(rows[row_id], row)
@@ -70,7 +72,7 @@ def _update_matrix_statuses(value: object, evidence: dict[str, dict]) -> object:
     return value
 
 
-def merge_manual_rows(smoke: dict, evidence: dict[str, dict]) -> dict:
+def merge_manual_rows(smoke: dict, evidence: dict[str, dict], *, ignore_unknown: bool = False) -> dict:
     rows = smoke.get("manual_rows")
     if not isinstance(rows, list):
         raise SystemExit("release smoke must contain manual_rows before evidence can be merged")
@@ -85,7 +87,16 @@ def merge_manual_rows(smoke: dict, evidence: dict[str, dict]) -> dict:
         output_rows.append(evidence.get(row_id, row))
     unknown = sorted(set(evidence) - known_ids)
     if unknown:
-        raise SystemExit("Evidence rows are not present in release smoke manual_rows: " + ", ".join(unknown))
+        if ignore_unknown:
+            evidence = {row_id: row for row_id, row in evidence.items() if row_id in known_ids}
+            output_rows = []
+            for row in rows:
+                if not isinstance(row, dict) or not isinstance(row.get("id"), str):
+                    output_rows.append(row)
+                    continue
+                output_rows.append(evidence.get(row["id"], row))
+        else:
+            raise SystemExit("Evidence rows are not present in release smoke manual_rows: " + ", ".join(unknown))
     merged = dict(smoke)
     merged["manual_rows"] = output_rows
     if isinstance(smoke.get("manual_matrix"), dict):
@@ -117,12 +128,13 @@ def main() -> int:
     parser.add_argument("--smoke", required=True, type=Path)
     parser.add_argument("--evidence-dir", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--ignore-unknown", action="store_true", help="Ignore evidence rows that are not listed in the release smoke manual rows.")
     args = parser.parse_args()
     smoke = load_json(args.smoke)
-    evidence = evidence_rows(args.evidence_dir)
+    evidence = evidence_rows(args.evidence_dir, ignore_malformed=args.ignore_unknown)
     if not evidence:
         raise SystemExit(f"No row.json evidence files found in {args.evidence_dir}")
-    write_json(args.output, merge_manual_rows(smoke, evidence))
+    write_json(args.output, merge_manual_rows(smoke, evidence, ignore_unknown=args.ignore_unknown))
     print(args.output)
     return 0
 
