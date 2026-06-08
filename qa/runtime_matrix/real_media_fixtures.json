@@ -4,14 +4,18 @@
     "wikimedia_cc0_word_wav": {
       "kind": "real_audio_wav",
       "source_page": "https://es.wiktionary.org/wiki/Archivo:LL-Q1321_(spa)-Rodrigo5260-Kabul.wav",
+      "download_url": "https://commons.wikimedia.org/wiki/Special:FilePath/LL-Q1321%20(spa)-Rodrigo5260-Kabul.wav",
       "license": "CC0 / public domain dedication as reported by Wikimedia Commons file page",
+      "expected_sha256_prefix": "d200260482dd",
       "notes": "Small real spoken-word WAV fixture. Use for media normalization and ASR smoke when a known transcript is needed.",
       "expected_text": "Kabul"
     },
     "wikimedia_public_domain_speech_ogg": {
       "kind": "real_audio_ogg",
       "source_page": "https://commons.wikimedia.org/wiki/File:Alexander_Graham_Bell_speaking.ogg",
+      "download_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Alexander%20Graham%20Bell%20speaking.ogg",
       "license": "Public Domain Mark 1.0 as reported by Wikimedia Commons file page",
+      "expected_sha256_prefix": "a0db5f3a4809",
       "notes": "Historic real speech OGG fixture. Useful for decode/normalization coverage, not modern ASR WER thresholds."
     },
     "samplefile_h264_aac_mp4": {
