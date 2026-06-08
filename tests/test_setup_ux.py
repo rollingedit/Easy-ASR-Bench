@@ -31,6 +31,7 @@ def test_setup_doctor_forwards_json_and_strict_flags():
     assert 'if /I "%%~A"=="--repair-plan" set DOCTOR_ARGS=!DOCTOR_ARGS! --repair-plan' in setup
     assert 'if /I "%%~A"=="--repair-all-safe" set DOCTOR_ARGS=!DOCTOR_ARGS! --repair-all-safe' in setup
     assert 'if /I "%%~A"=="--validate-real-smoke" set DOCTOR_ARGS=!DOCTOR_ARGS! --validate-real-smoke' in setup
+    assert 'if /I "%%~A"=="--repair-model-layouts" set DOCTOR_ARGS=!DOCTOR_ARGS! --repair-model-layouts' in setup
     assert 'if /I "%%~A"=="--install-deps" set DOCTOR_ARGS=!DOCTOR_ARGS! --install-deps' in setup
     assert 'if /I "%%~A"=="--allow-downloads" set DOCTOR_ARGS=!DOCTOR_ARGS! --allow-downloads' in setup
     assert 'if /I "%%~A"=="--no-network" set DOCTOR_ARGS=!DOCTOR_ARGS! --no-network' in setup

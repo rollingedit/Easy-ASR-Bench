@@ -103,5 +103,6 @@ def test_first_run_smoke_report_is_noninteractive_and_actionable(monkeypatch, tm
     assert report["repair_plan_schema"] == "easy_asr_bench.repair_plan.v1"
     assert report["repair_plan_summary"]["needs_repair"] == 1
     assert report["repair_command"] == "setup.bat --doctor --repair-all-safe"
+    assert report["model_layout_repair_command"] == "setup.bat --doctor --repair-model-layouts --allow-downloads"
     assert report["doctor_command"] == "setup.bat --doctor --repair-plan"
     assert report["real_smoke_command"] == "setup.bat --doctor --validate-real-smoke"

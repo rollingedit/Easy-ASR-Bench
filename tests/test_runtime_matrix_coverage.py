@@ -144,6 +144,7 @@ def test_clean_vm_bootstrap_row_blocks_without_clean_vm_marker(tmp_path, monkeyp
     assert "--install-deps --allow-downloads" in row["external_requirement"]
     assert row["details"]["required_sequence"] == [
         "cmd /c setup.bat --doctor --repair-all-safe",
+        "cmd /c setup.bat --doctor --repair-model-layouts --allow-downloads",
         "python qa/runtime_matrix/run_row.py --row setup_repair_all_safe --install-deps",
         "python qa/runtime_matrix/run_row.py --row same_media_multi_model_smollm_benchmark --install-deps --allow-downloads",
         "python -m app.main --first-run-smoke --json",
@@ -156,6 +157,7 @@ def test_clean_vm_bootstrap_requires_first_run_repair_evidence():
     assert 'first_run_payload.get("repair_plan_schema")' in source
     assert "first-run smoke did not include repair-plan evidence" in source
     assert 'first_run_payload.get("repair_command")' in source
+    assert "model_layout_repair_command" in source
 
 
 def test_clean_vm_bootstrap_rejects_incomplete_same_media_evidence():
@@ -255,6 +257,7 @@ def test_first_run_smoke_json_row_emits_repair_and_action_evidence(tmp_path):
     assert payload["schema"] == "easy_asr_bench.first_run_smoke.v1"
     assert payload["repair_plan_schema"] == "easy_asr_bench.repair_plan.v1"
     assert payload["repair_command"] == "setup.bat --doctor --repair-all-safe"
+    assert payload["model_layout_repair_command"] == "setup.bat --doctor --repair-model-layouts --allow-downloads"
     assert payload["real_smoke_command"] == "setup.bat --doctor --validate-real-smoke"
     assert payload["dead_end"] is False
 

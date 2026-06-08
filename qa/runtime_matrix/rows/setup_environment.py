@@ -222,6 +222,8 @@ def _first_run_smoke_json(row_id: str, evidence_dir: Path) -> dict:
             failures.append("first-run smoke did not include repair-plan evidence")
         if payload.get("repair_command") != "setup.bat --doctor --repair-all-safe":
             failures.append("first-run smoke repair command is missing or wrong")
+        if payload.get("model_layout_repair_command") != "setup.bat --doctor --repair-model-layouts --allow-downloads":
+            failures.append("first-run smoke model-layout repair command is missing or wrong")
         if payload.get("doctor_command") != "setup.bat --doctor --repair-plan":
             failures.append("first-run smoke doctor command is missing or wrong")
         if payload.get("real_smoke_command") != "setup.bat --doctor --validate-real-smoke":

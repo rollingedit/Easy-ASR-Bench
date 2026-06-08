@@ -121,6 +121,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
         },
         "required_sequence": [
             "cmd /c setup.bat --doctor --repair-all-safe",
+            "cmd /c setup.bat --doctor --repair-model-layouts --allow-downloads",
             "python qa/runtime_matrix/run_row.py --row setup_repair_all_safe --install-deps",
             "python qa/runtime_matrix/run_row.py --row same_media_multi_model_smollm_benchmark --install-deps --allow-downloads",
             "python -m app.main --first-run-smoke --json",
@@ -157,6 +158,12 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
         )
 
     setup_repair = _run_command(["cmd", "/c", "setup.bat", "--doctor", "--repair-all-safe"], evidence_dir, "setup_doctor_repair_all_safe", timeout=3600)
+    model_layout_repair = _run_command(
+        ["cmd", "/c", "setup.bat", "--doctor", "--repair-model-layouts", "--allow-downloads"],
+        evidence_dir,
+        "setup_doctor_repair_model_layouts",
+        timeout=3600,
+    )
     repair_row_cmd = [
         sys.executable,
         "qa/runtime_matrix/run_row.py",
@@ -186,6 +193,8 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
     failures = []
     if setup_repair["exit_code"] != 0:
         failures.append("setup.bat --doctor --repair-all-safe failed")
+    if model_layout_repair["exit_code"] != 0:
+        failures.append("setup.bat --doctor --repair-model-layouts --allow-downloads failed")
     if repair_row["exit_code"] != 0 or repair_payload.get("status") != "pass":
         failures.append("setup_repair_all_safe subrow did not pass")
     else:
@@ -202,10 +211,13 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
         failures.append("first-run smoke did not include repair-plan evidence")
     if not first_run_payload.get("repair_command"):
         failures.append("first-run smoke did not include the setup repair command")
+    if first_run_payload.get("model_layout_repair_command") != "setup.bat --doctor --repair-model-layouts --allow-downloads":
+        failures.append("first-run smoke did not include the model-layout repair command")
 
     details.update(
         {
             "setup_doctor_repair_all_safe": setup_repair,
+            "setup_doctor_repair_model_layouts": model_layout_repair,
             "setup_repair_all_safe_row": repair_row,
             "same_media_multi_model_row": benchmark_row,
             "first_run_smoke": first_run,
@@ -218,6 +230,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
     artifacts.extend(
         [
             evidence_dir / "setup_doctor_repair_all_safe.json",
+            evidence_dir / "setup_doctor_repair_model_layouts.json",
             evidence_dir / "setup_repair_all_safe_row.json",
             evidence_dir / "same_media_multi_model_row.json",
             evidence_dir / "first_run_smoke.json",

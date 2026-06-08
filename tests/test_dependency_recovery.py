@@ -1,8 +1,9 @@
+import json
 from pathlib import Path
 
 from app.config import DEFAULT_CONFIG
 from app.dependency_manager import ACCELERATOR_OVERRIDES, CUDA_INSTALL_OVERRIDES, acceleration_install_decision, cuda_diagnostics, cuda_install_decision, dependency_status, huggingface_cache_status, install_group_for_config, llama_cpp_cuda_tag_for_driver, llama_cpp_gpu_capable, llama_mtmd_cli_status, media_tools_status, missing_modules_for_config, recovery_command, recovery_command_for_config, requirement_version_issues, resolve_llama_cpp_wheel, visual_cpp_redistributable_status
-from app.doctor import run_doctor, run_real_smoke_validation
+from app.doctor import run_doctor, run_model_layout_repair_sweep, run_real_smoke_validation
 from app.main import _dependency_install_confirmation, ensure_dependencies, warn_runtime_dependency_fallbacks
 from app.repair_plan import backend_probe_for_group, build_repair_plan, execute_repair_plan
 from app.results_writer import dependency_resolution_environment, runtime_environment
@@ -276,6 +277,90 @@ def test_bootstrap_repair_uses_structured_repair_all_safe(monkeypatch, tmp_path:
 
     assert bootstrap.repair(tmp_path / "config.json") == 0
     assert calls == [(tmp_path / "config.json", {"repair_all_safe": True})]
+
+
+def _write_model_layout_plan(tmp_path: Path) -> tuple[Path, Path]:
+    model_dir = tmp_path / "Models" / "owner__asr__model"
+    model_dir.mkdir(parents=True)
+    plan_path = model_dir / "hf_model_layout_repair_plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "schema": "easy_asr_bench.model_layout_repair_plan.v1",
+                "repo_id": "owner/asr",
+                "revision": None,
+                "selected_choice": {
+                    "label": "Safetensors",
+                    "kind": "safetensors",
+                    "task_hint": "metadata_required",
+                    "primary_files": ["model.safetensors"],
+                    "downloaded_files": ["model.safetensors"],
+                },
+                "destination": str(model_dir),
+                "records": [
+                    {
+                        "issue_id": "model_layout:incomplete",
+                        "repair_action": "download_exact_missing_files",
+                        "safe_download_files": ["config.json"],
+                        "can_auto_repair": True,
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "folders": {
+                    "models": str(tmp_path / "Models"),
+                    "input": str(tmp_path / "Input"),
+                    "output": str(tmp_path / "Output"),
+                    "temp": str(tmp_path / "Temp"),
+                    "logs": str(tmp_path / "Logs"),
+                    "cache": str(tmp_path / "Cache"),
+                }
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return config_path, plan_path
+
+
+def test_doctor_model_layout_repair_sweep_blocks_without_download_permission(tmp_path: Path):
+    config_path, plan_path = _write_model_layout_plan(tmp_path)
+
+    report = run_model_layout_repair_sweep(config_path, allow_downloads=False)
+
+    assert report["schema"] == "easy_asr_bench.model_layout_repair_sweep.v1"
+    assert report["summary"]["blocked"] == 1
+    assert report["executions"][0]["plan_path"] == str(plan_path)
+    assert "not approved" in report["executions"][0]["records"][0]["block_reason"]
+
+
+def test_doctor_model_layout_repair_sweep_executes_approved_plan(monkeypatch, tmp_path: Path):
+    config_path, plan_path = _write_model_layout_plan(tmp_path)
+    downloaded: list[str] = []
+
+    def fake_download(repo_id: str, revision: str | None, filename: str, destination: Path, relative_name: str | None = None) -> Path:
+        downloaded.append(filename)
+        path = destination / (relative_name or filename)
+        path.write_text("{}", encoding="utf-8")
+        return path
+
+    monkeypatch.setattr("app.hf_model_downloader.list_repo_files", lambda ref: ["model.safetensors", "config.json"])
+    monkeypatch.setattr("app.hf_model_downloader._download_file", fake_download)
+
+    report = run_model_layout_repair_sweep(config_path, allow_downloads=True)
+
+    persisted = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert report["summary"]["repaired"] == 1
+    assert report["summary"]["downloaded_files"] == 1
+    assert downloaded == ["config.json"]
+    assert persisted["last_execution"]["summary"]["repaired"] == 1
 
 
 def test_execute_repair_plan_repairs_group_and_records_after_state(monkeypatch, tmp_path: Path):
