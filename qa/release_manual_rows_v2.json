@@ -85,6 +85,7 @@
       "audio_asr_gguf_mmproj": "not_run",
       "gguf_asr_mmproj_pair": "not_run",
       "incomplete_audio_asr_gguf_mmproj_rejected": "not_run",
+      "mismatched_audio_asr_gguf_mmproj_rejected": "not_run",
       "gguf_reference_llm": "not_run",
       "gguf_text_llm_reference_only": "not_run",
       "smollm_reference_grading_report": "not_run",

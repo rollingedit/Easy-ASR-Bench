@@ -103,6 +103,7 @@ ROWS: dict[str, RowDefinition] = {
     "audio_asr_gguf_mmproj": row("audio_asr_gguf_mmproj", "qa.runtime_matrix.rows.gguf_asr_mmproj", hardware="asr_gguf_mmproj_fixture"),
     "gguf_asr_mmproj_pair": row("gguf_asr_mmproj_pair", "qa.runtime_matrix.rows.gguf_asr_mmproj", hardware="asr_gguf_mmproj_fixture"),
     "incomplete_audio_asr_gguf_mmproj_rejected": row("incomplete_audio_asr_gguf_mmproj_rejected", "qa.runtime_matrix.rows.gguf_asr_mmproj"),
+    "mismatched_audio_asr_gguf_mmproj_rejected": row("mismatched_audio_asr_gguf_mmproj_rejected", "qa.runtime_matrix.rows.gguf_asr_mmproj"),
     "gguf_reference_llm": row("gguf_reference_llm", "qa.runtime_matrix.rows.gguf_reference_llm_smollm135"),
     "gguf_text_llm_reference_only": row("gguf_text_llm_reference_only", "qa.runtime_matrix.rows.gguf_reference_llm_smollm135"),
     "smollm_reference_grading_report": row("smollm_reference_grading_report", "qa.runtime_matrix.rows.smollm_reference_grading_report"),

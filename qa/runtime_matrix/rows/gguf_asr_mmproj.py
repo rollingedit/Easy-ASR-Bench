@@ -467,6 +467,8 @@ def run_qwen3_asr_model_dir(row_id: str, evidence_dir: Path, model_dir: Path, in
 def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: bool) -> dict:
     if row_id == "incomplete_audio_asr_gguf_mmproj_rejected":
         return _scan_fixture(row_id, evidence_dir, "missing_projector")
+    if row_id == "mismatched_audio_asr_gguf_mmproj_rejected":
+        return _scan_fixture(row_id, evidence_dir, "mismatched")
     if row_id in {"audio_asr_gguf_mmproj", "gguf_asr_mmproj_pair"}:
         return _run_public_qwen3_asr(row_id, evidence_dir, _install_deps, _allow_downloads)
     return write_row(row_id, "fail", evidence_dir, summary=f"Unhandled ASR GGUF+mmproj row: {row_id}")
