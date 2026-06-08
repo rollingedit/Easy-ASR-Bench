@@ -851,6 +851,7 @@ def main() -> None:
     parser.add_argument("--install-deps", action="store_true")
     parser.add_argument("--allow-downloads", action="store_true")
     parser.add_argument("--no-network", action="store_true")
+    parser.add_argument("--full-real-smoke", action="store_true")
     parser.add_argument("--first-run", action="store_true")
     parser.add_argument("--first-run-smoke", action="store_true")
     parser.add_argument("--download-model", action="store_true")
@@ -884,6 +885,7 @@ def _main(args: argparse.Namespace) -> None:
                 install_deps=bool(args.install_deps),
                 allow_downloads=bool(args.allow_downloads),
                 no_network=bool(args.no_network),
+                full_real_smoke=bool(args.full_real_smoke),
             )
         )
     models_root = folder_config(config, "models")

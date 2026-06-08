@@ -165,21 +165,23 @@ def _ensure_public_fixture(row_id: str, evidence_dir: Path, allow_downloads: boo
 
 
 def _llama_mtmd_version() -> dict:
-    from app.adapters.gguf_asr_mmproj import llama_mtmd_cli_path
+    from app.dependency_manager import llama_mtmd_cli_status
 
-    cli = llama_mtmd_cli_path({"llama_cpp": {}}, Path.cwd())
-    if not cli:
-        return {"path": "", "available": False}
+    status = llama_mtmd_cli_status({"llama_cpp": {}})
+    cli = status.get("path") or ""
+    if not status.get("available") or not cli:
+        return {"path": "", "available": False, "runtime_status": status}
     try:
         completed = subprocess.run([cli, "--version"], text=True, capture_output=True, timeout=30)
     except Exception as exc:
-        return {"path": cli, "available": True, "version_error": f"{type(exc).__name__}: {exc}"}
+        return {"path": cli, "available": True, "version_error": f"{type(exc).__name__}: {exc}", "runtime_status": status}
     return {
         "path": cli,
         "available": True,
         "exit_code": completed.returncode,
         "stdout": completed.stdout.strip(),
         "stderr": completed.stderr.strip(),
+        "runtime_status": status,
     }
 
 

@@ -14,6 +14,21 @@ from .version import RELEASE_CHANNEL, RELEASE_COMMIT, TAG
 
 
 DEFAULT_REAL_SMOKE_ROWS = ["setup_repair_all_safe", "cpu_model_smoke", "compare_html_offline"]
+DEFAULT_FULL_REAL_SMOKE_ROWS = [
+    "setup_repair_all_safe",
+    "cpu_model_smoke",
+    "compare_html_offline",
+    "real_tiny_faster_whisper_smollm_grading",
+    "real_public_media_faster_whisper_smollm_grading",
+    "real_public_media_openai_whisper_pt_smollm_grading",
+    "real_public_media_whisper_cpp_ggml_smollm_grading",
+    "real_public_media_hf_whisper_safetensors_smollm_grading_cpu",
+    "real_public_media_generic_onnx_ctc_smollm_grading_cpu",
+    "real_public_media_gguf_asr_mmproj_smollm_grading",
+    "hf_safetensors_asr_quality_smollm_grading_cpu",
+    "same_media_multi_model_smollm_benchmark",
+    "same_media_multi_model_smollm_benchmark_directml",
+]
 
 
 def build_doctor_report(config_path: Path) -> dict:
@@ -43,10 +58,17 @@ def run_real_smoke_validation(
     install_deps: bool = False,
     allow_downloads: bool = False,
     no_network: bool = False,
+    full_real_smoke: bool = False,
 ) -> dict:
     config = load_config(config_path)
     project_root = Path(__file__).resolve().parent.parent
-    rows = list(config.get("runtime_validation", {}).get("smoke_rows") or DEFAULT_REAL_SMOKE_ROWS)
+    runtime_validation = config.get("runtime_validation", {})
+    if full_real_smoke:
+        rows = list(runtime_validation.get("full_smoke_rows") or DEFAULT_FULL_REAL_SMOKE_ROWS)
+        smoke_profile = "full"
+    else:
+        rows = list(runtime_validation.get("smoke_rows") or DEFAULT_REAL_SMOKE_ROWS)
+        smoke_profile = "quick"
     workdir = project_root / "Temp" / "doctor_real_smoke"
     repair = execute_repair_plan(config, project_root=project_root)
     results = []
@@ -102,6 +124,8 @@ def run_real_smoke_validation(
         "requested_allow_downloads": allow_downloads,
         "no_network": no_network,
         "network_policy": "no_network" if no_network else ("allow_downloads" if effective_allow_downloads else "offline_default"),
+        "smoke_profile": smoke_profile,
+        "full_real_smoke": full_real_smoke,
         "repair_all_safe": repair,
         "rows": results,
         "summary": {
@@ -159,6 +183,7 @@ def run_doctor(
     install_deps: bool = False,
     allow_downloads: bool = False,
     no_network: bool = False,
+    full_real_smoke: bool = False,
 ) -> int:
     config = load_config(config_path)
     report = build_doctor_report(config_path)
@@ -167,7 +192,13 @@ def run_doctor(
         print(json.dumps(execute_repair_plan(config, status=status), indent=2))
         return 0 if (status["core"]["available"] or not strict) else 1
     if validate_real_smoke:
-        report = run_real_smoke_validation(config_path, install_deps=install_deps, allow_downloads=allow_downloads, no_network=no_network)
+        report = run_real_smoke_validation(
+            config_path,
+            install_deps=install_deps,
+            allow_downloads=allow_downloads,
+            no_network=no_network,
+            full_real_smoke=full_real_smoke,
+        )
         print(json.dumps(report, indent=2))
         if strict and report["summary"]["failed"]:
             return 1
@@ -260,6 +291,7 @@ def main() -> None:
     parser.add_argument("--install-deps", action="store_true")
     parser.add_argument("--allow-downloads", action="store_true")
     parser.add_argument("--no-network", action="store_true")
+    parser.add_argument("--full-real-smoke", action="store_true")
     args = parser.parse_args()
     raise SystemExit(
         run_doctor(
@@ -273,6 +305,7 @@ def main() -> None:
             install_deps=args.install_deps,
             allow_downloads=args.allow_downloads,
             no_network=args.no_network,
+            full_real_smoke=args.full_real_smoke,
         )
     )
 

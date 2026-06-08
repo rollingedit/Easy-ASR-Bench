@@ -150,12 +150,99 @@ def test_llama_mtmd_status_finds_configured_cli(monkeypatch, tmp_path: Path):
     monkeypatch.setattr("app.dependency_manager.llama_cpp_qwen3_asr_handler_available", lambda: False)
     monkeypatch.setattr("app.dependency_manager.shutil.which", lambda name: None)
     monkeypatch.setattr("app.dependency_manager.os.environ", {})
+    monkeypatch.setattr("app.dependency_manager.probe_llama_mtmd_cli_path", lambda path: {"ok": True, "path": str(path), "reason": "test"})
 
     status = llama_mtmd_cli_status({"llama_cpp": {"mtmd_cli_path": str(cli)}})
 
     assert status["available"] is True
     assert status["path"] == str(cli)
     assert status["source"] == "config"
+    assert status["probe"]["ok"] is True
+
+
+def test_llama_mtmd_status_rejects_inaccessible_cli(monkeypatch, tmp_path: Path):
+    cli = tmp_path / "llama-mtmd-cli.exe"
+    cli.write_text("", encoding="utf-8")
+    monkeypatch.setattr("app.dependency_manager.llama_cpp_qwen3_asr_handler_available", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.shutil.which", lambda name: str(cli))
+    monkeypatch.setattr("app.dependency_manager.os.environ", {})
+    monkeypatch.setattr(
+        "app.dependency_manager.probe_llama_mtmd_cli_path",
+        lambda path: {"ok": False, "path": str(path), "reason": "permission_denied", "error": "PermissionError: [WinError 5] Access is denied"},
+    )
+
+    status = llama_mtmd_cli_status()
+
+    assert status["available"] is False
+    assert status["path"] == ""
+    assert status["rejected"][0]["reason"] == "permission_denied"
+
+
+def test_llama_mtmd_status_reuses_verified_runtime_resolution_after_transient_denial(monkeypatch, tmp_path: Path):
+    cli = tmp_path / "llama-mtmd-cli.exe"
+    cli.write_text("", encoding="utf-8")
+    logs = tmp_path / "Logs"
+    logs.mkdir()
+    resolution_path = logs / "dependency_resolution_llama_mtmd.json"
+    resolution_path.write_text(
+        __import__("json").dumps(
+            {
+                "schema": "easy_asr_bench.runtime_resolution.v1",
+                "dependency_group": "llama_mtmd",
+                "status": "backend_usable",
+                "backend_verified": True,
+                "backend_probe_kind": "llama_mtmd_runtime_probe",
+                "accelerator_requested": False,
+                "versions": {},
+                "providers": [],
+                "runtime_path": str(cli),
+                "config_runtime": {"provider": "auto", "prefer_gpu": True, "fallback_to_cpu": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("app.dependency_manager.llama_cpp_qwen3_asr_handler_available", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.shutil.which", lambda name: str(cli))
+    monkeypatch.setattr("app.dependency_manager.os.environ", {})
+    monkeypatch.setattr(
+        "app.dependency_manager.probe_llama_mtmd_cli_path",
+        lambda path: {"ok": False, "path": str(path), "reason": "permission_denied", "error": "PermissionError: [WinError 5] Access is denied"},
+    )
+
+    status = llama_mtmd_cli_status({"folders": {"logs": str(logs)}})
+
+    assert status["available"] is True
+    assert status["path"] == str(cli)
+    assert status["source"] == "cached_runtime_resolution_after_permission_denied"
+    assert status["probe"]["source_resolution_path"] == str(resolution_path)
+    assert status["rejected"][0]["reason"] == "permission_denied"
+
+
+def test_llama_mtmd_status_stages_copy_when_installed_cli_is_temporarily_denied(monkeypatch, tmp_path: Path):
+    package_dir = tmp_path / "WinGetPackage"
+    package_dir.mkdir()
+    cli = package_dir / "llama-mtmd-cli.exe"
+    cli.write_text("", encoding="utf-8")
+    (package_dir / "llama.dll").write_text("", encoding="utf-8")
+    cache = tmp_path / "Cache"
+    monkeypatch.setattr("app.dependency_manager.llama_cpp_qwen3_asr_handler_available", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.shutil.which", lambda name: str(cli))
+    monkeypatch.setattr("app.dependency_manager.os.environ", {})
+
+    def fake_probe(path):
+        if Path(path) == cli:
+            return {"ok": False, "path": str(path), "reason": "permission_denied", "error": "PermissionError: [WinError 5] Access is denied"}
+        return {"ok": True, "path": str(path), "reason": "probe_ok"}
+
+    monkeypatch.setattr("app.dependency_manager.probe_llama_mtmd_cli_path", fake_probe)
+
+    status = llama_mtmd_cli_status({"folders": {"cache": str(cache)}})
+
+    assert status["available"] is True
+    assert status["source"] == "staged_copy_after_permission_denied"
+    assert Path(status["path"]).parent == cache / "native_tools" / "llama_mtmd" / package_dir.name
+    assert (Path(status["path"]).parent / "llama.dll").exists()
+    assert status["rejected"][0]["reason"] == "permission_denied"
 
 
 def test_visual_cpp_redistributable_status_reports_non_windows(monkeypatch):
@@ -954,6 +1041,40 @@ def test_validate_real_smoke_no_network_suppresses_allow_downloads(monkeypatch, 
     assert report["network_policy"] == "no_network"
     assert "--allow-downloads" not in calls[0]
     assert report["summary"]["blocked"] == 1
+
+
+def test_validate_real_smoke_full_profile_runs_format_rows(monkeypatch, tmp_path: Path):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        '{"folders":{"models":"Models","input":"Input","output":"Output","temp":"Temp","logs":"Logs","cache":"Cache"}}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("app.doctor.execute_repair_plan", lambda config, project_root=None, status=None: {"mode": "repair_all_safe", "summary": {"attempted": 0}})
+    calls = []
+
+    def fake_run(command, cwd=None, text=True, capture_output=True, timeout=None):
+        calls.append(command)
+        row_id = command[command.index("--row") + 1]
+        row_dir = Path(command[command.index("--workdir") + 1]) / row_id
+        row_dir.mkdir(parents=True, exist_ok=True)
+        (row_dir / "row.json").write_text('{"status":"pass","summary":"ok"}\n', encoding="utf-8")
+        return __import__("subprocess").CompletedProcess(command, 0, "stdout", "stderr")
+
+    monkeypatch.setattr("app.doctor.subprocess.run", fake_run)
+
+    report = run_real_smoke_validation(config_path, install_deps=True, allow_downloads=True, full_real_smoke=True)
+    row_ids = [row["id"] for row in report["rows"]]
+
+    assert report["smoke_profile"] == "full"
+    assert report["full_real_smoke"] is True
+    assert "real_public_media_faster_whisper_smollm_grading" in row_ids
+    assert "real_public_media_openai_whisper_pt_smollm_grading" in row_ids
+    assert "real_public_media_whisper_cpp_ggml_smollm_grading" in row_ids
+    assert "real_public_media_hf_whisper_safetensors_smollm_grading_cpu" in row_ids
+    assert "real_public_media_generic_onnx_ctc_smollm_grading_cpu" in row_ids
+    assert "real_public_media_gguf_asr_mmproj_smollm_grading" in row_ids
+    assert "same_media_multi_model_smollm_benchmark_directml" in row_ids
+    assert all("--install-deps" in command and "--allow-downloads" in command for command in calls)
 
 
 def test_repair_backend_probe_checks_expected_onnx_provider(monkeypatch):

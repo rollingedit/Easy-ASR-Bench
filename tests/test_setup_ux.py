@@ -37,6 +37,7 @@ def test_setup_doctor_forwards_json_and_strict_flags():
     assert 'if /I "%%~A"=="--install-deps" set DOCTOR_ARGS=!DOCTOR_ARGS! --install-deps' in setup
     assert 'if /I "%%~A"=="--allow-downloads" set DOCTOR_ARGS=!DOCTOR_ARGS! --allow-downloads' in setup
     assert 'if /I "%%~A"=="--no-network" set DOCTOR_ARGS=!DOCTOR_ARGS! --no-network' in setup
+    assert 'if /I "%%~A"=="--full-real-smoke" set DOCTOR_ARGS=!DOCTOR_ARGS! --full-real-smoke' in setup
     assert "app.doctor --config config.json %DOCTOR_ARGS%" in setup
     assert 'app.doctor --config "%INSTALL_DIR%\\config.json" %DOCTOR_ARGS%' in setup
     assert "python -m app.doctor --config config.json %DOCTOR_ARGS%" in setup

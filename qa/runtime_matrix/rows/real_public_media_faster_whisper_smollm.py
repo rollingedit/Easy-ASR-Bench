@@ -43,6 +43,60 @@ PACKAGE_NAMES_BY_BACKEND = {
 }
 LOCAL_FIXTURE_SEARCH_ROOTS = ("Temp", "Input", "Cache")
 LOCAL_OPENAI_PT_SEARCH_ROOTS = ("Temp", "Models", "Cache")
+LOCAL_MODEL_REPO_SEARCH_ROOTS = ("Temp", "Models", "Cache")
+
+
+def _repo_folder_name(repo_id: str) -> str:
+    return repo_id.replace("/", "__")
+
+
+def _find_cached_repo_folder(repo_id: str, required_names: set[str], exclude: Path | None = None) -> Path | None:
+    folder_name = _repo_folder_name(repo_id)
+    excluded = exclude.resolve() if exclude is not None and exclude.exists() else None
+    for root_name in LOCAL_MODEL_REPO_SEARCH_ROOTS:
+        root = Path.cwd() / root_name
+        if not root.exists():
+            continue
+        for candidate in root.rglob(folder_name):
+            if not candidate.is_dir():
+                continue
+            try:
+                if excluded is not None and candidate.resolve() == excluded:
+                    continue
+            except OSError:
+                continue
+            names = {path.name for path in candidate.rglob("*") if path.is_file()}
+            if required_names <= names:
+                return candidate
+    return None
+
+
+def _find_cached_model_folder(required_names: set[str], any_name_groups: tuple[set[str], ...], exclude: Path | None = None) -> Path | None:
+    excluded = exclude.resolve() if exclude is not None and exclude.exists() else None
+    for root_name in LOCAL_MODEL_REPO_SEARCH_ROOTS:
+        root = Path.cwd() / root_name
+        if not root.exists():
+            continue
+        for model_bin in root.rglob("model.bin"):
+            candidate = model_bin.parent
+            if not candidate.is_dir():
+                continue
+            try:
+                if excluded is not None and candidate.resolve() == excluded:
+                    continue
+            except OSError:
+                continue
+            names = {path.name for path in candidate.rglob("*") if path.is_file()}
+            if required_names <= names and all(names & group for group in any_name_groups):
+                return candidate
+    return None
+
+
+def _copy_cached_repo_folder(source: Path, destination: Path) -> None:
+    if destination.exists():
+        shutil.rmtree(destination)
+    ignore = shutil.ignore_patterns(".hf_cache", "__pycache__")
+    shutil.copytree(source, destination, ignore=ignore)
 
 
 def _ensure_faster_whisper(models_root: Path, allow_downloads: bool) -> tuple[Path | None, str | None]:
@@ -50,6 +104,20 @@ def _ensure_faster_whisper(models_root: Path, allow_downloads: bool) -> tuple[Pa
     matches = [candidate for candidate in runnable if candidate.adapter_name == "faster_whisper"]
     if matches:
         return matches[0].path, None
+    destination = models_root / _repo_folder_name(RECOMMENDED_BASELINE_REPO)
+    cached = _find_cached_repo_folder(RECOMMENDED_BASELINE_REPO, {"model.bin", "config.json"}, exclude=destination)
+    if cached is None:
+        cached = _find_cached_model_folder(
+            {"model.bin", "config.json"},
+            ({"tokenizer.json", "vocabulary.json", "vocabulary.txt", "vocab.json"},),
+            exclude=destination,
+        )
+    if cached is not None:
+        _copy_cached_repo_folder(cached, destination)
+        runnable, _ = scan_models(models_root)
+        matches = [candidate for candidate in runnable if candidate.adapter_name == "faster_whisper"]
+        if matches:
+            return matches[0].path, None
     if not allow_downloads:
         return None, f"missing {RECOMMENDED_BASELINE_REPO}; rerun with --allow-downloads"
     destination = download_hf_model_from_ref(

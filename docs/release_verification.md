@@ -52,7 +52,7 @@ python qa\runtime_matrix\run_row.py --row model_fixture_quality_claims --workdir
 python qa\runtime_matrix\run_row.py --row hf_downloader_package_variant_taxonomy --workdir Temp\runtime_matrix_hf_downloader_package_variant_taxonomy
 python qa\runtime_matrix\run_row.py --row generic_onnx_cuda_unavailable_cpu_fallback --workdir Temp\runtime_matrix_generic_onnx_cuda_unavailable_cpu_fallback
 python qa\runtime_matrix\run_row.py --row generic_onnx_openvino_unavailable_cpu_fallback --workdir Temp\runtime_matrix_generic_onnx_openvino_unavailable_cpu_fallback
-python -m app.doctor --config config.json --validate-real-smoke
+python -m app.doctor --config config.json --validate-real-smoke --full-real-smoke
 Remove-Item -LiteralPath dist\release-assets -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path dist\release-assets
 Copy-Item dist\Easy-ASR-Bench-vX.Y.Z-win.zip dist\release-assets\
@@ -108,7 +108,7 @@ The `setup_repair_model_layouts` runtime-matrix row exercises the shared model-l
 
 The `clean_vm_zero_dependency_bootstrap` row is the final fresh-machine proof. On a normal development laptop it must block with an external requirement. In a fresh Windows 11 VM/Sandbox, set `EASY_ASR_BENCH_CLEAN_VM_BOOTSTRAP_PROOF=1` and run it with `--install-deps --allow-downloads`; it then runs `setup.bat --doctor --repair-all-safe`, `setup.bat --doctor --repair-model-layouts --allow-downloads`, the `setup_repair_all_safe` subrow, the `setup_repair_model_layouts` subrow, the same-media multi-model SmolLM benchmark, and first-run smoke, writing each subrow/transcript as evidence. The first-run smoke JSON must include the repair-plan schema, repair-plan summary, and setup/model-layout repair commands so a fresh-machine pass proves first-run guidance is connected to the same bootstrapper diagnostics.
 
-`app.doctor --validate-real-smoke` is the local post-repair smoke wrapper. It emits `easy_asr_bench.real_smoke_validation.v1`, includes the `repair_all_safe` JSON, and records each runtime-matrix row status plus its `row.json` path. Use `--no-network` for explicit offline diagnostics, or `--allow-downloads` only when model/media downloads are intentionally permitted.
+`app.doctor --validate-real-smoke` is the local post-repair smoke wrapper. It emits `easy_asr_bench.real_smoke_validation.v1`, includes the `repair_all_safe` JSON, and records each runtime-matrix row status plus its `row.json` path. The default quick profile runs repair, the real faster-whisper smoke alias, and offline report validation. Add `--full-real-smoke` for the full format profile across faster-whisper/CTranslate2, OpenAI Whisper `.pt`, whisper.cpp GGML, HF Safetensors, Generic ONNX CTC, ASR GGUF+mmproj, SmolLM scoring, and same-media CPU/DirectML rows. Use `--no-network` for explicit offline diagnostics, or `--allow-downloads` only when model/media downloads are intentionally permitted.
 
 The `report_atomic_write_failure_cleanup` row forces simulated replace failures in report text and CSV atomic-write paths and verifies failed `.partial` files are removed while the previous complete artifact remains intact. This guards against partial report artifacts after disk, permission, antivirus, or interrupted-write failures.
 
