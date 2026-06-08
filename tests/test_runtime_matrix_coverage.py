@@ -888,6 +888,12 @@ def test_runtime_matrix_maps_whisper_cpp_ggml_row():
     assert ROWS["whisper_cpp_ggml_speech_smollm_grading"].module == "qa.runtime_matrix.rows.whisper_cpp_smollm_grading"
 
 
+def test_required_release_rows_include_quality_bearing_whisper_cpp_speech_row():
+    data = json.loads((ROOT / "tests" / "fixtures" / "release_required_rows_v2.json").read_text(encoding="utf-8"))
+
+    assert "whisper_cpp_ggml_speech_smollm_grading" in data["rows"]
+
+
 def test_runtime_matrix_maps_real_faster_whisper_smollm_grading_row():
     assert ROWS["faster_whisper_pkg_resources_repair"].module == "qa.runtime_matrix.rows.ctranslate2_dynamic_resolver"
     assert ROWS["faster_whisper_ctranslate2_candidate_fallback_repair"].module == "qa.runtime_matrix.rows.ctranslate2_dynamic_resolver"
