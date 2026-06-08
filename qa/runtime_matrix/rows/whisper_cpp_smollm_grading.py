@@ -108,7 +108,8 @@ def _run_public_media_quality(row_id: str, evidence_dir: Path, allow_downloads: 
     if isinstance(model_path_or_row, dict):
         return model_path_or_row
     model_path = model_path_or_row
-    source, fixture_details, fixture_error = _download_fixture("wikimedia_cc0_word_wav", evidence_dir, allow_downloads)
+    fixture_id = "wikimedia_public_domain_spoken_words_webm" if row_id == "real_public_video_whisper_cpp_ggml_smollm_grading" else "wikimedia_cc0_word_wav"
+    source, fixture_details, fixture_error = _download_fixture(fixture_id, evidence_dir, allow_downloads)
     if fixture_error or source is None:
         return write_row(
             row_id,
@@ -217,7 +218,7 @@ def _run_public_media_quality(row_id: str, evidence_dir: Path, allow_downloads: 
             "expected_text": expected_text,
             "normalized_wer": normalized_wer,
             "quality_bearing": True,
-            "quality_note": "Single-word public-media WER is recorded but not release-gated.",
+            "quality_note": "Short public-media WER is recorded but not release-gated.",
             "output_dir": str(output_dir),
             "score_status": scored.get("status"),
             "whisper_cpp_score": {
@@ -371,7 +372,12 @@ def _run_speech_quality(row_id: str, evidence_dir: Path, allow_downloads: bool) 
 
 
 def run(row_id: str, evidence_dir: Path, _install_deps: bool, allow_downloads: bool) -> dict:
-    if row_id not in {"whisper_cpp_ggml_smollm_grading", "whisper_cpp_ggml_speech_smollm_grading", "real_public_media_whisper_cpp_ggml_smollm_grading"}:
+    if row_id not in {
+        "whisper_cpp_ggml_smollm_grading",
+        "whisper_cpp_ggml_speech_smollm_grading",
+        "real_public_media_whisper_cpp_ggml_smollm_grading",
+        "real_public_video_whisper_cpp_ggml_smollm_grading",
+    }:
         return write_row(
             row_id,
             "fail",
@@ -416,7 +422,7 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, allow_downloads: b
         )
     if row_id == "whisper_cpp_ggml_speech_smollm_grading":
         return _run_speech_quality(row_id, evidence_dir, allow_downloads)
-    if row_id == "real_public_media_whisper_cpp_ggml_smollm_grading":
+    if row_id in {"real_public_media_whisper_cpp_ggml_smollm_grading", "real_public_video_whisper_cpp_ggml_smollm_grading"}:
         return _run_public_media_quality(row_id, evidence_dir, allow_downloads)
 
     model_path_or_row = _ensure_whisper_cpp_fixture(evidence_dir, row_id, allow_downloads, [SMOLLM_PATH])
