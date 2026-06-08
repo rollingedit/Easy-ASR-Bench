@@ -26,6 +26,7 @@ python qa\runtime_matrix\run_row.py --row setup_repair_all_safe --workdir Temp\r
 python qa\runtime_matrix\run_row.py --row repair_all_safe_failure_isolation --workdir Temp\runtime_matrix_repair_all_safe_failure_isolation
 python qa\runtime_matrix\run_row.py --row setup_repair_model_layouts --workdir Temp\runtime_matrix_setup_repair_model_layouts
 python qa\runtime_matrix\run_row.py --row clean_vm_zero_dependency_bootstrap --workdir Temp\runtime_matrix_clean_vm_bootstrap
+python qa\runtime_matrix\run_row.py --row report_atomic_write_failure_cleanup --workdir Temp\runtime_matrix_report_atomic_write_failure_cleanup
 python -m app.doctor --config config.json --validate-real-smoke
 Remove-Item -LiteralPath dist\release-assets -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path dist\release-assets
@@ -59,6 +60,8 @@ The `setup_repair_model_layouts` runtime-matrix row exercises the shared model-l
 The `clean_vm_zero_dependency_bootstrap` row is the final fresh-machine proof. On a normal development laptop it must block with an external requirement. In a fresh Windows 11 VM/Sandbox, set `EASY_ASR_BENCH_CLEAN_VM_BOOTSTRAP_PROOF=1` and run it with `--install-deps --allow-downloads`; it then runs `setup.bat --doctor --repair-all-safe`, `setup.bat --doctor --repair-model-layouts --allow-downloads`, the `setup_repair_all_safe` subrow, the `setup_repair_model_layouts` subrow, the same-media multi-model SmolLM benchmark, and first-run smoke, writing each subrow/transcript as evidence. The first-run smoke JSON must include the repair-plan schema, repair-plan summary, and setup/model-layout repair commands so a fresh-machine pass proves first-run guidance is connected to the same bootstrapper diagnostics.
 
 `app.doctor --validate-real-smoke` is the local post-repair smoke wrapper. It emits `easy_asr_bench.real_smoke_validation.v1`, includes the `repair_all_safe` JSON, and records each runtime-matrix row status plus its `row.json` path. Use `--no-network` for explicit offline diagnostics, or `--allow-downloads` only when model/media downloads are intentionally permitted.
+
+The `report_atomic_write_failure_cleanup` row forces simulated replace failures in report text and CSV atomic-write paths and verifies failed `.partial` files are removed while the previous complete artifact remains intact. This guards against partial report artifacts after disk, permission, antivirus, or interrupted-write failures.
 
 Public-asset Windows smoke should also capture machine-readable app state from the installed app:
 

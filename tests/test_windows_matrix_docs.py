@@ -143,6 +143,14 @@ def test_release_verification_documents_clean_vm_bootstrap_runtime_row():
     assert "same-media multi-model SmolLM benchmark" in text
 
 
+def test_release_verification_documents_report_atomic_write_cleanup_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row report_atomic_write_failure_cleanup" in text
+    assert "failed `.partial` files are removed" in text
+    assert "previous complete artifact remains intact" in text
+
+
 def test_release_verification_documents_validate_real_smoke_doctor_mode():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
     setup_text = Path("docs/what_setup_installs.md").read_text(encoding="utf-8")
