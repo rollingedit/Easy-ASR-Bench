@@ -12,6 +12,7 @@ from app.hf_model_downloader import (
     destination_for,
     download_hf_model_interactive,
     download_choice,
+    execute_missing_file_repair_plan,
     local_relative_name,
     offer_missing_file_repair,
     parent_refs,
@@ -656,6 +657,8 @@ def test_offer_missing_file_repair_downloads_exact_repo_matches(tmp_path: Path, 
     repair_plan = json.loads(repair_plan_path.read_text(encoding="utf-8"))
     assert repair_plan["schema"] == "easy_asr_bench.model_layout_repair_plan.v1"
     assert repair_plan["records"][0]["safe_download_files"] == ["config.json", "preprocessor_config.json"]
+    assert repair_plan["last_execution"]["schema"] == "easy_asr_bench.model_layout_repair_execution.v1"
+    assert repair_plan["last_execution"]["summary"]["repaired"] == 1
     assert "config.json" in downloaded
     assert "preprocessor_config.json" in downloaded
 
@@ -741,6 +744,128 @@ def test_build_missing_file_repair_plan_records_audit_blocker(tmp_path: Path):
     assert record["repair_action"] == "write_llm_file_audit_request"
     assert record["can_auto_repair"] is False
     assert "No exact or conservative" in record["block_reason"]
+
+
+def test_execute_missing_file_repair_plan_downloads_allowed_sidecars(tmp_path: Path, monkeypatch):
+    destination = tmp_path / "model"
+    destination.mkdir()
+    choice = DownloadChoice(
+        label="Safetensors",
+        kind="safetensors",
+        primary_files=("model.safetensors",),
+        files=("model.safetensors",),
+        task_hint="metadata_required",
+    )
+    plan = {
+        "schema": "easy_asr_bench.model_layout_repair_plan.v1",
+        "records": [
+            {
+                "issue_id": "model_layout:incomplete",
+                "repair_action": "download_exact_missing_files",
+                "safe_download_files": ["config.json", "preprocessor_config.json"],
+                "can_auto_repair": True,
+            }
+        ],
+    }
+    downloaded: list[str] = []
+
+    def fake_download(repo_id: str, revision: str | None, filename: str, destination: Path, relative_name: str | None = None) -> Path:
+        downloaded.append(filename)
+        path = destination / (relative_name or filename)
+        path.write_text("{}", encoding="utf-8")
+        return path
+
+    monkeypatch.setattr("app.hf_model_downloader._download_file", fake_download)
+
+    execution = execute_missing_file_repair_plan(
+        HFModelRef("owner/asr"),
+        choice,
+        ["model.safetensors", "config.json", "preprocessor_config.json"],
+        destination,
+        plan,
+        allow_downloads=True,
+        print_func=lambda text: None,
+    )
+
+    assert execution["schema"] == "easy_asr_bench.model_layout_repair_execution.v1"
+    assert execution["summary"]["repaired"] == 1
+    assert execution["records"][0]["status"] == "repaired"
+    assert downloaded == ["config.json", "preprocessor_config.json"]
+
+
+def test_execute_missing_file_repair_plan_blocks_without_download_permission(tmp_path: Path, monkeypatch):
+    destination = tmp_path / "model"
+    destination.mkdir()
+    choice = DownloadChoice(
+        label="Safetensors",
+        kind="safetensors",
+        primary_files=("model.safetensors",),
+        files=("model.safetensors",),
+        task_hint="metadata_required",
+    )
+    plan = {
+        "schema": "easy_asr_bench.model_layout_repair_plan.v1",
+        "records": [
+            {
+                "issue_id": "model_layout:incomplete",
+                "repair_action": "download_exact_missing_files",
+                "safe_download_files": ["config.json"],
+                "can_auto_repair": True,
+            }
+        ],
+    }
+    monkeypatch.setattr("app.hf_model_downloader._download_file", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("unexpected download")))
+
+    execution = execute_missing_file_repair_plan(
+        HFModelRef("owner/asr"),
+        choice,
+        ["model.safetensors", "config.json"],
+        destination,
+        plan,
+        allow_downloads=False,
+        print_func=lambda text: None,
+    )
+
+    assert execution["summary"]["blocked"] == 1
+    assert execution["records"][0]["status"] == "blocked"
+    assert "not approved" in execution["records"][0]["block_reason"]
+
+
+def test_execute_missing_file_repair_plan_blocks_invalid_files(tmp_path: Path):
+    destination = tmp_path / "model"
+    destination.mkdir()
+    choice = DownloadChoice(
+        label="Safetensors",
+        kind="safetensors",
+        primary_files=("model.safetensors",),
+        files=("model.safetensors",),
+        task_hint="metadata_required",
+    )
+    plan = {
+        "schema": "easy_asr_bench.model_layout_repair_plan.v1",
+        "records": [
+            {
+                "issue_id": "model_layout:bad",
+                "repair_action": "download_exact_missing_files",
+                "safe_download_files": ["invented.json", "model.safetensors"],
+                "can_auto_repair": True,
+            }
+        ],
+    }
+
+    execution = execute_missing_file_repair_plan(
+        HFModelRef("owner/asr"),
+        choice,
+        ["model.safetensors", "config.json"],
+        destination,
+        plan,
+        allow_downloads=True,
+        print_func=lambda text: None,
+    )
+
+    assert execution["summary"]["blocked"] == 1
+    assert execution["records"][0]["status"] == "blocked"
+    assert "not safe exact repo additions" in execution["records"][0]["block_reason"]
 
 
 def test_offer_missing_file_repair_writes_structured_llm_audit_request_when_ambiguous(tmp_path: Path, monkeypatch):

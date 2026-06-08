@@ -722,6 +722,82 @@ def write_missing_file_repair_plan(destination: Path, plan: dict) -> Path:
     return path
 
 
+def execute_missing_file_repair_plan(
+    ref: HFModelRef,
+    choice: DownloadChoice,
+    repo_files: list[str],
+    destination: Path,
+    plan: dict,
+    *,
+    allow_downloads: bool,
+    print_func=print,
+) -> dict:
+    repo_set = set(repo_files)
+    selected_set = set(choice.files)
+    records = []
+    downloaded_paths: list[Path] = []
+    for record in plan.get("records", []):
+        files = [str(item) for item in record.get("safe_download_files", []) if item]
+        execution = {
+            "issue_id": record.get("issue_id", ""),
+            "repair_action": record.get("repair_action", ""),
+            "status": "pending",
+            "requested_files": files,
+            "downloaded_files": [],
+            "downloaded_paths": [],
+            "block_reason": "",
+            "error_type": "",
+            "message": "",
+        }
+        invalid = [filename for filename in files if filename not in repo_set or filename in selected_set]
+        if invalid:
+            execution["status"] = "blocked"
+            execution["block_reason"] = "Repair plan included files that are not safe exact repo additions: " + ", ".join(invalid)
+            records.append(execution)
+            continue
+        if not files or not record.get("can_auto_repair"):
+            execution["status"] = "blocked"
+            execution["block_reason"] = record.get("block_reason") or "No safe automatic model-layout repair files were available."
+            records.append(execution)
+            continue
+        if not allow_downloads:
+            execution["status"] = "blocked"
+            execution["block_reason"] = "Model-layout repair downloads were not approved."
+            records.append(execution)
+            continue
+        try:
+            paths = _download_validated_files(ref, choice, files, destination, print_func=print_func)
+        except Exception as exc:
+            execution["status"] = "failed"
+            execution["error_type"] = type(exc).__name__
+            execution["message"] = str(exc) or type(exc).__name__
+            records.append(execution)
+            continue
+        downloaded_paths.extend(paths)
+        execution["status"] = "repaired"
+        execution["downloaded_files"] = files
+        execution["downloaded_paths"] = [str(path) for path in paths]
+        records.append(execution)
+
+    summary = {
+        "total": len(records),
+        "repaired": sum(1 for record in records if record["status"] == "repaired"),
+        "blocked": sum(1 for record in records if record["status"] == "blocked"),
+        "failed": sum(1 for record in records if record["status"] == "failed"),
+        "downloaded_files": sum(len(record.get("downloaded_files", [])) for record in records),
+    }
+    return {
+        "schema": "easy_asr_bench.model_layout_repair_execution.v1",
+        "repo_id": ref.repo_id,
+        "revision": ref.revision,
+        "destination": str(destination),
+        "allow_downloads": allow_downloads,
+        "records": records,
+        "summary": summary,
+        "downloaded_paths": [str(path) for path in downloaded_paths],
+    }
+
+
 def _parse_llm_recommendation(raw: str, repo_files: list[str], already_selected: set[str]) -> tuple[list[str], str | None]:
     text = raw.strip()
     if not text:
@@ -794,7 +870,9 @@ def offer_missing_file_repair(
             print_func(f"[{key(str(index))}] {filename}")
         answer = input_func(f"Download these missing files now? [{key('Y')}/{key('n')}] ").strip().lower()
         if answer not in {"n", "no"}:
-            _download_validated_files(ref, choice, repair_files, destination, print_func=print_func)
+            execution = execute_missing_file_repair_plan(ref, choice, repo_files, destination, repair_plan, allow_downloads=True, print_func=print_func)
+            repair_plan["last_execution"] = execution
+            write_missing_file_repair_plan(destination, repair_plan)
             return repair_plan
         print_func("Skipped exact missing-file repair download.")
 
@@ -812,7 +890,9 @@ def offer_missing_file_repair(
             print_func(f"This repair set has {len(same_package_files)} file(s). Review before downloading.")
         answer = input_func(f"Download these same-package repair files now? [{key('y')}/{key('N')}] ").strip().lower()
         if answer in {"y", "yes"}:
-            _download_validated_files(ref, choice, same_package_files, destination, print_func=print_func)
+            execution = execute_missing_file_repair_plan(ref, choice, repo_files, destination, repair_plan, allow_downloads=True, print_func=print_func)
+            repair_plan["last_execution"] = execution
+            write_missing_file_repair_plan(destination, repair_plan)
             return repair_plan
         print_func("Skipped same-package repair download.")
 
