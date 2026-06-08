@@ -197,6 +197,33 @@ def test_merge_release_evidence_rejects_unknown_rows():
         raise AssertionError("unknown evidence row should fail")
 
 
+def test_merge_release_evidence_can_ignore_unknown_rows():
+    merged = merge_manual_rows(
+        {"manual_rows": [{"id": "known", "status": "not_run"}]},
+        {
+            "known": {"id": "known", "status": "pass"},
+            "unknown": {"id": "unknown", "status": "pass"},
+        },
+        ignore_unknown=True,
+    )
+
+    assert merged["manual_rows"] == [{"id": "known", "status": "pass"}]
+    assert merged["manual_row_status_counts"] == {"pass": 1}
+
+
+def test_evidence_rows_can_ignore_malformed_rows(tmp_path: Path):
+    good = tmp_path / "good"
+    bad = tmp_path / "bad"
+    good.mkdir()
+    bad.mkdir()
+    (good / "row.json").write_text(json.dumps({"id": "known", "status": "pass"}), encoding="utf-8")
+    (bad / "row.json").write_text(json.dumps({"status": "blocked", "summary": "offline"}), encoding="utf-8")
+
+    rows = evidence_rows(tmp_path, ignore_malformed=True)
+
+    assert list(rows) == ["known"]
+
+
 def test_verify_release_transcript_rejects_self_hash_and_checksum_mismatch(tmp_path: Path):
     assets = tmp_path / "assets"
     assets.mkdir()
