@@ -56,9 +56,10 @@
       "rows": [
         "real_media_download_cache",
         "real_public_media_faster_whisper_smollm_grading",
-        "real_public_media_openai_whisper_pt_smollm_grading"
+        "real_public_media_openai_whisper_pt_smollm_grading",
+        "real_public_media_whisper_cpp_ggml_smollm_grading"
       ],
-      "notes": "CC0/public-domain-dedicated spoken-word WAV from Wikimedia Commons. Used for real web-media normalization and faster-whisper/OpenAI Whisper .pt plus SmolLM scored-report validation; WER is recorded but not release-gated because this is a single-word public-media smoke fixture."
+      "notes": "CC0/public-domain-dedicated spoken-word WAV from Wikimedia Commons. Used for real web-media normalization and faster-whisper/OpenAI Whisper .pt/whisper.cpp plus SmolLM scored-report validation; WER is recorded but not release-gated because this is a single-word public-media smoke fixture."
     },
     "wikimedia_public_domain_spoken_words_webm": {
       "source_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Spoken%20Words.webm",
@@ -80,6 +81,7 @@
         "smollm_reference_grading_report",
         "real_public_media_faster_whisper_smollm_grading",
         "real_public_media_openai_whisper_pt_smollm_grading",
+        "real_public_media_whisper_cpp_ggml_smollm_grading",
         "real_public_video_faster_whisper_smollm_grading",
         "llama_cpp_cuda_smollm_smoke",
         "llama_cpp_vulkan_smollm_smoke"
@@ -191,9 +193,10 @@
       "rows": [
         "whisper_cpp_ggml",
         "whisper_cpp_ggml_smollm_grading",
-        "whisper_cpp_ggml_speech_smollm_grading"
+        "whisper_cpp_ggml_speech_smollm_grading",
+        "real_public_media_whisper_cpp_ggml_smollm_grading"
       ],
-      "notes": "The blank-audio row is structural; the speech SmolLM row uses generated SAPI speech and asserts non-empty transcript plus WER threshold."
+      "notes": "The blank-audio row is structural; the speech SmolLM row uses generated SAPI speech and asserts non-empty transcript plus WER threshold. The real public-media row uses the Wikimedia CC0 WAV fixture and records single-word WER without release-gating it."
     },
     "openai_whisper_tiny_pt": {
       "repo": "openai/whisper",
