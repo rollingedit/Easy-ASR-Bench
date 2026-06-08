@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -67,6 +68,8 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
         return _run_public_real_download_to_asr(row_id, evidence_dir, _install_deps, _allow_downloads)
     if row_id == "hf_downloader_supported_outcome_taxonomy":
         return _run_supported_outcome_taxonomy(row_id, evidence_dir)
+    if row_id == "hf_downloader_package_variant_taxonomy":
+        return _run_package_variant_taxonomy(row_id, evidence_dir)
     if row_id != "hf_downloader_qwen3_asr_gguf_mmproj_layout":
         return write_row(row_id, "fail", evidence_dir, summary=f"Unhandled HF downloader layout row: {row_id}")
     return _run_materialized_layout(row_id, evidence_dir)
@@ -680,6 +683,7 @@ def _run_supported_outcome_taxonomy(row_id: str, evidence_dir: Path) -> dict:
         repo_id="owner/fw-asr",
         files=["model.bin", "config.json", "tokenizer.json"],
     )
+
     runnable, unsupported = _candidate_payloads(runnable_dest)
     cases["complete_runnable_asr"] = {
         "destination": str(runnable_dest) if runnable_dest else "",
@@ -848,6 +852,169 @@ def _run_supported_outcome_taxonomy(row_id: str, evidence_dir: Path) -> dict:
             "HF downloader routed supported repo outcomes into runnable ASR, sidecar repair, reference LLM, and inspection-only paths."
             if not failures
             else "HF downloader supported-outcome taxonomy validation failed."
+        ),
+        details={"cases": cases, "failures": failures},
+        artifacts=artifacts,
+    )
+
+
+def _run_package_variant_taxonomy(row_id: str, evidence_dir: Path) -> dict:
+    cases: dict[str, dict] = {}
+    failures: list[str] = []
+
+    sharded_files = [
+        "config.json",
+        "preprocessor_config.json",
+        "tokenizer.json",
+        "model.safetensors.index.json",
+        "model-00001-of-00002.safetensors",
+        "model-00002-of-00002.safetensors",
+    ]
+    sharded_ref = HFModelRef("owner/sharded-asr")
+    sharded_choices = build_download_choices(sharded_files, sharded_ref)
+    sharded_choice = next((choice for choice in sharded_choices if choice.kind == "safetensors_index"), None)
+    sharded_downloads: list[Path] = []
+    sharded_destination = evidence_dir / "sharded_safetensors"
+    if sharded_destination.exists():
+        shutil.rmtree(sharded_destination)
+
+    def sharded_download(_repo_id: str, _revision: str | None, filename: str, destination: Path, relative_name: str | None = None) -> Path:
+        target = destination / (relative_name or filename)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if filename == "model.safetensors.index.json":
+            target.write_text(
+                json.dumps(
+                    {
+                        "metadata": {"total_size": 4},
+                        "weight_map": {
+                            "encoder.weight": "model-00001-of-00002.safetensors",
+                            "decoder.weight": "model-00002-of-00002.safetensors",
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+        elif filename.endswith(".json"):
+            target.write_text("{}", encoding="utf-8", newline="\n")
+        else:
+            target.write_bytes(f"fixture:{filename}".encode("utf-8"))
+        return target
+
+    if sharded_choice is None:
+        failures.append("sharded Safetensors index choice was not built")
+    else:
+        original_download = hf_model_downloader._download_file
+        hf_model_downloader._download_file = sharded_download
+        try:
+            sharded_downloads = download_choice(sharded_ref, sharded_choice, sharded_destination, print_func=lambda _text: None)
+        finally:
+            hf_model_downloader._download_file = original_download
+        downloaded_names = sorted(path.name for path in sharded_downloads)
+        expected = sorted(
+            [
+                "config.json",
+                "preprocessor_config.json",
+                "tokenizer.json",
+                "model.safetensors.index.json",
+                "model-00001-of-00002.safetensors",
+                "model-00002-of-00002.safetensors",
+            ]
+        )
+        if downloaded_names != expected:
+            failures.append(f"sharded Safetensors downloads did not expand index shards: {downloaded_names}")
+        cases["sharded_safetensors_index"] = {
+            "choice": sharded_choice.__dict__,
+            "downloaded_names": downloaded_names,
+            "expected_downloaded_names": expected,
+        }
+
+    onnx_files = [
+        "config.json",
+        "tokenizer.json",
+        "preprocessor_config.json",
+        "onnx/audio_encoder.onnx",
+        "onnx/audio_encoder.onnx_data",
+        "onnx/audio_encoder_fp16.onnx",
+        "onnx/audio_encoder_fp16.onnx_data",
+        "onnx/audio_encoder_q4.onnx",
+        "onnx/audio_encoder_q4.onnx_data",
+        "onnx/decoder_model_merged.onnx",
+        "onnx/decoder_model_merged.onnx_data",
+        "onnx/decoder_model_merged_fp16.onnx",
+        "onnx/decoder_model_merged_fp16.onnx_data",
+        "onnx/decoder_model_merged_q4.onnx",
+        "onnx/decoder_model_merged_q4.onnx_data",
+        "model.safetensors",
+    ]
+    onnx_choices = [choice for choice in build_download_choices(onnx_files, HFModelRef("owner/multi-onnx")) if choice.kind == "onnx"]
+    by_variant = {}
+    for choice in onnx_choices:
+        if "[fp16]" in choice.label:
+            by_variant["fp16"] = choice
+        elif "[q4]" in choice.label:
+            by_variant["q4"] = choice
+        elif "[default]" in choice.label:
+            by_variant["default"] = choice
+    missing_variants = sorted(set(["default", "fp16", "q4"]) - set(by_variant))
+    if missing_variants:
+        failures.append("ONNX variants were not split into choices: " + ", ".join(missing_variants))
+    fp16 = by_variant.get("fp16")
+    if fp16 is not None:
+        forbidden = {"onnx/audio_encoder.onnx", "onnx/audio_encoder_q4.onnx", "onnx/decoder_model_merged_q4.onnx", "model.safetensors"}
+        leaked = sorted(set(fp16.files) & forbidden)
+        required = {
+            "onnx/audio_encoder_fp16.onnx",
+            "onnx/audio_encoder_fp16.onnx_data",
+            "onnx/decoder_model_merged_fp16.onnx",
+            "onnx/decoder_model_merged_fp16.onnx_data",
+            "config.json",
+            "tokenizer.json",
+            "preprocessor_config.json",
+        }
+        missing_required = sorted(required - set(fp16.files))
+        if leaked:
+            failures.append("ONNX fp16 choice leaked other variants/files: " + ", ".join(leaked))
+        if missing_required:
+            failures.append("ONNX fp16 choice missed required files: " + ", ".join(missing_required))
+    cases["onnx_variant_isolation"] = {
+        "choices": [choice.__dict__ for choice in onnx_choices],
+        "variants": sorted(by_variant),
+    }
+
+    split_files = [
+        "BF16/Qwen3.5-27B-BF16-00001-of-00002.gguf",
+        "BF16/Qwen3.5-27B-BF16-00002-of-00002.gguf",
+        "Q4_K_M/Qwen3.5-27B-Q4_K_M.gguf",
+    ]
+    resolved_ref, split_choices = build_smart_download_choices(split_files, HFModelRef("unsloth/Qwen3.5-27B-GGUF", "main", "BF16"))
+    split_choice = split_choices[0] if split_choices else None
+    if split_choice is None:
+        failures.append("split GGUF reference LLM choice was not built")
+    else:
+        expected_split = (
+            "BF16/Qwen3.5-27B-BF16-00001-of-00002.gguf",
+            "BF16/Qwen3.5-27B-BF16-00002-of-00002.gguf",
+        )
+        if split_choice.files != expected_split:
+            failures.append("split GGUF choice did not keep all split parts together")
+        if split_choice.task_hint != "reference_llm":
+            failures.append("split GGUF text package was not marked reference_llm")
+    cases["split_gguf_reference_llm"] = {
+        "resolved_ref": resolved_ref.__dict__,
+        "choice": split_choice.__dict__ if split_choice else None,
+    }
+
+    artifacts = list(sharded_downloads)
+    return write_row(
+        row_id,
+        "fail" if failures else "pass",
+        evidence_dir,
+        summary=(
+            "HF downloader package-variant taxonomy keeps sharded Safetensors, ONNX variants, and split GGUF packages grouped without cross-variant downloads."
+            if not failures
+            else "HF downloader package-variant taxonomy validation failed."
         ),
         details={"cases": cases, "failures": failures},
         artifacts=artifacts,

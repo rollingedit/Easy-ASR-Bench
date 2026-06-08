@@ -42,6 +42,7 @@
     "report_atomic_write_failure_cleanup",
     "llm_reference_json_import",
     "model_fixture_quality_claims",
+    "hf_downloader_package_variant_taxonomy",
     "same_media_multi_model_smollm_benchmark",
     "same_media_multi_model_smollm_benchmark_directml",
     "dependency_install_declined"

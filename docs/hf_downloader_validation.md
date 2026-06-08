@@ -12,6 +12,8 @@ Current fixture classes:
 
 These fixtures prove package selection behavior, not live Hugging Face availability. A public release may add live-download smoke evidence in `release-smoke-vX.Y.Z.json`, but unrun live repos must not be described as passed.
 
+The runtime-matrix row `hf_downloader_package_variant_taxonomy` exercises these fixture classes through the product downloader helpers. It verifies sharded Safetensors index expansion, ONNX variant isolation, and split GGUF grouping as executable release evidence.
+
 Live-download evidence, when actually run, should record:
 
 - `repo_id`
