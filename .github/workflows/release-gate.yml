@@ -27,6 +27,7 @@ jobs:
       - name: Install validation dependencies
         run: |
           python -m pip install pyyaml pytest
+          python -m pip install -r requirements/python_packaging.txt
           python -m pip install -r requirements/core.txt
 
       - name: Validate release files
@@ -119,7 +120,9 @@ jobs:
 
       - name: Install core and test dependencies
         run: |
+          python -m pip install -r requirements/python_packaging.txt
           python -m pip install -r requirements/core.txt
+          python -m pip install -r requirements/onnx.txt
           python -m pip install pytest
 
       - name: Run unit tests

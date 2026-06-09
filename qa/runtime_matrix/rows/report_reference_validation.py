@@ -136,7 +136,7 @@ def _assert_report_files(output_dir: Path, *, large: bool) -> list[str]:
         'id="results-json"',
         "LLM-Corrected Reference",
         "Speed and Memory Only",
-        "Video Memory",
+        "VRAM / GPU Memory Peak",
         "function scoreReference",
         "function renderAlignmentPage",
     ]
