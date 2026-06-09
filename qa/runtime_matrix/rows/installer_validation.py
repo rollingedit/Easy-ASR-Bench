@@ -227,7 +227,9 @@ def _tamper_installer(row_id: str, evidence_dir: Path) -> dict:
 
 
 def _bad_release_checksum(row_id: str, evidence_dir: Path) -> dict:
-    assets = _stage_release_assets(evidence_dir / "assets")
+    staged_asset_dir = ROOT / "Temp" / "runtime_matrix_bad_release_checksum_assets"
+    shutil.rmtree(staged_asset_dir, ignore_errors=True)
+    assets = _stage_release_assets(staged_asset_dir)
     checksums = json.loads(assets["checksums"].read_text(encoding="utf-8"))
     checksums["files"][ZIP_NAME] = "sha256:" + ("0" * 64)
     assets["checksums"].write_text(json.dumps(checksums, indent=2) + "\n", encoding="utf-8", newline="\n")
