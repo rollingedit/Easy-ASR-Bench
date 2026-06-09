@@ -1685,6 +1685,30 @@ def test_same_media_dependency_repair_recovers_when_post_check_is_clean(tmp_path
     assert artifacts == [tmp_path / "llama_mtmd_repair.log"]
 
 
+def test_same_media_dependency_preflight_retries_safe_repair_before_blocking(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import same_media_multi_model_smollm_benchmark
+
+    calls = []
+
+    def fake_repair(config, evidence_dir, install_deps):
+        calls.append(install_deps)
+        if not install_deps:
+            return ["onnx: missing onnxruntime DirectML provider"], {"onnx_missing_after": ["onnxruntime DirectML provider"]}, []
+        return [], {"onnx_missing_after": []}, [tmp_path / "onnx_repair.log"]
+
+    monkeypatch.setattr(same_media_multi_model_smollm_benchmark, "_repair_dependencies", fake_repair)
+
+    blockers, details, artifacts = same_media_multi_model_smollm_benchmark._repair_dependencies_with_safe_retry({}, tmp_path, False)
+
+    assert calls == [False, True]
+    assert blockers == []
+    assert details["safe_repair_retry_triggered"] is True
+    assert details["safe_repair_retry_blockers_before"] == ["onnx: missing onnxruntime DirectML provider"]
+    assert details["onnx_missing_after"] == []
+    assert details["safe_repair_retry_onnx_missing_after"] == []
+    assert artifacts == [tmp_path / "onnx_repair.log"]
+
+
 def test_same_media_multi_model_row_blocks_without_smollm_fixture(tmp_path, monkeypatch):
     from qa.runtime_matrix.rows import same_media_multi_model_smollm_benchmark
 

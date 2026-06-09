@@ -150,6 +150,21 @@ def _repair_dependencies(config: dict, evidence_dir: Path, install_deps: bool) -
     return blockers, details, artifacts
 
 
+def _repair_dependencies_with_safe_retry(config: dict, evidence_dir: Path, install_deps: bool) -> tuple[list[str], dict, list[Path]]:
+    blockers, details, artifacts = _repair_dependencies(config, evidence_dir, install_deps)
+    if not blockers or install_deps:
+        return blockers, details, artifacts
+
+    retry_blockers, retry_details, retry_artifacts = _repair_dependencies(config, evidence_dir, True)
+    details["safe_repair_retry_triggered"] = True
+    details["safe_repair_retry_blockers_before"] = list(blockers)
+    for key, value in retry_details.items():
+        details[f"safe_repair_retry_{key}"] = value
+        if key.endswith("_missing_after"):
+            details[key] = value
+    return retry_blockers, details, [*artifacts, *retry_artifacts]
+
+
 def _ensure_faster_whisper(models_root: Path, allow_downloads: bool) -> tuple[Path | None, str | None]:
     runnable, _ = scan_models(models_root)
     candidates = [candidate for candidate in runnable if candidate.adapter_name == "faster_whisper"]
@@ -332,9 +347,11 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
     config["runtime"]["llm_context_tokens"] = 1024
     config["runtime"]["llm_reference_max_tokens"] = 128
     config["runtime"]["llm_reference_temperature"] = 0.0
-    blockers, dependency_details, dependency_artifacts = _repair_dependencies(config, evidence_dir, install_deps)
+    blockers, dependency_details, dependency_artifacts = _repair_dependencies_with_safe_retry(config, evidence_dir, install_deps)
     dependency_details["requested_provider"] = provider
     dependency_details["cuda_provider_checks"] = diagnostics
+    if dependency_details.get("safe_repair_retry_triggered"):
+        dependency_details["cuda_provider_checks_after_safe_repair"] = cuda_diagnostics()
     try:
         from app.dependency_manager import prepare_llama_cpp_dll_search_path
 
