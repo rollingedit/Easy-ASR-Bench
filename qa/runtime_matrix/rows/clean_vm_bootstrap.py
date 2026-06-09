@@ -130,6 +130,42 @@ def _write_windows_sandbox_bundle(evidence_dir: Path) -> dict:
     return {"script_path": str(script_path), "config_path": str(config_path)}
 
 
+def _sandbox_completion_evidence() -> tuple[dict, list[Path], list[str]]:
+    evidence_root = ROOT / "Temp" / "windows_sandbox_clean_bootstrap_evidence"
+    sandbox_smoke = ROOT / "release-smoke-v0.4.0-sandbox.json"
+    artifacts = [
+        evidence_root / "win11_clean_no_python_setup" / "row.json",
+        evidence_root / "clean_vm_zero_dependency_bootstrap" / "row.json",
+        evidence_root / "full-real-smoke.log",
+        evidence_root / "validate-release-smoke-evidence.log",
+        sandbox_smoke,
+    ]
+    details = {
+        "evidence_root": str(evidence_root),
+        "sandbox_smoke": str(sandbox_smoke),
+        "expected_artifacts": [str(path) for path in artifacts],
+    }
+    failures: list[str] = []
+    win11 = _row_payload(artifacts[0])
+    clean_vm = _row_payload(artifacts[1])
+    details["win11_clean_no_python_setup"] = {"status": win11.get("status"), "summary": win11.get("summary", "")}
+    details["clean_vm_zero_dependency_bootstrap"] = {"status": clean_vm.get("status"), "summary": clean_vm.get("summary", "")}
+    if win11.get("status") != "pass":
+        failures.append("sandbox win11_clean_no_python_setup row evidence is missing or not pass")
+    if clean_vm.get("status") != "pass":
+        failures.append("sandbox clean_vm_zero_dependency_bootstrap row evidence is missing or not pass")
+    validate_log = artifacts[3]
+    if validate_log.exists():
+        details["validate_log_tail"] = validate_log.read_text(encoding="utf-8", errors="replace")[-2000:]
+        if "release smoke validation passed" not in details["validate_log_tail"]:
+            failures.append("sandbox release-smoke evidence validation log does not show a pass")
+    else:
+        failures.append("sandbox release-smoke evidence validation log is missing")
+    if not sandbox_smoke.exists():
+        failures.append("sandbox release-smoke-v0.4.0-sandbox.json is missing")
+    return details, [path for path in artifacts if path.exists()], failures
+
+
 def _windows_sandbox_executable() -> str:
     resolved = shutil.which("WindowsSandbox.exe")
     if resolved:
@@ -451,8 +487,9 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
 
 def _run_windows_sandbox_deploy(row_id: str, evidence_dir: Path) -> dict:
     bundle = _write_windows_sandbox_bundle(evidence_dir)
+    completion_details, completion_artifacts, completion_failures = _sandbox_completion_evidence()
     feature_result = ROOT / "Temp" / "windows_sandbox_feature_result.json"
-    artifacts = [Path(bundle["script_path"]), Path(bundle["config_path"])]
+    artifacts = [Path(bundle["script_path"]), Path(bundle["config_path"]), *completion_artifacts]
     if feature_result.exists():
         artifacts.append(feature_result)
     details = {
@@ -464,7 +501,17 @@ def _run_windows_sandbox_deploy(row_id: str, evidence_dir: Path) -> dict:
         "prebootstrap_probe_env": setup_environment.PREBOOTSTRAP_PROBE_ENV,
         "bundle": bundle,
         "expected_sandbox_evidence_dir": "Temp\\windows_sandbox_clean_bootstrap_evidence",
+        "completion_evidence": completion_details,
     }
+    if not completion_failures:
+        return write_row(
+            row_id,
+            "pass",
+            evidence_dir,
+            summary="Windows Sandbox clean-bootstrap validation completed and produced mapped release evidence.",
+            details=details,
+            artifacts=artifacts,
+        )
     if sys.platform != "win32":
         return write_row(
             row_id,
@@ -527,15 +574,22 @@ def _run_windows_sandbox_deploy(row_id: str, evidence_dir: Path) -> dict:
     details["launch_exit_code"] = completed.returncode
     details["launch_stdout_tail"] = completed.stdout[-2000:]
     details["launch_stderr_tail"] = completed.stderr[-2000:]
+    if completed.returncode == 0:
+        return write_row(
+            row_id,
+            "blocked",
+            evidence_dir,
+            summary="Windows Sandbox clean-bootstrap validation launched, but mapped completion evidence is not available yet.",
+            block_reason="Sandbox launch returned success but required mapped row evidence was not produced or not yet collected: " + "; ".join(completion_failures),
+            external_requirement="Wait for the Sandbox startup script to finish, then rerun this row or merge Temp\\windows_sandbox_clean_bootstrap_evidence.",
+            details=details,
+            artifacts=artifacts,
+        )
     return write_row(
         row_id,
-        "pass" if completed.returncode == 0 else "fail",
+        "fail",
         evidence_dir,
-        summary=(
-            "Windows Sandbox clean-bootstrap validation was launched; collect sandbox row evidence from the mapped Temp folder when it finishes."
-            if completed.returncode == 0
-            else "Windows Sandbox launch command failed."
-        ),
+        summary="Windows Sandbox launch command failed.",
         details=details,
         artifacts=artifacts,
     )

@@ -293,6 +293,27 @@ def test_windows_sandbox_deploy_row_blocks_when_feature_missing(tmp_path, monkey
     assert row["details"]["windows_sandbox_executable"] == ""
 
 
+def test_windows_sandbox_deploy_launch_success_waits_for_completion_evidence(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import clean_vm_bootstrap
+
+    class Completed:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    monkeypatch.setenv(clean_vm_bootstrap.SANDBOX_LAUNCH_ENV, "1")
+    monkeypatch.setattr(clean_vm_bootstrap, "_windows_sandbox_executable", lambda: r"C:\Windows\System32\WindowsSandbox.exe")
+    monkeypatch.setattr(clean_vm_bootstrap, "_windows_edition_details", lambda: {"available": True, "edition_id": "Professional", "sandbox_supported_edition": True})
+    monkeypatch.setattr(clean_vm_bootstrap, "_sandbox_completion_evidence", lambda: ({"evidence_root": "missing"}, [], ["completion evidence missing"]))
+    monkeypatch.setattr(clean_vm_bootstrap.subprocess, "run", lambda *args, **kwargs: Completed())
+
+    row = clean_vm_bootstrap.run("windows_sandbox_clean_bootstrap_deploy", ROOT / "Temp" / f"pytest_windows_sandbox_launch_{tmp_path.name}", False, False)
+
+    assert row["status"] == "blocked"
+    assert "completion evidence" in row["block_reason"]
+    assert row["details"]["launch_exit_code"] == 0
+
+
 def test_windows_sandbox_deploy_row_blocks_on_unsupported_edition(tmp_path, monkeypatch):
     from qa.runtime_matrix.rows import clean_vm_bootstrap
 
