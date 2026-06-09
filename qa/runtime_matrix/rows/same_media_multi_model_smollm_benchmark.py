@@ -135,9 +135,14 @@ def _repair_dependencies(config: dict, evidence_dir: Path, install_deps: bool) -
                 install_group_for_config(group, Path.cwd(), config, log_path=repair_log)
                 artifacts.append(repair_log)
             except Exception as exc:
-                blockers.append(f"{group}: repair failed: {type(exc).__name__}: {exc}")
                 artifacts.append(repair_log)
-                continue
+                details[f"{group}_repair_exception"] = f"{type(exc).__name__}: {exc}"
+                missing = missing_modules_for_config(group, config)
+                if missing:
+                    blockers.append(f"{group}: repair failed: {type(exc).__name__}: {exc}")
+                    details[f"{group}_missing_after"] = missing
+                    continue
+                details[f"{group}_repair_recovered_after_exception"] = True
             missing = missing_modules_for_config(group, config)
         details[f"{group}_missing_after"] = missing
         if missing:

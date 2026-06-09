@@ -1658,6 +1658,33 @@ def test_same_media_multi_model_dependency_groups_include_smollm_and_mtmd():
     } <= groups
 
 
+def test_same_media_dependency_repair_recovers_when_post_check_is_clean(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import same_media_multi_model_smollm_benchmark
+
+    monkeypatch.setattr(same_media_multi_model_smollm_benchmark, "GROUPS", ["llama_mtmd"])
+    calls = {"missing": 0}
+
+    def fake_missing(group, config):
+        calls["missing"] += 1
+        return ["llama-mtmd-cli or llama-cpp-python Qwen3ASRChatHandler"] if calls["missing"] == 1 else []
+
+    def fake_install(group, project_root, config, log_path=None):
+        if log_path is not None:
+            log_path.write_text("fallback repaired runtime\n", encoding="utf-8")
+        raise FileNotFoundError("winget")
+
+    monkeypatch.setattr(same_media_multi_model_smollm_benchmark, "missing_modules_for_config", fake_missing)
+    monkeypatch.setattr(same_media_multi_model_smollm_benchmark, "install_group_for_config", fake_install)
+    monkeypatch.setattr(same_media_multi_model_smollm_benchmark, "recovery_command_for_config", lambda group, config: "repair")
+
+    blockers, details, artifacts = same_media_multi_model_smollm_benchmark._repair_dependencies({}, tmp_path, True)
+
+    assert blockers == []
+    assert details["llama_mtmd_repair_recovered_after_exception"] is True
+    assert details["llama_mtmd_missing_after"] == []
+    assert artifacts == [tmp_path / "llama_mtmd_repair.log"]
+
+
 def test_same_media_multi_model_row_blocks_without_smollm_fixture(tmp_path, monkeypatch):
     from qa.runtime_matrix.rows import same_media_multi_model_smollm_benchmark
 
