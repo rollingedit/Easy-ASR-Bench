@@ -18,6 +18,15 @@
       "expected_sha256_prefix": "a0db5f3a4809",
       "notes": "Historic real speech OGG fixture. Useful for decode/normalization coverage, not modern ASR WER thresholds."
     },
+    "wikimedia_public_domain_gettysburg_ogg": {
+      "kind": "real_audio_ogg",
+      "source_page": "https://commons.wikimedia.org/wiki/File:Gettysburg_by_Britton.ogg",
+      "download_url": "https://commons.wikimedia.org/wiki/Special:FilePath/Gettysburg%20by%20Britton.ogg",
+      "license": "Public domain dedication as reported by Wikimedia Commons file page",
+      "expected_sha256_prefix": "fa7698e48e9b",
+      "notes": "Clear long public-domain spoken-word OGG fixture with a published transcript. Use for user-visible folder benchmark proof where one-word or degraded historic audio would be misleading.",
+      "expected_text": "Four score and seven years ago our fathers brought forth on this continent a new nation, conceived in liberty, and dedicated to the proposition that all men are created equal."
+    },
     "wikimedia_public_domain_spoken_words_webm": {
       "kind": "real_video_webm_with_audio",
       "source_page": "https://commons.wikimedia.org/wiki/File:Spoken_Words.webm",

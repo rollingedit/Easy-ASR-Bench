@@ -6,6 +6,7 @@ set APP_NAME=Easy ASR Bench
 set APP_VERSION=v0.3.9
 set INSTALL_DIR=%LOCALAPPDATA%\Easy-ASR-Bench
 set INSTALLER_PS1=%~dp0installer\install.ps1
+set TEMP_INSTALLER_PS1=%TEMP%\Easy-ASR-Bench-install-%APP_VERSION%.ps1
 set INSTALLER_URL=https://github.com/rollingedit/Easy-ASR-Bench/releases/download/%APP_VERSION%/install.ps1
 set INSTALLER_SHA256=sha256:21701f93b0b662962a5dae3df3f4f134de4e0b3fc52d2b2c82cda0ae4b496aa4
 set VERIFY_RELEASE=0
@@ -64,13 +65,13 @@ echo.
 
 if not exist "%INSTALLER_PS1%" (
   echo Downloading installer script for %APP_VERSION%...
-  set INSTALLER_PS1=%TEMP%\Easy-ASR-Bench-install-%APP_VERSION%.ps1
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '%INSTALLER_URL%' -OutFile '%INSTALLER_PS1%'"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '%INSTALLER_URL%' -OutFile '%TEMP_INSTALLER_PS1%'"
   if errorlevel 1 (
     echo Could not download installer script.
     pause
     exit /b 1
   )
+  set "INSTALLER_PS1=%TEMP_INSTALLER_PS1%"
 )
 
 call :verify_sha "%INSTALLER_PS1%" "%INSTALLER_SHA256%" "installer/install.ps1"
@@ -139,13 +140,13 @@ if not exist "%INSTALLER_PS1%" (
     exit /b 0
   )
   echo Downloading installer script for release verification...
-  set INSTALLER_PS1=%TEMP%\Easy-ASR-Bench-install-%APP_VERSION%.ps1
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '%INSTALLER_URL%' -OutFile '%INSTALLER_PS1%'"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '%INSTALLER_URL%' -OutFile '%TEMP_INSTALLER_PS1%'"
   if errorlevel 1 (
     echo Could not download installer script.
     if "%SETUP_JSON%"=="1" call :emit_dry_run_json 1 installer_download_failed
     exit /b 1
   )
+  set "INSTALLER_PS1=%TEMP_INSTALLER_PS1%"
 )
 call :verify_sha "%INSTALLER_PS1%" "%INSTALLER_SHA256%" "installer/install.ps1"
 if errorlevel 1 (

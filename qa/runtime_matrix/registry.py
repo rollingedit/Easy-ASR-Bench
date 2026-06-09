@@ -68,6 +68,7 @@ ROWS: dict[str, RowDefinition] = {
     "hf_downloader_package_variant_taxonomy": row("hf_downloader_package_variant_taxonomy", "qa.runtime_matrix.rows.hf_downloader_layouts"),
     "same_media_multi_model_smollm_benchmark": row("same_media_multi_model_smollm_benchmark", "qa.runtime_matrix.rows.same_media_multi_model_smollm_benchmark"),
     "same_media_multi_model_smollm_benchmark_directml": row("same_media_multi_model_smollm_benchmark_directml", "qa.runtime_matrix.rows.same_media_multi_model_smollm_benchmark", hardware="directml"),
+    "real_public_folder_batch_smollm_benchmark": row("real_public_folder_batch_smollm_benchmark", "qa.runtime_matrix.rows.real_public_folder_batch_smollm", hardware="network"),
     "compare_html_offline_large_transcript": row("compare_html_offline_large_transcript", "qa.runtime_matrix.rows.report_reference_validation"),
     "compare_html_offline": row("compare_html_offline", "qa.runtime_matrix.rows.report_reference_validation"),
     "report_atomic_write_failure_cleanup": row("report_atomic_write_failure_cleanup", "qa.runtime_matrix.rows.report_reference_validation"),

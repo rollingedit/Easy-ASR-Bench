@@ -118,11 +118,8 @@ def _write_scored_artifacts(results: dict, output_dir: Path) -> dict:
     scored = import_llm_reference(results, "LLM response:\n```json\n" + json.dumps(reference) + "\n```")
     scored_path = output_dir / "scored_report.json"
     scored_path.write_text(json.dumps(scored, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
-    scored_results = dict(results)
-    if scored.get("status") == "scored":
-        scored_results["reference_scores"] = scored["scores"]
     scored_html = output_dir / "compare_scored.html"
-    scored_html.write_text(build_html_report(scored_results), encoding="utf-8", newline="\n")
+    scored_html.write_text(build_html_report(scored), encoding="utf-8", newline="\n")
     return {"reference": reference, "scored": scored, "scored_path": scored_path, "scored_html": scored_html}
 
 
@@ -138,8 +135,8 @@ def _assert_report_files(output_dir: Path, *, large: bool) -> list[str]:
         "<!doctype html>",
         'id="results-json"',
         "LLM-Corrected Reference",
-        "Runtime Ranking",
-        "VRAM",
+        "Speed and Memory Only",
+        "Video Memory",
         "function scoreReference",
         "function renderAlignmentPage",
     ]
@@ -151,7 +148,7 @@ def _assert_report_files(output_dir: Path, *, large: bool) -> list[str]:
     scored_markers = [
         "Loaded precomputed LLM-corrected reference scores",
         "precomputedReferenceScores",
-        "Balanced Rank",
+        "Accuracy Rank",
         "fixture_windows_gpu_adapter_memory",
     ]
     for marker in scored_markers:

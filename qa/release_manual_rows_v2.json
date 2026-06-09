@@ -54,6 +54,7 @@
     "model_fixture_quality_claims": "not_run",
     "same_media_multi_model_smollm_benchmark": "not_run",
     "same_media_multi_model_smollm_benchmark_directml": "not_run",
+    "real_public_folder_batch_smollm_benchmark": "not_run",
     "provider_smoke": {
       "cpu_model_smoke": "not_run",
       "nvidia_cuda_torch_onnx_faster_whisper_llama": "not_run",

@@ -4,6 +4,18 @@ from .html_json import json_for_script_tag
 
 
 def build_html_report(results: dict) -> str:
+    if results.get("schema") == "easy_asr_bench.scored_report.v1":
+        scored = results
+        base_results = dict(scored.get("results") or {})
+        if scored.get("status") == "scored":
+            base_results["reference_scores"] = scored.get("scores", {})
+        if scored.get("reference"):
+            base_results["reference"] = scored["reference"]
+        for key in ("score_type", "score_note", "status"):
+            if key in scored:
+                output_key = "score_status" if key == "status" else key
+                base_results[output_key] = scored[key]
+        results = base_results
     embedded = json_for_script_tag(results)
     return f"""<!doctype html>
 <html lang="en">
@@ -12,24 +24,24 @@ def build_html_report(results: dict) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Easy ASR Bench Report</title>
 <style>
-:root {{ color-scheme: light; --bg:#f5f6f8; --panel:#fff; --ink:#18212f; --muted:#647184; --line:#d8dee8; --blue:#1f5fae; --blue2:#e7f0ff; --red:#ffd9dc; --red2:#9f1d2b; --yellow:#fff1b8; --green:#dff3e5; --green2:#1d6b3a; --violet:#efe9ff; }}
+:root {{ color-scheme: light; --bg:#f4f6f8; --panel:#fff; --ink:#142033; --muted:#5e6b7d; --line:#d5dde7; --blue:#1f5fae; --blue2:#e7f0ff; --red:#ffd9dc; --red2:#9f1d2b; --yellow:#fff1b8; --green:#dff3e5; --green2:#1d6b3a; --violet:#efe9ff; }}
 * {{ box-sizing:border-box; }}
-body {{ margin:0; font-family:Segoe UI, Arial, sans-serif; background:var(--bg); color:var(--ink); font-size:14px; }}
-header {{ padding:22px 32px; background:#18212f; color:white; border-bottom:4px solid #3ba776; }}
-header h1 {{ margin:0 0 6px; font-size:26px; line-height:1.15; letter-spacing:0; }}
-header p {{ margin:0; color:#d5dce6; max-width:900px; }}
-main {{ padding:20px 32px 48px; max-width:1500px; margin:0 auto; }}
-nav {{ position:sticky; top:0; z-index:10; display:flex; gap:8px; flex-wrap:wrap; margin:0 0 18px; padding:10px 0; background:var(--bg); border-bottom:1px solid var(--line); }}
+body {{ margin:0; font-family:Segoe UI, Arial, sans-serif; background:var(--bg); color:var(--ink); font-size:13px; }}
+header {{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; padding:12px 20px; background:#fff; color:var(--ink); border-bottom:1px solid var(--line); }}
+header h1 {{ margin:0; font-size:20px; line-height:1.2; letter-spacing:0; }}
+header p {{ margin:2px 0 0; color:var(--muted); max-width:900px; font-size:13px; }}
+main {{ padding:14px 20px 36px; max-width:1800px; margin:0 auto; }}
+nav {{ position:sticky; top:0; z-index:10; display:flex; gap:6px; flex-wrap:wrap; margin:0 0 12px; padding:8px 0; background:var(--bg); border-bottom:1px solid var(--line); }}
 nav button {{ background:#eef2f7; color:#27384f; border:1px solid #cbd4df; }}
 nav button.active {{ background:var(--blue); color:white; border-color:var(--blue); }}
-section {{ display:none; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:18px; margin:0 0 18px; box-shadow:0 1px 2px rgba(24,33,47,.04); }}
+section {{ display:none; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:14px; margin:0 0 14px; }}
 section.active {{ display:block; }}
 h2 {{ margin:0 0 12px; font-size:18px; line-height:1.25; }}
 h3 {{ margin:18px 0 8px; font-size:15px; line-height:1.25; }}
-.grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; }}
-.card {{ border:1px solid var(--line); border-radius:8px; padding:12px; background:#fbfcfe; min-width:0; }}
+.grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:8px; }}
+.card {{ border:1px solid var(--line); border-radius:6px; padding:10px; background:#fbfcfe; min-width:0; }}
 .label {{ color:var(--muted); font-size:12px; text-transform:uppercase; }}
-.value {{ font-size:20px; margin-top:4px; overflow-wrap:anywhere; }}
+.value {{ font-size:14px; margin-top:4px; overflow-wrap:anywhere; }}
 .toolbar {{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 12px; }}
 .toolbar label {{ color:var(--muted); font-size:13px; }}
 select, input[type="search"] {{ border:1px solid var(--line); border-radius:6px; background:white; color:var(--ink); padding:8px 10px; min-height:34px; }}
@@ -39,23 +51,26 @@ th, td {{ text-align:left; border-bottom:1px solid var(--line); padding:8px; ver
 th {{ background:#eef2f7; position:sticky; top:0; z-index:1; }}
 tbody tr:hover {{ background:#f8fbff; }}
 textarea {{ width:100%; min-height:180px; box-sizing:border-box; font-family:Consolas, monospace; }}
-button {{ background:var(--blue); color:white; border:0; border-radius:6px; padding:9px 12px; cursor:pointer; margin:8px 8px 0 0; min-height:36px; }}
+button {{ background:var(--blue); color:white; border:0; border-radius:6px; padding:7px 10px; cursor:pointer; margin:6px 6px 0 0; min-height:32px; }}
 button:hover {{ filter:brightness(.96); }}
-pre {{ white-space:pre-wrap; word-break:break-word; background:#f7f8fa; border:1px solid var(--line); border-radius:6px; padding:10px; }}
+pre {{ white-space:pre-wrap; word-break:break-word; background:#f7f8fa; border:1px solid var(--line); border-radius:6px; padding:8px; }}
 .badge {{ display:inline-block; padding:2px 7px; border-radius:999px; background:#e8eef8; color:#123b73; font-size:12px; }}
 .badge.error {{ background:var(--red); color:var(--red2); }}
 .badge.ok {{ background:var(--green); color:var(--green2); padding:2px 7px; }}
 .model-name {{ font-weight:600; }}
-.replace {{ background:var(--red); border-radius:3px; padding:1px 3px; }}
-.insert {{ background:var(--yellow); border-radius:3px; padding:1px 3px; }}
-.delete {{ text-decoration:line-through; background:var(--red); border-radius:3px; padding:1px 3px; }}
+.replace {{ background:var(--red); color:var(--red2); border-radius:3px; padding:1px 3px; }}
+.insert {{ background:var(--red); color:var(--red2); text-decoration:line-through; border-radius:3px; padding:1px 3px; }}
+.delete {{ background:var(--red); color:var(--red2); border-radius:3px; padding:1px 3px; }}
 .equal {{ background:transparent; }}
-.diffline {{ line-height:1.8; }}
+.diffline {{ line-height:1.9; font-family:Consolas, monospace; }}
+.correction {{ font-size:12px; font-family:Segoe UI, Arial, sans-serif; color:var(--red2); margin-left:2px; }}
 .pager {{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 12px; }}
 .ok {{ background:var(--green); padding:8px; border-radius:6px; }}
 .warn {{ background:#fff4d6; padding:8px; border-radius:6px; }}
 .chunk-row {{ border-top:1px solid var(--line); padding-top:10px; }}
 .empty {{ color:var(--muted); font-style:italic; }}
+.summary-table th {{ width:170px; }}
+.path-cell {{ overflow-wrap:anywhere; }}
 @media (max-width: 760px) {{
   header {{ padding:18px 16px; }}
   main {{ padding:14px 12px 32px; }}
@@ -67,8 +82,8 @@ pre {{ white-space:pre-wrap; word-break:break-word; background:#f7f8fa; border:1
 </head>
 <body>
 <header>
-  <h1>Easy ASR Bench Report</h1>
-  <p>Local model comparison with transcripts, speed, memory, pairwise differences, and LLM-corrected reference scoring.</p>
+  <div><h1>Easy ASR Bench</h1>
+  <p>Local transcription benchmark report</p></div>
 </header>
 <main>
   <nav>
@@ -82,14 +97,15 @@ pre {{ white-space:pre-wrap; word-break:break-word; background:#f7f8fa; border:1
   </nav>
   <section id="overview" class="active"></section>
   <section id="score">
-    <h2>LLM-Corrected Reference</h2>
-    <p>Paste JSON returned by an LLM using the prompt in <code>results.txt</code>. This scores against an LLM-corrected reference, not human ground truth.</p>
+    <h2>Reference and Accuracy</h2>
+    <p>Scores compare each transcript with the corrected reference shown below. If no reference is loaded, this page can only rank speed and memory.</p>
+    <div id="precomputedReferencePanel"></div>
     <textarea id="referenceInput" placeholder="Paste easy_asr_bench.llm_reference.v1 JSON here"></textarea>
     <button onclick="scoreReference()">Validate Reference and Score Models</button>
     <button onclick="downloadScored()">Download scored_report.json</button>
     <div id="referenceStatus"></div>
-    <h2>Scoreboard</h2><div id="scoreboard"></div>
-    <h2>Runtime Ranking</h2><div id="runtimeRanking"></div>
+    <h2>Model Results</h2><div id="scoreboard"></div>
+    <h2>Speed and Memory Only</h2><div id="runtimeRanking"></div>
   </section>
   <section id="pairwise"><h2>Pairwise Differences</h2><div id="pairwiseBody"></div></section>
   <section id="transcripts"><h2>Transcript Comparison</h2><div id="transcriptsBody"></div></section>
@@ -103,6 +119,7 @@ const results = JSON.parse(document.getElementById('results-json').textContent);
 let scored = null;
 let latestScores = null;
 const precomputedReferenceScores = results.reference_scores || null;
+const precomputedReference = results.reference || null;
 let chunkPage = 0;
 let transcriptModelFilter = 'all';
 let chunkModelFilter = 'all';
@@ -184,7 +201,17 @@ function balancedScore(score, metrics) {{
 function wer(ref,hyp,norm=true) {{ const r=words(ref,norm), h=words(hyp,norm); return edit(r,h)/Math.max(1,r.length); }}
 function fullText(run) {{ return (run.transcript_chunks || []).map(c=>c.text || '').join('\\n'); }}
 function fmt(n) {{ return Number.isFinite(n) ? n.toFixed(3) : 'n/a'; }}
-function fmtMb(n) {{ return Number.isFinite(Number(n)) ? Number(n).toFixed(0) : 'unavailable'; }}
+function fmtSeconds(n) {{ const value = Number(n); return Number.isFinite(value) ? `${{value.toFixed(2)}} seconds` : 'not available'; }}
+function fmtMemoryMb(n) {{
+  const value = Number(n);
+  if (!Number.isFinite(value)) return 'not available';
+  if (value >= 1024) return `${{(value / 1024).toFixed(2)}} GB`;
+  return `${{value.toFixed(1)}} MB`;
+}}
+function fmtPercent(n) {{
+  const value = Number(n);
+  return Number.isFinite(value) ? `${{(value * 100).toFixed(1)}}%` : 'not scored';
+}}
 function renderOverview() {{
   const source = results.source || {{}};
   const runs = results.runs || [];
@@ -197,33 +224,64 @@ function renderOverview() {{
     const actions = (error.next_actions || []).map(item => `<li>${{safe(item)}}</li>`).join('');
     return `<div class="warn"><b>${{safe(error.status || 'failed')}}</b><br>Stage: ${{safe(error.stage || 'unknown')}}<br>Problem: ${{safe(error.message || '')}}<h3>Likely causes</h3><ul>${{causes}}</ul><h3>Next actions</h3><ul>${{actions}}</ul><p>No source files were modified.</p></div>`;
   }}).join('')}}` : '';
-  document.getElementById('overview').innerHTML = `<h2>Overview</h2><div class="grid">
-    <div class="card"><div class="label">Source</div><div class="value">${{safe(source.name || '')}}</div></div>
-    <div class="card"><div class="label">Duration</div><div class="value">${{fmt(source.duration_seconds || 0)}}s</div></div>
-    <div class="card"><div class="label">Models Tested</div><div class="value">${{runs.length}}</div></div>
-    <div class="card"><div class="label">Chunks</div><div class="value">${{(results.chunk_plan?.chunks || []).length}}</div></div>
-    <div class="card"><div class="label">Fastest</div><div class="value">${{safe(fastest?.model?.display_name || 'n/a')}}</div></div>
-    <div class="card"><div class="label">Lowest RAM</div><div class="value">${{safe(lowRam?.model?.display_name || 'n/a')}}</div></div>
-  </div>${{errorPanel}}`;
+  const referenceWarning = precomputedReference ? `<h3>Reference Status</h3><div class="warn">${{safe(results.score_note || 'LLM-corrected reference scores are not human ground truth.')}} ${{referenceUncertaintyText(precomputedReference)}}</div>` : '';
+  document.getElementById('overview').innerHTML = `<h2>Run Summary</h2><div class="table-wrap"><table class="summary-table"><tbody>
+    <tr><th>Source file</th><td class="path-cell">${{safe(source.name || '')}}</td></tr>
+    <tr><th>Duration</th><td>${{fmtSeconds(source.duration_seconds || 0)}}</td></tr>
+    <tr><th>Models tested</th><td>${{runs.length}}</td></tr>
+    <tr><th>Audio chunks</th><td>${{(results.chunk_plan?.chunks || []).length}}</td></tr>
+    <tr><th>Fastest model</th><td>${{safe(fastest?.model?.display_name || 'n/a')}}</td></tr>
+    <tr><th>Lowest RAM model</th><td>${{safe(lowRam?.model?.display_name || 'n/a')}}</td></tr>
+  </tbody></table></div>${{referenceWarning}}${{errorPanel}}`;
 }}
 function safe(s) {{ return escapeHtml(s); }}
 function renderScoreboard(scores=null) {{
+  const hasScores = !!scores;
   const rows = (results.runs || []).map(run => {{
     const m = run.metrics || {{}};
     const s = scores?.[run.model.candidate_id] || {{}};
-    const errorBadge = run.errors?.length ? `<span class="badge error">${{run.errors.length}} error(s)</span>` : '<span class="badge ok">ok</span>';
+    const errorBadge = run.errors?.length ? `<span class="badge error">${{run.errors.length}} runtime issue(s)</span>` : '<span class="badge ok">0 runtime issues</span>';
     const vramSource = m.vram_measurement_source || 'unavailable';
-    const rank = s.balanced_rank ? `#${{safe(s.balanced_rank)}}` : 'n/a';
-    return `<tr><td><span class="model-name">${{safe(run.model.display_name)}}</span><br><span class="badge">${{safe(run.model.precision)}}</span> ${{errorBadge}}</td><td>${{safe(run.model.backend)}}</td><td>${{rank}}</td><td>${{fmt(s.normalized_wer)}}</td><td>${{fmt(s.strict_wer)}}</td><td>${{fmt(s.cer)}}</td><td>${{s.substitutions ?? 'n/a'}}</td><td>${{s.insertions ?? 'n/a'}}</td><td>${{s.deletions ?? 'n/a'}}</td><td>${{fmt(balancedScore(s,m))}}</td><td>${{fmt(m.audio_seconds_per_wall_second)}}</td><td>${{fmt(m.total_wall_seconds)}}</td><td>${{fmtMb(m.peak_process_memory_mb)}}</td><td>${{fmtMb(m.peak_vram_mb)}}<br><span class="badge">${{safe(vramSource)}}</span></td></tr>`;
+    const rank = s.balanced_rank ? `#${{safe(s.balanced_rank)}}` : 'not scored';
+    const scoreText = value => hasScores ? fmt(value) : 'needs reference';
+    const scorePercentText = value => hasScores ? fmtPercent(value) : 'needs reference';
+    const countText = value => hasScores ? (value ?? 'n/a') : 'needs reference';
+    return `<tr><td><span class="model-name">${{safe(run.model.display_name)}}</span><br><span class="badge">${{safe(run.model.precision)}}</span> ${{errorBadge}}</td><td>${{safe(run.model.backend)}}</td><td>${{rank}}</td><td>${{scorePercentText(s.normalized_wer)}}</td><td>${{scorePercentText(s.strict_wer)}}</td><td>${{scorePercentText(s.cer)}}</td><td>${{countText(s.substitutions)}}</td><td>${{countText(s.insertions)}}</td><td>${{countText(s.deletions)}}</td><td>${{scoreText(balancedScore(s,m))}}</td><td>${{fmtSeconds(m.total_wall_seconds)}}</td><td>${{fmtMemoryMb(m.peak_process_memory_mb)}}</td><td>${{fmtMemoryMb(m.peak_vram_mb)}}<br><span class="badge">${{safe(vramSource)}}</span></td></tr>`;
   }}).join('');
-  document.getElementById('scoreboard').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Model</th><th>Backend</th><th>Balanced Rank</th><th>Norm WER</th><th>Strict WER</th><th>CER</th><th>Sub</th><th>Ins</th><th>Del</th><th>Balanced</th><th>x Real-time</th><th>Wall s</th><th>RAM MB</th><th>VRAM MB</th></tr></thead><tbody>${{rows}}</tbody></table></div><p class="empty">Balanced rank requires a corrected reference. Runtime-only rank below compares speed and memory only. VRAM uses Windows GPU Adapter Memory counters when available, which cover NVIDIA, AMD, and Intel adapters. Torch-only fallback is labeled separately.</p>`;
+  const note = hasScores ? 'Accuracy scores use the corrected reference shown on this page. Lower word/character error is better; higher balanced score is better.' : 'Accuracy is not scored yet because no corrected reference is loaded. Speed and memory are still shown.';
+  document.getElementById('scoreboard').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Model</th><th>Backend</th><th>Accuracy Rank</th><th>Word Error Rate</th><th>Exact Word Error Rate</th><th>Character Error Rate</th><th>Changed Words</th><th>Extra Words</th><th>Missing Words</th><th>Balanced Score</th><th>Transcription Time</th><th>System RAM Peak</th><th>VRAM / GPU Memory Peak</th></tr></thead><tbody>${{rows}}</tbody></table></div><p class="empty">${{safe(note)}} VRAM/GPU memory is reported separately from process RAM. On integrated GPUs it can be shared system memory, so do not add it to RAM as a total.</p>`;
   renderRuntimeRanking();
 }}
 function renderRuntimeRanking() {{
   const ranking = results.runtime_rankings?.rows || [];
   if (!ranking.length) {{ document.getElementById('runtimeRanking').innerHTML = '<p class="empty">No runtime ranking is available.</p>'; return; }}
-  const rows = ranking.map(row => `<tr><td>#${{safe(row.runtime_rank)}}</td><td>${{safe(row.display_name)}}</td><td>${{fmt(row.speed_percentile)}}</td><td>${{fmt(row.memory_percentile_inverse)}}</td><td>${{fmt(row.speed_audio_seconds_per_wall_second)}}</td><td>${{fmtMb(row.peak_process_memory_mb)}}</td><td>${{fmtMb(row.peak_vram_mb)}}</td></tr>`).join('');
-  document.getElementById('runtimeRanking').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Rank</th><th>Model</th><th>Speed Percentile</th><th>Memory Percentile</th><th>x Real-time</th><th>RAM MB</th><th>VRAM MB</th></tr></thead><tbody>${{rows}}</tbody></table></div><p class="empty">${{safe(results.runtime_rankings?.note || 'Runtime ranking does not measure transcript quality.')}}</p>`;
+  const rows = ranking.map(row => `<tr><td>#${{safe(row.runtime_rank)}}</td><td>${{safe(row.display_name)}}</td><td>${{fmt(row.speed_percentile)}}</td><td>${{fmt(row.memory_percentile_inverse)}}</td><td>${{fmt(row.speed_audio_seconds_per_wall_second)}}x</td><td>${{fmtMemoryMb(row.peak_process_memory_mb)}}</td><td>${{fmtMemoryMb(row.peak_vram_mb)}}</td></tr>`).join('');
+  document.getElementById('runtimeRanking').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Rank</th><th>Model</th><th>Speed Percentile</th><th>Memory Percentile</th><th>Relative Speed</th><th>System RAM Peak</th><th>VRAM / GPU Memory Peak</th></tr></thead><tbody>${{rows}}</tbody></table></div><p class="empty">${{safe(results.runtime_rankings?.note || 'Runtime ranking does not measure transcript quality.')}} Relative speed is audio duration divided by run time; the main scoreboard shows transcription time in seconds.</p>`;
+}}
+function referenceUncertaintyText(ref) {{
+  const notes = [];
+  for (const segment of ref?.segments || []) {{
+    for (const item of segment.uncertain || []) notes.push(item);
+  }}
+  for (const item of ref?.global_notes || []) notes.push(item);
+  const unique = [...new Set(notes.filter(Boolean))];
+  return unique.length ? ` Notes: ${{unique.map(safe).join('; ')}}` : '';
+}}
+function referenceFullText(ref) {{
+  const chunks = results.chunk_plan?.chunks || [];
+  const refMap = new Map((ref?.segments || []).map(segment => [segment.chunk_id, segment]));
+  return chunks.map(chunk => refMap.get(chunk.chunk_id)?.text || '').join('\\n');
+}}
+function renderPrecomputedReferencePanel(ref, scores) {{
+  const panel = document.getElementById('precomputedReferencePanel');
+  if (!panel) return;
+  if (!ref) {{
+    panel.innerHTML = '';
+    return;
+  }}
+  const segments = (ref.segments || []).map(segment => `<tr><td>${{safe(segment.chunk_id)}}</td><td>${{fmt(Number(segment.start_seconds))}}-${{fmt(Number(segment.end_seconds))}}s</td><td><pre>${{escapeHtml(segment.text || '')}}</pre></td><td>${{safe((segment.uncertain || []).join('; ') || 'none')}}</td></tr>`).join('');
+  const scoreCount = scores ? Object.keys(scores).length : 0;
+  panel.innerHTML = `<div class="card"><h3>Loaded LLM-Corrected Reference</h3><p><b>Score type:</b> ${{safe(results.score_type || 'llm_corrected_reference')}}. <b>Scored models:</b> ${{scoreCount}}. This is AI-assisted reference text, not human ground truth.</p><p>${{safe(referenceUncertaintyText(ref) || 'No uncertainty notes provided.')}}</p><h3>Reference Text</h3><pre>${{escapeHtml(referenceFullText(ref))}}</pre><div class="table-wrap"><table><thead><tr><th>Chunk</th><th>Time</th><th>Corrected Reference</th><th>Notes</th></tr></thead><tbody>${{segments}}</tbody></table></div></div>`;
 }}
 function renderPairwise() {{
   const rows = Object.entries(results.pairwise_differences || {{}}).map(([k,v]) => `<tr><td>${{safe(k)}}</td><td>${{fmt(v.normalized_wer_like_difference)}}</td><td>${{fmt(v.cer_difference)}}</td></tr>`).join('');
@@ -289,9 +347,9 @@ function escapeHtml(s) {{ return String(s).replace(/[&<>]/g, c=>({{'&':'&amp;','
 function renderAlignment(items) {{
   return items.map(item => {{
     if (item.op === 'equal') return `<span class="equal">${{safe(item.hypothesis)}}</span>`;
-    if (item.op === 'insert') return `<span class="insert">+${{safe(item.hypothesis)}}</span>`;
-    if (item.op === 'delete') return `<span class="delete">-${{safe(item.reference)}}</span>`;
-    return `<span class="replace">${{safe(item.reference)}}-&gt;${{safe(item.hypothesis)}}</span>`;
+    if (item.op === 'insert') return `<span class="insert">${{safe(item.hypothesis)}}</span>`;
+    if (item.op === 'delete') return `<span class="delete">${{safe(item.reference)}}<span class="correction">missing</span></span>`;
+    return `<span class="replace">${{safe(item.hypothesis)}}<span class="correction">-&gt; ${{safe(item.reference)}}</span></span>`;
   }}).join(' ');
 }}
 function extractJson(text) {{
@@ -348,6 +406,7 @@ function scoreReference() {{
   scored = {{ results, reference: ref, scores }};
   latestScores = scores;
   document.getElementById('referenceStatus').innerHTML = '<p class="ok">Reference validated. Scores updated. Label these as LLM-corrected reference scores, not human ground truth.</p>';
+  renderPrecomputedReferencePanel(ref, scores);
   renderScoreboard(scores);
   renderTranscripts();
 }}
@@ -357,8 +416,9 @@ function downloadScored() {{
 }}
 if (precomputedReferenceScores) {{
   latestScores = precomputedReferenceScores;
-  scored = {{ results, scores: precomputedReferenceScores, score_type: 'llm_corrected_reference' }};
+  scored = {{ results, reference: precomputedReference, scores: precomputedReferenceScores, score_type: results.score_type || 'llm_corrected_reference', score_note: results.score_note }};
   document.getElementById('referenceStatus').innerHTML = '<p class="ok">Loaded precomputed LLM-corrected reference scores. These are not human ground truth.</p>';
+  renderPrecomputedReferencePanel(precomputedReference, precomputedReferenceScores);
 }}
 renderOverview(); renderScoreboard(latestScores); renderPairwise(); renderTranscripts();
 renderChunks();

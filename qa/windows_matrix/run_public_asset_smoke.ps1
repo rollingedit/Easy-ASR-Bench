@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$Repo = "rollingedit/Easy-ASR-Bench",
   [string]$Tag = "v0.3.7",
   [string]$WorkDir = "qa\windows_matrix\public_asset_smoke",
@@ -111,9 +111,20 @@ Invoke-CapturedCommand `
   -Command "call `"$setup`" --dry-run --verify-release --asset-dir `"$AssetDir`"" `
   -TranscriptPath $verifyTranscript
 
+$lonelySetupDir = Join-Path $WorkDir "lonely-setup-$Tag"
+Remove-Item -LiteralPath $lonelySetupDir -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $lonelySetupDir | Out-Null
+Copy-Item -LiteralPath $setup -Destination (Join-Path $lonelySetupDir "setup.bat") -Force
+$lonelyVerifyTranscript = Join-Path $WorkDir "setup-lonely-verify-release-$Tag.txt"
+Invoke-CapturedCommand `
+  -Command "call `"$lonelySetupDir\setup.bat`" --dry-run --verify-release" `
+  -TranscriptPath $lonelyVerifyTranscript `
+  -WorkingDirectory $lonelySetupDir
+
 $setupRowDir = Join-Path $Output "setup_dry_run_verify_release"
 New-Item -ItemType Directory -Force -Path $setupRowDir | Out-Null
 Copy-Item -LiteralPath $verifyTranscript -Destination (Join-Path $setupRowDir "setup-verify-release.log") -Force
+Copy-Item -LiteralPath $lonelyVerifyTranscript -Destination (Join-Path $setupRowDir "setup-lonely-verify-release.log") -Force
 Copy-Item -LiteralPath $assetHashPath -Destination (Join-Path $setupRowDir "public-assets.json") -Force
 
 & powershell -ExecutionPolicy Bypass -File qa\windows_matrix\collect_release_evidence.ps1 `
@@ -122,7 +133,7 @@ Copy-Item -LiteralPath $assetHashPath -Destination (Join-Path $setupRowDir "publ
   -Status "pass" `
   -AppVersion $Tag `
   -ReleaseCommit $ReleaseCommit `
-  -Commands @("setup.bat --dry-run --verify-release --asset-dir <downloaded assets>")
+  -Commands @("setup.bat --dry-run --verify-release --asset-dir <downloaded assets>", "setup.bat --dry-run --verify-release from folder containing only setup.bat")
 if ($LASTEXITCODE -ne 0) {
   throw "collect_release_evidence failed for setup_dry_run_verify_release with exit code $LASTEXITCODE"
 }

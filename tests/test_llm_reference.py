@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from app.llm_reference import merge_reference_llms, save_custom_reference_path, scan_custom_reference_llms
+from app.llm_reference_prompt import build_llm_reference_prompt
 from app.precision_detector import detect_from_path, normalize_precision_label
 
 
@@ -78,3 +79,35 @@ def test_precision_normalization_covers_common_asr_quant_labels():
         "nvp4": "4-bit / Q4",
     }.items():
         assert normalize_precision_label(label)[1] == bucket
+
+
+def test_llm_reference_prompt_preserves_intent_style_and_forces_best_effort():
+    prompt = build_llm_reference_prompt(
+        {
+            "schema": "easy_asr_bench.results.v1",
+            "source": {"name": "clip.wav", "sha256": "abc"},
+            "chunk_plan": {"chunks": [{"chunk_id": "0001", "start_seconds": 0.0, "end_seconds": 1.0}]},
+            "runs": [
+                {
+                    "model": {"candidate_id": "m1", "display_name": "Model One"},
+                    "transcript_chunks": [{"chunk_id": "0001", "start_seconds": 0.0, "end_seconds": 1.0, "text": "raw transcript"}],
+                }
+            ],
+        }
+    )
+
+    assert "podcast, interview, lecture, news clip, comedy bit" in prompt
+    assert "dialogue scene, phone call, informal chat" in prompt
+    assert "source metadata, the chunk plan, and every selected ASR model's transcript chunks" in prompt
+    assert "Return only valid JSON" in prompt
+    assert "Keep exactly one JSON segment per original chunk_id" in prompt
+    assert "Do not include Markdown fences, commentary, headings" in prompt
+    assert "topic-specific terms, dialogue flow, names, acronyms" in prompt
+    assert "incomplete sentences, false starts, cut-off thoughts" in prompt
+    assert "complete fragments into polished grammar" in prompt
+    assert "Do not sanitize, formalize, summarize, paraphrase" in prompt
+    assert "Prefer words supported by multiple ASR outputs" in prompt
+    assert "still choose the most plausible wording" in prompt
+    assert "do not stop the correction with an uncertainty placeholder" in prompt
+    assert "genuinely unclear" not in prompt
+    assert "Do not invent missing speech, facts, speaker labels" in prompt

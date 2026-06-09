@@ -637,6 +637,7 @@ def process_file_with_candidates(
     config: dict,
     unsupported_models: list[ModelCandidate] | None = None,
     reference_llm: ModelCandidate | None = None,
+    file_progress: tuple[int, int] | None = None,
 ) -> Path | None:
     from .benchmark import peak_vram_sample, process_memory_mb, reset_peak_vram, timer
     from .media import audio_duration_seconds, prepare_audio
@@ -646,6 +647,8 @@ def process_file_with_candidates(
     temp_dir = folder_config(config, "temp", "temp_folder")
     output_dir = folder_config(config, "output")
     logging.info("Processing %s", source)
+    progress_prefix = f"[File {file_progress[0]}/{file_progress[1]}] " if file_progress else ""
+    print(f"{progress_prefix}Processing {source.name}")
     wav_path = None
     try:
         wait_for_stable_file(source, float(config["input"]["file_stability_wait_seconds"]))
@@ -662,8 +665,9 @@ def process_file_with_candidates(
             for chunk in chunks
         ]
         run_results: list[ModelRunResult] = []
-        for candidate in candidates:
+        for model_index, candidate in enumerate(candidates, 1):
             logging.info("Running %s", candidate.candidate_id)
+            print(f"{progress_prefix}[Model {model_index}/{len(candidates)}] Running {candidate.display_name}")
             adapter = None
             try:
                 adapter = adapter_for(candidate)
@@ -677,9 +681,11 @@ def process_file_with_candidates(
                 audio_seconds_metric = float(result.metrics.get("audio_seconds", audio_seconds))
                 result.metrics["audio_seconds_per_wall_second"] = audio_seconds_metric / max(0.001, float(result.metrics["total_wall_seconds"]))
                 result.metrics.update(peak_vram_sample())
+                print(f"{progress_prefix}[Model {model_index}/{len(candidates)}] Finished {candidate.display_name} in {result.metrics['total_wall_seconds']:.2f} seconds")
             except Exception as exc:
                 logging.error("%s failed", candidate.candidate_id)
                 logging.exception("Model failed")
+                print(f"{progress_prefix}[Model {model_index}/{len(candidates)}] Failed {candidate.display_name}: {exc}")
                 result = ModelRunResult(
                     candidate=candidate,
                     transcript_chunks=[],
@@ -732,8 +738,11 @@ def process_file_with_candidates(
             try:
                 ref_adapter = adapter_for(reference_llm)
                 if hasattr(ref_adapter, "generate_reference"):
+                    print(f"{progress_prefix}[Reference LLM] Generating corrected reference with {reference_llm.display_name}")
                     results["local_llm_reference_attempt"] = ref_adapter.generate_reference(reference_llm, runtime_config_for_candidate(config), results)
+                    print(f"{progress_prefix}[Reference LLM] Finished corrected reference attempt")
             except Exception as exc:
+                print(f"{progress_prefix}[Reference LLM] Failed corrected reference attempt: {exc}")
                 results["local_llm_reference_attempt"] = {
                     "candidate_id": reference_llm.candidate_id,
                     "display_name": reference_llm.display_name,
@@ -845,6 +854,7 @@ def main() -> None:
     parser.add_argument("--scan-only", action="store_true")
     parser.add_argument("--doctor", action="store_true")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--strict", action="store_true")
     parser.add_argument("--repair-plan", action="store_true")
     parser.add_argument("--repair-all-safe", action="store_true")
     parser.add_argument("--validate-real-smoke", action="store_true")
@@ -877,7 +887,7 @@ def _main(args: argparse.Namespace) -> None:
         raise SystemExit(
             run_doctor(
                 Path(args.config),
-                strict=False,
+                strict=bool(args.strict),
                 json_output=bool(args.json),
                 repair_plan_output=bool(args.repair_plan),
                 repair_all_safe=bool(args.repair_all_safe),
@@ -949,8 +959,9 @@ def _main(args: argparse.Namespace) -> None:
                     state,
                     bool(config["input"].get("skip_already_processed_by_hash", True)),
                 )
-                for file_path in files:
-                    output = process_file_with_candidates(file_path, selected, config, unsupported, reference_llm)
+                for file_index, file_path in enumerate(files, 1):
+                    progress = (file_index, len(files)) if args.once else None
+                    output = process_file_with_candidates(file_path, selected, config, unsupported, reference_llm, file_progress=progress)
                     status = output_status(output)
                     state.mark(file_path.resolve(), status, str(output or ""))
                     batch_rows.append({"source_path": str(file_path.resolve()), "status": status, "output_path": str(output or "")})
@@ -963,12 +974,12 @@ def _main(args: argparse.Namespace) -> None:
         if not files:
             return
         state = queue_state(config)
-        for file_path in files:
+        for file_index, file_path in enumerate(files, 1):
             from .queue_manager import QueueItem
             from .utils import file_key
 
             state.upsert(QueueItem(str(file_path.resolve()), "", file_key(file_path)))
-            output = process_file_with_candidates(file_path, selected, config, unsupported, reference_llm)
+            output = process_file_with_candidates(file_path, selected, config, unsupported, reference_llm, file_progress=(file_index, len(files)))
             status = output_status(output)
             state.mark(file_path.resolve(), status, str(output or ""))
             batch_rows.append({"source_path": str(file_path.resolve()), "status": status, "output_path": str(output or "")})
@@ -984,7 +995,7 @@ def write_batch_summary(config: dict, rows: list[dict]) -> None:
 
     output_dir = write_batch_report(folder_config(config, "output"), rows)
     print(f"Wrote batch overview to {output_dir}")
-    print(f"Open batch dashboard: {output_dir / 'index.html'}")
+    print(f"Open final results: {output_dir / 'final_results.html'}")
 
 
 def open_folder(path: Path) -> None:

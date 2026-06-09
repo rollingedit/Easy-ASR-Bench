@@ -32,6 +32,7 @@ DEFAULT_FULL_REAL_SMOKE_ROWS = [
     "hf_safetensors_asr_quality_smollm_grading_cpu",
     "same_media_multi_model_smollm_benchmark",
     "same_media_multi_model_smollm_benchmark_directml",
+    "real_public_folder_batch_smollm_benchmark",
 ]
 
 

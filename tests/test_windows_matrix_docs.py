@@ -46,6 +46,12 @@ def test_public_asset_smoke_runner_captures_installed_app_json_evidence():
     assert "setup.bat" in script
     assert "call `\"$setup`\" --dry-run --verify-release --asset-dir" in script
     assert "--dry-run --verify-release --asset-dir" in script
+    assert "$lonelySetupDir = Join-Path $WorkDir \"lonely-setup-$Tag\"" in script
+    assert "Copy-Item -LiteralPath $setup -Destination (Join-Path $lonelySetupDir \"setup.bat\")" in script
+    assert "setup-lonely-verify-release-$Tag.txt" in script
+    assert "call `\"$lonelySetupDir\\setup.bat`\" --dry-run --verify-release" in script
+    assert "setup-lonely-verify-release.log" in script
+    assert "folder containing only setup.bat" in script
     assert "--doctor --json" in script
     assert "--first-run-smoke" in script
     assert "doctor.json" in script
