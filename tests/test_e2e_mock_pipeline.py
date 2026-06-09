@@ -76,7 +76,7 @@ def candidate(candidate_id: str, adapter_name: str) -> ModelCandidate:
     )
 
 
-def test_mock_e2e_pipeline_writes_reports_when_one_model_fails(tmp_path, monkeypatch):
+def test_mock_e2e_pipeline_writes_reports_when_one_model_fails(tmp_path, monkeypatch, capsys):
     source = tmp_path / "input.wav"
     source.write_bytes(b"fixture")
     temp = tmp_path / "Temp"
@@ -112,6 +112,7 @@ def test_mock_e2e_pipeline_writes_reports_when_one_model_fails(tmp_path, monkeyp
         source,
         [candidate("good-model", "fake_pass"), candidate("bad-model", "fake_fail")],
         config,
+        file_progress=(1, 1),
     )
 
     assert report_dir is not None
@@ -132,6 +133,11 @@ def test_mock_e2e_pipeline_writes_reports_when_one_model_fails(tmp_path, monkeyp
     assert "Likely causes" in (report_dir / "results.txt").read_text(encoding="utf-8")
     assert "Model Errors" in (report_dir / "compare.html").read_text(encoding="utf-8")
     assert not wav_path.exists()
+    output = capsys.readouterr().out
+    assert "[File 1/1] Processing input.wav" in output
+    assert "[File 1/1] [Model 1/2] Running good-model" in output
+    assert "[File 1/1] [Model 1/2] Finished good-model" in output
+    assert "[File 1/1] [Model 2/2] Failed bad-model" in output
 
 
 def test_mock_e2e_pipeline_structures_chunk_errors(tmp_path, monkeypatch):

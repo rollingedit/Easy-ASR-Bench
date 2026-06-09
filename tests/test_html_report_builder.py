@@ -73,10 +73,20 @@ def test_html_report_guards_browser_scoring_for_huge_references():
 def test_html_report_can_display_precomputed_reference_scores():
     data = minimal_results()
     data["reference_scores"] = {"m1": {"normalized_wer": 0.0, "strict_wer": 0.0, "cer": 0.0, "substitutions": 0, "insertions": 0, "deletions": 0}}
+    data["reference"] = {
+        "schema": "easy_asr_bench.llm_reference.v1",
+        "source_sha256": "abc",
+        "reference_type": "llm_corrected_reference",
+        "segments": [{"chunk_id": "0001", "start_seconds": 0.0, "end_seconds": 1.0, "text": "hello world", "uncertain": ["AI-assisted correction"]}],
+        "global_notes": ["fixture reference"],
+    }
+    data["score_note"] = "LLM-corrected reference scores are not human ground truth."
 
     html = build_html_report(data)
 
     assert "precomputedReferenceScores" in html
+    assert "Loaded LLM-Corrected Reference" in html
+    assert "hello world" in html
     assert "Loaded precomputed LLM-corrected reference scores" in html
     assert "renderScoreboard(latestScores)" in html
 
@@ -100,6 +110,34 @@ def test_html_report_separates_balanced_and_runtime_only_rankings():
 
     html = build_html_report(data)
 
-    assert "Runtime Ranking" in html
-    assert "Balanced rank requires a corrected reference" in html
+    assert "Speed and Memory Only" in html
+    assert "Accuracy is not scored yet because no corrected reference is loaded" in html
     assert "does not measure transcript quality" in html
+
+
+def test_html_report_accepts_scored_report_payload_directly():
+    data = minimal_results()
+    scored = {
+        "schema": "easy_asr_bench.scored_report.v1",
+        "status": "scored",
+        "score_type": "llm_corrected_reference",
+        "score_note": "Scores are AI-assisted.",
+        "results": data,
+        "reference": {
+            "schema": "easy_asr_bench.llm_reference.v1",
+            "source_sha256": "abc",
+            "reference_type": "llm_corrected_reference",
+            "segments": [{"chunk_id": "0001", "start_seconds": 0.0, "end_seconds": 1.0, "text": "real reference", "uncertain": []}],
+        },
+        "scores": {"m1": {"normalized_wer": 0.0, "strict_wer": 0.0, "cer": 0.0, "substitutions": 0, "insertions": 0, "deletions": 0, "balanced_rank": 1}},
+    }
+
+    html = build_html_report(scored)
+
+    assert '"reference_scores"' in html
+    assert "real reference" in html
+    assert "Accuracy Rank" in html
+    assert "Loaded precomputed LLM-corrected reference scores" in html
+    assert "System RAM Peak" in html
+    assert "VRAM / GPU Memory Peak" in html
+    assert "do not add it to RAM as a total" in html

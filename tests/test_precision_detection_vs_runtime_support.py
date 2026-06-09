@@ -59,4 +59,5 @@ def test_gguf_q4_is_reference_llm_not_asr_runtime(tmp_path: Path):
     assert data["detected_precision"].lower() == "q4_k_m"
     assert data["runtime_precision_supported"] is False
     assert candidate.category == "reference_llm"
+    assert data["category"] == "reference_llm"
     assert candidate.task == "llm-corrected-reference"

@@ -526,7 +526,7 @@ def test_interactive_download_requires_confirmation_for_large_choice(tmp_path: P
         return []
 
     monkeypatch.setattr("app.hf_model_downloader.download_choice", fake_download)
-    answers = iter(["owner/model", "n"])
+    answers = iter(["owner/model", "n", ""])
 
     result = download_hf_model_interactive(tmp_path, input_func=lambda prompt: next(answers), print_func=lambda text: None)
 
@@ -545,7 +545,7 @@ def test_interactive_download_rejects_y_for_large_choice(tmp_path: Path, monkeyp
         return []
 
     monkeypatch.setattr("app.hf_model_downloader.download_choice", fake_download)
-    answers = iter(["owner/model", "y"])
+    answers = iter(["owner/model", "y", ""])
 
     result = download_hf_model_interactive(tmp_path, input_func=lambda prompt: next(answers), print_func=lambda text: None)
 
@@ -564,7 +564,7 @@ def test_interactive_download_accepts_typed_download_for_large_choice(tmp_path: 
         return []
 
     monkeypatch.setattr("app.hf_model_downloader.download_choice", fake_download)
-    answers = iter(["owner/model", "DOWNLOAD"])
+    answers = iter(["owner/model", "DOWNLOAD", ""])
 
     result = download_hf_model_interactive(tmp_path, input_func=lambda prompt: next(answers), print_func=lambda text: None)
 
@@ -575,16 +575,39 @@ def test_interactive_download_accepts_typed_download_for_large_choice(tmp_path: 
 def test_interactive_download_inspection_failure_returns_to_user_without_crash(tmp_path: Path, monkeypatch):
     monkeypatch.setattr("app.hf_model_downloader.list_repo_files", lambda ref: (_ for _ in ()).throw(RuntimeError("network down")))
     messages: list[str] = []
+    answers = iter(["owner/model", ""])
 
     result = download_hf_model_interactive(
         tmp_path,
-        input_func=lambda prompt: "owner/model",
+        input_func=lambda prompt: next(answers),
         print_func=messages.append,
     )
 
     assert result is None
     assert any("Could not inspect that Hugging Face model" in message for message in messages)
     assert any("network down" in message for message in messages)
+
+
+def test_interactive_download_loops_until_blank_enter(tmp_path: Path, monkeypatch):
+    files = ["config.json", "tokenizer.json", "preprocessor_config.json", "model.safetensors"]
+    monkeypatch.setattr("app.hf_model_downloader.list_repo_files", lambda ref: files)
+    downloaded: list[str] = []
+
+    def fake_download(ref, choice, destination, print_func=print):
+        downloaded.append(ref.repo_id)
+        destination.mkdir(parents=True, exist_ok=True)
+        return [destination / "model.safetensors"]
+
+    monkeypatch.setattr("app.hf_model_downloader.download_choice", fake_download)
+    answers = iter(["bad link", "owner/first", "owner/second", ""])
+    messages: list[str] = []
+
+    result = download_hf_model_interactive(tmp_path, input_func=lambda prompt: next(answers), print_func=messages.append)
+
+    assert downloaded == ["owner/first", "owner/second"]
+    assert result == destination_for(tmp_path, HFModelRef("owner/second"), build_smart_download_choices(files, HFModelRef("owner/second"))[1][0])
+    assert any("Invalid Hugging Face link or repo id" in message for message in messages)
+    assert any("Paste another Hugging Face link, or press Enter when done." in message for message in messages)
 
 
 def test_interactive_download_unknown_choice_requires_confirmation(tmp_path: Path, monkeypatch):
@@ -597,7 +620,7 @@ def test_interactive_download_unknown_choice_requires_confirmation(tmp_path: Pat
         return []
 
     monkeypatch.setattr("app.hf_model_downloader.download_choice", fake_download)
-    answers = iter(["https://huggingface.co/owner/model/tree/main/custom", "n"])
+    answers = iter(["https://huggingface.co/owner/model/tree/main/custom", "n", ""])
     messages: list[str] = []
 
     result = download_hf_model_interactive(tmp_path, input_func=lambda prompt: next(answers), print_func=messages.append)

@@ -51,6 +51,16 @@ def test_setup_repair_forwards_repair_mode_to_public_installer():
     assert "%INSTALLER_MODE_ARGS%" in setup
 
 
+def test_setup_lonely_installer_download_uses_temp_path_outside_same_block_expansion():
+    setup = Path("setup.bat").read_text(encoding="utf-8")
+
+    assert "set TEMP_INSTALLER_PS1=%TEMP%\\Easy-ASR-Bench-install-%APP_VERSION%.ps1" in setup
+    assert "Invoke-WebRequest -Uri '%INSTALLER_URL%' -OutFile '%TEMP_INSTALLER_PS1%'" in setup
+    assert 'set "INSTALLER_PS1=%TEMP_INSTALLER_PS1%"' in setup
+    assert "set INSTALLER_PS1=%TEMP%\\Easy-ASR-Bench-install-%APP_VERSION%.ps1" not in setup
+    assert "Invoke-WebRequest -Uri '%INSTALLER_URL%' -OutFile '%INSTALLER_PS1%'" not in setup
+
+
 def test_setup_dry_run_json_emits_machine_readable_contract():
     setup = Path("setup.bat").read_text(encoding="utf-8")
 
@@ -72,10 +82,13 @@ def test_public_installer_runs_local_setup_without_post_setup_menu():
 
 def test_run_bat_forwards_release_qa_flags_without_interactive_banner():
     run_bat = Path("Run.bat").read_text(encoding="utf-8")
+    main = Path("app/main.py").read_text(encoding="utf-8")
 
     assert 'if /I "%~1"=="--doctor"' in run_bat
     assert "shift /1" in run_bat
     assert "app.main --doctor %*" in run_bat
+    assert 'parser.add_argument("--strict", action="store_true")' in main
+    assert "strict=bool(args.strict)" in main
     assert 'if /I "%~1"=="--first-run-smoke" goto direct_app' in run_bat
     assert "app.main %*" in run_bat
 

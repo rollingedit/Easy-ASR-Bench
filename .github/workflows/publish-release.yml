@@ -159,5 +159,10 @@ jobs:
           }
 
       - name: Verify public setup path
-        shell: cmd
-        run: setup.bat --dry-run --verify-release
+        shell: pwsh
+        run: |
+          $lonely = Join-Path $env:RUNNER_TEMP "easy-asr-lonely-setup"
+          Remove-Item -LiteralPath $lonely -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $lonely | Out-Null
+          Copy-Item setup.bat (Join-Path $lonely "setup.bat") -Force
+          cmd /d /c "`"$lonely\setup.bat`" --dry-run --verify-release"

@@ -108,6 +108,7 @@ def candidate_to_dict(candidate) -> dict:
         "runtime_precision_reason": runtime_precision_reason,
         "path": str(candidate.path),
         "adapter_name": candidate.adapter_name,
+        "category": candidate.category,
         "warnings": list(candidate.warnings),
     }
 

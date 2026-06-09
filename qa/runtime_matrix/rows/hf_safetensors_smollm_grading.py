@@ -228,11 +228,8 @@ def _run_whisper_quality(row_id: str, evidence_dir: Path, install_deps: bool, al
     scored = import_llm_reference(results, "SmolLM corrected reference fixture:\n```json\n" + json.dumps(reference) + "\n```")
     scored_path = output_dir / "scored_report.json"
     scored_path.write_text(json.dumps(scored, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
-    scored_results = dict(results)
-    if scored.get("status") == "scored":
-        scored_results["reference_scores"] = scored["scores"]
     scored_html = output_dir / "compare_scored.html"
-    scored_html.write_text(build_html_report(scored_results), encoding="utf-8", newline="\n")
+    scored_html.write_text(build_html_report(scored), encoding="utf-8", newline="\n")
 
     dependency_report_failures, dependency_report_details = dependency_resolution_report_failures(results, expected_groups={"transformers_cpu", "llama_cpp"})
     failures: list[str] = list(dependency_report_failures)
@@ -371,11 +368,8 @@ def _run_whisper_public_media(row_id: str, evidence_dir: Path, install_deps: boo
     scored = import_llm_reference(results, "SmolLM corrected reference fixture:\n```json\n" + json.dumps(reference) + "\n```")
     scored_path = output_dir / "scored_report.json"
     scored_path.write_text(json.dumps(scored, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
-    scored_results = dict(results)
-    if scored.get("status") == "scored":
-        scored_results["reference_scores"] = scored["scores"]
     scored_html = output_dir / "compare_scored.html"
-    scored_html.write_text(build_html_report(scored_results), encoding="utf-8", newline="\n")
+    scored_html.write_text(build_html_report(scored), encoding="utf-8", newline="\n")
 
     dependency_report_failures, dependency_report_details = dependency_resolution_report_failures(results, expected_groups={"transformers_cpu", "llama_cpp"})
     failures: list[str] = list(dependency_report_failures)
@@ -495,11 +489,8 @@ def _run_ctc_quality(row_id: str, evidence_dir: Path, install_deps: bool, allow_
     scored = import_llm_reference(results, "SmolLM corrected reference fixture:\n```json\n" + json.dumps(reference) + "\n```")
     scored_path = output_dir / "scored_report.json"
     scored_path.write_text(json.dumps(scored, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
-    scored_results = dict(results)
-    if scored.get("status") == "scored":
-        scored_results["reference_scores"] = scored["scores"]
     scored_html = output_dir / "compare_scored.html"
-    scored_html.write_text(build_html_report(scored_results), encoding="utf-8", newline="\n")
+    scored_html.write_text(build_html_report(scored), encoding="utf-8", newline="\n")
 
     dependency_report_failures, dependency_report_details = dependency_resolution_report_failures(results, expected_groups={"transformers_cpu", "llama_cpp"})
     failures: list[str] = list(dependency_report_failures)
@@ -731,11 +722,8 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
         scored = import_llm_reference(results, "SmolLM corrected reference fixture:\n```json\n" + json.dumps(reference) + "\n```")
         scored_path = output_dir / "scored_report.json"
         scored_path.write_text(json.dumps(scored, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
-        scored_results = dict(results)
-        if scored.get("status") == "scored":
-            scored_results["reference_scores"] = scored["scores"]
         scored_html = output_dir / "compare_scored.html"
-        scored_html.write_text(build_html_report(scored_results), encoding="utf-8", newline="\n")
+        scored_html.write_text(build_html_report(scored), encoding="utf-8", newline="\n")
 
         dependency_report_failures, dependency_report_details = dependency_resolution_report_failures(results, expected_groups={"transformers_cpu", "llama_cpp"})
         failures: list[str] = list(dependency_report_failures)
@@ -880,11 +868,8 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
     scored = import_llm_reference(results, "SmolLM corrected reference fixture:\n```json\n" + json.dumps(reference) + "\n```")
     scored_path = output_dir / "scored_report.json"
     scored_path.write_text(json.dumps(scored, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
-    scored_results = dict(results)
-    if scored.get("status") == "scored":
-        scored_results["reference_scores"] = scored["scores"]
     scored_html = output_dir / "compare_scored.html"
-    scored_html.write_text(build_html_report(scored_results), encoding="utf-8", newline="\n")
+    scored_html.write_text(build_html_report(scored), encoding="utf-8", newline="\n")
 
     dependency_report_failures, dependency_report_details = dependency_resolution_report_failures(results, expected_groups={"transformers_cpu", "llama_cpp"})
     failures: list[str] = list(dependency_report_failures)

@@ -159,6 +159,9 @@ def test_publish_workflow_refuses_public_asset_mutation_before_clobber():
     assert "release-verification-${{ inputs.tag }}.txt" in publish
     assert "gh release download ${{ inputs.tag }} --pattern release-verification-${{ inputs.tag }}.txt" in publish
     assert "Uploaded release verification transcript is missing required proof fields" in publish
+    assert "easy-asr-lonely-setup" in publish
+    assert 'Copy-Item setup.bat (Join-Path $lonely "setup.bat")' in publish
+    assert 'cmd /d /c "`"$lonely\\setup.bat`" --dry-run --verify-release"' in publish
 
     release_gate = (ROOT / ".github" / "workflows" / "release-gate.yml").read_text(encoding="utf-8")
     assert "validate_raw_github_files.py" in release_gate
@@ -166,6 +169,10 @@ def test_publish_workflow_refuses_public_asset_mutation_before_clobber():
     assert "types: [published, prereleased]" in release_gate
     assert "gh release view $tag --json isPrerelease" in release_gate
     assert "releaseIsPrerelease" in release_gate
+    assert "Run setup and CI contract tests" in release_gate
+    assert "tests/test_app_main_doctor_strict_flag.py" in release_gate
+    assert "release-asset/setup.bat" in release_gate
+    assert 'cmd /d /c "`"$lonely\\setup.bat`" --dry-run --verify-release"' in release_gate
 
 
 def test_release_verifier_peels_annotated_tags():

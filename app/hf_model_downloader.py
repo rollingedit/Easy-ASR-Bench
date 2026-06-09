@@ -1125,8 +1125,21 @@ def download_hf_model_from_ref(models_root: Path, raw: str, input_func=input, pr
 
 
 def download_hf_model_interactive(models_root: Path, input_func=input, print_func=print) -> Path | None:
-    raw = input_func(prompt_label("Hugging Face model URL or repo id> ")).strip()
-    return download_hf_model_from_ref(models_root, raw, input_func=input_func, print_func=print_func)
+    last_destination: Path | None = None
+    print_func("Paste Hugging Face model URLs or repo ids one at a time. Press Enter when done.")
+    while True:
+        raw = input_func(prompt_label("Hugging Face model URL or repo id> ")).strip()
+        if not raw:
+            return last_destination
+        try:
+            parse_hf_model_ref(raw)
+        except ValueError as exc:
+            print_func(f"Invalid Hugging Face link or repo id: {exc}")
+            continue
+        destination = download_hf_model_from_ref(models_root, raw, input_func=input_func, print_func=print_func)
+        if destination is not None:
+            last_destination = destination
+            print_func("Paste another Hugging Face link, or press Enter when done.")
 
 
 def download_recommended_baseline(models_root: Path, input_func=input, print_func=print) -> Path | None:
