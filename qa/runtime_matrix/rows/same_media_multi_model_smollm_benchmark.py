@@ -331,6 +331,9 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
     dependency_details["requested_provider"] = provider
     dependency_details["cuda_provider_checks"] = diagnostics
     try:
+        from app.dependency_manager import prepare_llama_cpp_dll_search_path
+
+        prepare_llama_cpp_dll_search_path()
         import llama_cpp  # noqa: F401
     except ModuleNotFoundError:
         blockers.append("llama_cpp: missing llama_cpp import for CPU SmolLM grading")

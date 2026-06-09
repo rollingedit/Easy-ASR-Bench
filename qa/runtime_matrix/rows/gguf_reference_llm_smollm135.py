@@ -18,9 +18,12 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
             evidence_dir,
             summary="SmolLM 135M GGUF fixture is not present locally.",
             block_reason=f"missing {SMOLLM_PATH}",
-            external_requirement="download HuggingFaceTB/SmolLM-135M-GGUF Q4_K_M fixture",
+            external_requirement="download QuantFactory/SmolLM-135M-GGUF Q4_K_M fixture",
         )
     try:
+        from app.dependency_manager import prepare_llama_cpp_dll_search_path
+
+        prepare_llama_cpp_dll_search_path()
         import llama_cpp  # noqa: F401
     except ModuleNotFoundError:
         return write_row(
@@ -73,4 +76,3 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
         },
         artifacts=[SMOLLM_PATH],
     )
-

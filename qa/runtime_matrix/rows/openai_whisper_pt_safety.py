@@ -231,6 +231,9 @@ def _checksum_verified_row(row_id: str, evidence_dir: Path, install_deps: bool, 
             artifacts=[checkpoint],
         )
     try:
+        from app.dependency_manager import prepare_llama_cpp_dll_search_path
+
+        prepare_llama_cpp_dll_search_path()
         import llama_cpp  # noqa: F401
     except ModuleNotFoundError:
         return write_row(

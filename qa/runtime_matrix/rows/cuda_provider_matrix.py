@@ -7,7 +7,7 @@ from pathlib import Path
 
 import sys
 
-from app.dependency_manager import CUDA_INSTALL_OVERRIDES, cuda_diagnostics, llama_cpp_gpu_capable, recovery_command_for_config
+from app.dependency_manager import CUDA_INSTALL_OVERRIDES, acceleration_install_decision, cuda_diagnostics, llama_cpp_gpu_capable, recovery_command_for_config
 from app.runtime_plan import hardware_from_dependency_manager, resolve_runtime_plan
 from qa.runtime_matrix.common import package_versions, write_row
 from qa.runtime_matrix.rows.gguf_reference_llm_smollm135 import SMOLLM_PATH
@@ -26,10 +26,24 @@ def _repair_commands() -> dict[str, str]:
 
 
 def _explicit_cuda_requirement_commands() -> dict[str, list[str]]:
-    return {
+    commands = {
         group: [f'"{sys.executable}" -m pip install -r {requirement}' for requirement in override["requirement_files"]]
         for group, override in CUDA_INSTALL_OVERRIDES.items()
     }
+    decision = acceleration_install_decision(
+        {
+            "runtime": {"provider": "cuda", "prefer_gpu": True},
+            "dependency_install": {"allow_cuda_install": True, "allow_accelerator_install": True},
+        },
+        "llama_cpp",
+    )
+    repair_commands = decision.get("repair_commands") or []
+    if repair_commands:
+        if isinstance(repair_commands, dict):
+            commands["llama_cpp"] = [str(command) for command in repair_commands.values()]
+        else:
+            commands["llama_cpp"] = [str(command) for command in repair_commands]
+    return commands
 
 
 def _installed_version(package: str) -> str | None:
@@ -37,6 +51,24 @@ def _installed_version(package: str) -> str | None:
         return importlib.metadata.version(package)
     except importlib.metadata.PackageNotFoundError:
         return None
+
+
+def _last_json_object(text: str) -> dict:
+    decoder = json.JSONDecoder()
+    last: dict = {}
+    last_schema: dict = {}
+    for index, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            value, _end = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            last = value
+            if "schema" in value:
+                last_schema = value
+    return last_schema or last
 
 
 def _nvidia_cuda_combo(row_id: str, evidence_dir: Path) -> dict:
@@ -233,10 +265,7 @@ def _faster_whisper_cuda_smoke(row_id: str, evidence_dir: Path, install_deps: bo
     }
     if completed.returncode != 0:
         return write_row(row_id, "fail", evidence_dir, summary="faster-whisper CUDA app-pipeline smoke failed.", details=details)
-    try:
-        payload = json.loads(completed.stdout[completed.stdout.rfind("{") :])
-    except Exception:
-        payload = {}
+    payload = _last_json_object(completed.stdout)
     details["smoke_payload"] = payload
     metrics = payload.get("metrics", {}) if isinstance(payload, dict) else {}
     if metrics.get("provider_summary", {}).get("actual_provider") not in {"cuda", "auto"} and metrics.get("device") != "cuda":
@@ -271,6 +300,9 @@ def _llama_cpp_cuda_smoke(row_id: str, evidence_dir: Path) -> dict:
             external_requirement="NVIDIA CUDA machine with CUDA-capable llama-cpp-python and cached SmolLM 135M GGUF",
         )
     try:
+        from app.dependency_manager import prepare_llama_cpp_dll_search_path
+
+        prepare_llama_cpp_dll_search_path()
         from llama_cpp import Llama
 
         llm = Llama(model_path=str(SMOLLM_PATH), n_ctx=256, n_gpu_layers=-1, verbose=False)

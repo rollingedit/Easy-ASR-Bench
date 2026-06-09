@@ -111,6 +111,9 @@ def _llama_cpp_vulkan_smollm_smoke(row_id: str, evidence_dir: Path, install_deps
             artifacts=[log_path],
         )
     try:
+        from app.dependency_manager import prepare_llama_cpp_dll_search_path
+
+        prepare_llama_cpp_dll_search_path()
         from llama_cpp import Llama
 
         llm = Llama(model_path=str(SMOLLM_PATH), n_ctx=256, n_gpu_layers=-1, verbose=False)

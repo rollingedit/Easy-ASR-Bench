@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 from dataclasses import dataclass
 import importlib.util
 import importlib.metadata
@@ -26,6 +27,37 @@ VC_REDIST_REGISTRY_KEYS = (
     r"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64",
     r"SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\x64",
 )
+
+_LLAMA_CPP_DLL_HANDLES: list[object] = []
+
+
+def prepare_llama_cpp_dll_search_path() -> None:
+    if sys.platform != "win32":
+        return
+    try:
+        import site
+    except Exception:
+        return
+    roots = [Path(base) for base in site.getsitepackages() + [site.getusersitepackages()]]
+    for root in roots:
+        for rel in ("llama_cpp/lib", "torch/lib", "nvidia/cublas/bin", "nvidia/cudnn/bin", "nvidia/cuda_nvrtc/bin"):
+            path = root / rel
+            if path.exists() and hasattr(os, "add_dll_directory"):
+                try:
+                    _LLAMA_CPP_DLL_HANDLES.append(os.add_dll_directory(str(path)))
+                except OSError:
+                    continue
+    for root in roots:
+        llama_lib = root / "llama_cpp" / "lib"
+        if not llama_lib.exists():
+            continue
+        for name in ("ggml-base.dll", "ggml-cuda.dll", "ggml-cpu.dll", "ggml.dll", "llama.dll"):
+            dll = llama_lib / name
+            if dll.exists():
+                try:
+                    _LLAMA_CPP_DLL_HANDLES.append(ctypes.CDLL(str(dll)))
+                except OSError:
+                    continue
 
 
 @dataclass(frozen=True)
@@ -135,7 +167,10 @@ CUDA_INSTALL_OVERRIDES = {
 }
 
 CUDA_REPAIR_MARKERS = {
-    "faster_whisper": ("nvidia.cublas.lib", "nvidia.cudnn.lib"),
+    "faster_whisper": (
+        ("nvidia.cublas.lib", "nvidia.cublas.bin"),
+        ("nvidia.cudnn.lib", "nvidia.cudnn.bin"),
+    ),
 }
 
 ACCELERATOR_OVERRIDES = {
@@ -342,9 +377,9 @@ def missing_modules_for_config(group: str, config: dict) -> list[str]:
     elif accelerator == "openvino" and group == "onnx" and not onnx_provider_available("OpenVINOExecutionProvider"):
         missing.append("onnxruntime OpenVINO provider")
     elif accelerator == "cuda" and group == "faster_whisper":
-        for module in CUDA_REPAIR_MARKERS[group]:
-            if not module_available(module):
-                missing.append(module)
+        for alternatives in CUDA_REPAIR_MARKERS[group]:
+            if not any(module_available(module) for module in alternatives):
+                missing.append(" or ".join(alternatives))
         if not ctranslate2_cuda_available():
             missing.append("CTranslate2 CUDA backend")
     elif (
@@ -555,6 +590,29 @@ def llama_cpp_gpu_capable() -> bool:
     except (ModuleNotFoundError, ValueError):
         return False
     code = (
+        "import os\n"
+        "import ctypes\n"
+        "from pathlib import Path\n"
+        "_dll_handles = []\n"
+        "_preloaded_dlls = []\n"
+        "try:\n"
+        "    import site\n"
+        "    roots = [Path(base) for base in site.getsitepackages() + [site.getusersitepackages()]]\n"
+        "    for root in roots:\n"
+        "        for rel in ('llama_cpp/lib', 'torch/lib', 'nvidia/cublas/bin', 'nvidia/cudnn/bin', 'nvidia/cuda_nvrtc/bin'):\n"
+        "            path = root / rel\n"
+        "            if path.exists() and hasattr(os, 'add_dll_directory'):\n"
+        "                _dll_handles.append(os.add_dll_directory(str(path)))\n"
+        "    for root in roots:\n"
+        "        llama_lib = root / 'llama_cpp' / 'lib'\n"
+        "        if not llama_lib.exists():\n"
+        "            continue\n"
+        "        for name in ('ggml-base.dll', 'ggml-cuda.dll', 'ggml-cpu.dll', 'ggml.dll', 'llama.dll'):\n"
+        "            dll = llama_lib / name\n"
+        "            if dll.exists():\n"
+        "                _preloaded_dlls.append(ctypes.CDLL(str(dll)))\n"
+        "except Exception:\n"
+        "    pass\n"
         "try:\n"
         "    from llama_cpp import llama_supports_gpu_offload\n"
         "    print('EASY_ASR_LLAMA_GPU_OFFLOAD=' + ('1' if llama_supports_gpu_offload() else '0'))\n"
@@ -579,6 +637,7 @@ LLAMA_CPP_RELEASES_API = "https://api.github.com/repos/ggml-org/llama.cpp/releas
 
 def llama_cpp_qwen3_asr_handler_available() -> bool:
     try:
+        prepare_llama_cpp_dll_search_path()
         from llama_cpp.llama_chat_format import Qwen3ASRChatHandler  # noqa: F401
 
         return True
@@ -1245,10 +1304,6 @@ def _driver_major(driver_version: str) -> int:
 
 def llama_cpp_cuda_tag_for_driver(driver_version: str) -> str:
     major = _driver_major(driver_version)
-    if major >= 580:
-        return "cu132"
-    if major >= 575:
-        return "cu130"
     if major >= 555:
         return "cu125"
     if major >= 550:

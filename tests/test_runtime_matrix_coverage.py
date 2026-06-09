@@ -128,6 +128,14 @@ def test_runtime_matrix_includes_native_runtime_prerequisite_rows():
     assert ROWS["vulkan_runtime_no_sdk"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
 
 
+def test_cuda_provider_matrix_parses_last_json_payload():
+    from qa.runtime_matrix.rows.cuda_provider_matrix import _last_json_object
+
+    text = 'progress {"nested": {"value": 1}}\n{"schema": "payload", "metrics": {"device": "cuda"}}\n'
+
+    assert _last_json_object(text) == {"schema": "payload", "metrics": {"device": "cuda"}}
+
+
 def test_windows_vc_runtime_repair_contract_row_records_winget_command(tmp_path):
     from qa.runtime_matrix.rows import windows_vc_runtime
 
@@ -895,6 +903,19 @@ def test_openai_whisper_cuda_fallback_row_records_runtime_plan_and_repair_comman
     commands = " ".join(row["details"]["explicit_cuda_requirement_commands"]).replace("\\", "/")
     assert "requirements/torch_cuda_cu128.txt" in commands
     assert "requirements/openai_whisper.txt" in commands
+
+
+def test_cuda_provider_matrix_llama_command_uses_resolved_wheel(monkeypatch):
+    from qa.runtime_matrix.rows.cuda_provider_matrix import _explicit_cuda_requirement_commands
+
+    monkeypatch.setattr("app.dependency_manager.sys.version_info", (3, 12, 10))
+    monkeypatch.setattr("app.dependency_manager.nvidia_driver_version", lambda: "555.99")
+    monkeypatch.setattr("app.dependency_manager.nvidia_gpu_detected", lambda: True)
+
+    commands = " ".join(_explicit_cuda_requirement_commands()["llama_cpp"])
+
+    assert "llama-cpp-python/whl/cu125" in commands
+    assert "llama_cpp_cuda_cu124.txt" not in commands
 
 
 def test_runtime_matrix_maps_hf_safetensors_rows_to_real_tiny_fixture_runner():

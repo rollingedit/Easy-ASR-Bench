@@ -228,6 +228,9 @@ def gguf_quant_label(name: str) -> str:
 
 def load_python_backend(model_path: Path, mmproj_path: Path, runtime_config: dict):
     try:
+        from ..dependency_manager import prepare_llama_cpp_dll_search_path
+
+        prepare_llama_cpp_dll_search_path()
         from llama_cpp import Llama
         from llama_cpp.llama_chat_format import Qwen3ASRChatHandler
     except Exception:

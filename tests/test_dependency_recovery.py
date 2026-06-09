@@ -126,9 +126,18 @@ def test_llama_cpp_gpu_capable_uses_isolated_marker_probe(monkeypatch):
     class Completed:
         stdout = "native log\nEASY_ASR_LLAMA_GPU_OFFLOAD=1\n"
 
-    monkeypatch.setattr("app.dependency_manager.subprocess.run", lambda *args, **kwargs: Completed())
+    captured = {}
+
+    def fake_run(command, **kwargs):
+        captured["code"] = command[2]
+        return Completed()
+
+    monkeypatch.setattr("app.dependency_manager.subprocess.run", fake_run)
 
     assert llama_cpp_gpu_capable() is True
+    assert "_dll_handles.append(os.add_dll_directory" in captured["code"]
+    assert "_preloaded_dlls.append(ctypes.CDLL" in captured["code"]
+    assert "llama_cpp/lib" in captured["code"]
 
 
 def test_llama_mtmd_group_reports_native_runtime_without_blocking_text_llm(monkeypatch):
@@ -1660,8 +1669,8 @@ def test_llama_cpp_cuda_resolver_maps_driver_to_wheel_tags(monkeypatch):
     assert llama_cpp_cuda_tag_for_driver("530.30") == "cu121"
     assert llama_cpp_cuda_tag_for_driver("550.90") == "cu124"
     assert llama_cpp_cuda_tag_for_driver("555.99") == "cu125"
-    assert llama_cpp_cuda_tag_for_driver("575.10") == "cu130"
-    assert llama_cpp_cuda_tag_for_driver("580.00") == "cu132"
+    assert llama_cpp_cuda_tag_for_driver("575.10") == "cu125"
+    assert llama_cpp_cuda_tag_for_driver("580.00") == "cu125"
 
 
 def test_llama_cpp_cuda_resolver_uses_selected_prebuilt_index(monkeypatch):
@@ -1671,7 +1680,7 @@ def test_llama_cpp_cuda_resolver_uses_selected_prebuilt_index(monkeypatch):
     decision = resolve_llama_cpp_wheel({"dependency_install": {}}, "cuda")
 
     assert decision.supported is True
-    assert decision.extra_index_url.endswith("/cu130")
+    assert decision.extra_index_url.endswith("/cu125")
     assert decision.pip_args == ("--upgrade", "--force-reinstall", "--no-deps", "--index-url", decision.extra_index_url, "llama-cpp-python")
 
 
@@ -2250,7 +2259,10 @@ def test_faster_whisper_cuda_repair_requires_ctranslate2_backend(monkeypatch):
 
     monkeypatch.setattr("app.dependency_manager.nvidia_gpu_detected", lambda: True)
     monkeypatch.setattr("app.dependency_manager._missing_import_modules", lambda metadata: [])
-    monkeypatch.setattr("app.dependency_manager.module_available", lambda module: module not in {"nvidia.cublas.lib", "nvidia.cudnn.lib"})
+    monkeypatch.setattr(
+        "app.dependency_manager.module_available",
+        lambda module: module not in {"nvidia.cublas.lib", "nvidia.cublas.bin", "nvidia.cudnn.lib", "nvidia.cudnn.bin"},
+    )
     monkeypatch.setattr("app.dependency_manager.ctranslate2_cuda_available", lambda: False)
 
     missing = missing_modules_for_config(
@@ -2262,6 +2274,28 @@ def test_faster_whisper_cuda_repair_requires_ctranslate2_backend(monkeypatch):
     )
 
     assert "CTranslate2 CUDA backend" in missing
+
+
+def test_faster_whisper_cuda_accepts_modern_nvidia_bin_packages(monkeypatch):
+    from app.dependency_manager import missing_modules_for_config
+
+    monkeypatch.setattr("app.dependency_manager.nvidia_gpu_detected", lambda: True)
+    monkeypatch.setattr("app.dependency_manager._missing_import_modules", lambda metadata: [])
+    monkeypatch.setattr(
+        "app.dependency_manager.module_available",
+        lambda module: module in {"nvidia.cublas.bin", "nvidia.cudnn.bin"},
+    )
+    monkeypatch.setattr("app.dependency_manager.ctranslate2_cuda_available", lambda: True)
+
+    missing = missing_modules_for_config(
+        "faster_whisper",
+        {
+            "runtime": {"provider": "auto", "prefer_gpu": True},
+            "dependency_install": {"allow_cuda_install": True},
+        },
+    )
+
+    assert missing == []
 
 
 def test_cuda_repair_triggers_for_llama_cpp_without_gpu_offload(monkeypatch):

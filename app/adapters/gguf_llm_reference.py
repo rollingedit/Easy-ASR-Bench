@@ -50,6 +50,9 @@ class GGUFLLMReferenceAdapter:
 
     def load(self, candidate: ModelCandidate, runtime_config: dict):
         try:
+            from ..dependency_manager import prepare_llama_cpp_dll_search_path
+
+            prepare_llama_cpp_dll_search_path()
             from llama_cpp import Llama
         except ModuleNotFoundError as exc:
             raise RuntimeError("GGUF reference support requires llama-cpp-python. Install requirements/llama_cpp.txt.") from exc
