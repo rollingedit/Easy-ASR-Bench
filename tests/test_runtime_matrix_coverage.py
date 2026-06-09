@@ -279,6 +279,7 @@ def test_windows_sandbox_deploy_row_generates_launch_bundle(tmp_path, monkeypatc
     monkeypatch.delenv(clean_vm_bootstrap.SANDBOX_LAUNCH_ENV, raising=False)
     monkeypatch.setattr(clean_vm_bootstrap, "_windows_sandbox_executable", lambda: r"C:\Windows\System32\WindowsSandbox.exe")
     monkeypatch.setattr(clean_vm_bootstrap, "_windows_edition_details", lambda: {"available": True, "edition_id": "Professional", "sandbox_supported_edition": True})
+    monkeypatch.setattr(clean_vm_bootstrap, "_sandbox_completion_evidence", lambda: ({"evidence_root": "missing"}, [], ["completion evidence missing"]))
     evidence_dir = ROOT / "Temp" / f"pytest_windows_sandbox_deploy_{tmp_path.name}"
     row = clean_vm_bootstrap.run("windows_sandbox_clean_bootstrap_deploy", evidence_dir, False, False)
 
@@ -315,6 +316,7 @@ def test_windows_sandbox_deploy_row_blocks_when_feature_missing(tmp_path, monkey
 
     monkeypatch.setattr(clean_vm_bootstrap, "_windows_sandbox_executable", lambda: "")
     monkeypatch.setattr(clean_vm_bootstrap, "_windows_edition_details", lambda: {"available": True, "edition_id": "Professional", "sandbox_supported_edition": True})
+    monkeypatch.setattr(clean_vm_bootstrap, "_sandbox_completion_evidence", lambda: ({"evidence_root": "missing"}, [], ["completion evidence missing"]))
     row = clean_vm_bootstrap.run("windows_sandbox_clean_bootstrap_deploy", ROOT / "Temp" / f"pytest_windows_sandbox_missing_{tmp_path.name}", False, False)
 
     assert row["status"] == "blocked"
@@ -379,6 +381,7 @@ def test_windows_sandbox_deploy_row_blocks_on_unsupported_edition(tmp_path, monk
 
     monkeypatch.setattr(clean_vm_bootstrap, "_windows_sandbox_executable", lambda: "")
     monkeypatch.setattr(clean_vm_bootstrap, "_windows_edition_details", lambda: {"available": True, "edition_id": "Core", "sandbox_supported_edition": False})
+    monkeypatch.setattr(clean_vm_bootstrap, "_sandbox_completion_evidence", lambda: ({"evidence_root": "missing"}, [], ["completion evidence missing"]))
     row = clean_vm_bootstrap.run("windows_sandbox_clean_bootstrap_deploy", ROOT / "Temp" / f"pytest_windows_sandbox_core_{tmp_path.name}", False, False)
 
     assert row["status"] == "blocked"
