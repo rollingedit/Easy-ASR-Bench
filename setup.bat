@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
@@ -229,14 +229,35 @@ for %%V in (3.14 3.13 3.12 3.11 3.10) do (
 
 if "%PYEXE%"=="" (
   echo Python 3.10 through 3.14 was not found. Attempting install with winget...
-  winget install -e --id Python.Python.3.12 --accept-package-agreements --accept-source-agreements
+  where winget >nul 2>nul
+  if not errorlevel 1 (
+    winget install -e --id Python.Python.3.12 --accept-package-agreements --accept-source-agreements
+  ) else (
+    echo winget was not found. Downloading Python 3.12.10 from python.org...
+    set "PYTHON_INSTALLER_URL=https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe"
+    set "PYTHON_INSTALLER=%TEMP%\python-3.12.10-amd64.exe"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '!PYTHON_INSTALLER_URL!' -OutFile '!PYTHON_INSTALLER!'"
+    if errorlevel 1 (
+      echo Python installer download failed. Install Python 3.12 and rerun setup.bat.
+      pause
+      exit /b 1
+    )
+    "!PYTHON_INSTALLER!" /quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1 Include_pip=1 SimpleInstall=1
+  )
   py -3.12 -c "import sys" >nul 2>nul
-  if errorlevel 1 (
+  if not errorlevel 1 set PYEXE=py -3.12
+  if "!PYEXE!"=="" (
+    python -c "import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 12) else 1)" >nul 2>nul
+    if not errorlevel 1 set PYEXE=python
+  )
+  if "!PYEXE!"=="" (
+    if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" set PYEXE="%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+  )
+  if "!PYEXE!"=="" (
     echo Python install was not detected. Install Python 3.12 and rerun setup.bat.
     pause
     exit /b 1
   )
-  set PYEXE=py -3.12
 )
 
 if not exist ".venv\Scripts\python.exe" (

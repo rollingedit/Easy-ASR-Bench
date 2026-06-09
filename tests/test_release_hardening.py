@@ -124,6 +124,8 @@ def test_setup_discovers_supported_python_matrix():
 
     assert "for %%V in (3.14 3.13 3.12 3.11 3.10)" in setup
     assert "winget install -e --id Python.Python.3.12" in setup
+    assert "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe" in setup
+    assert '"!PYTHON_INSTALLER!" /quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1 Include_pip=1 SimpleInstall=1' in setup
     assert "Python 3.10 through 3.14 was not found" in setup
 
 

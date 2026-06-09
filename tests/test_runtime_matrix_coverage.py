@@ -275,8 +275,18 @@ def test_windows_sandbox_deploy_row_generates_launch_bundle(tmp_path, monkeypatc
     assert "prebootstrap-python-probe.json" in script_text
     assert "EASY_ASR_BENCH_PREBOOTSTRAP_PROBE" in script_text
     assert "$exe = $Command[0]" in script_text
+    assert "Invoke-ValidationStep" in script_text
+    assert "step-\" + $Name + \".json" in script_text
+    assert "setup-dry-run-json" in script_text
+    assert "setup-local-no-post-menu" in script_text
+    assert '"--local", "--no-post-setup-menu"' in script_text
+    assert "exit_code_path" in script_text
+    assert "Start-Job" in script_text
+    assert "Executable not found for sandbox validation step" in script_text
+    assert '$commandText = $Command -join "`n"' in script_text
+    assert '$StepCommand = @($StepCommandText -split "`n")' in script_text
     assert "clean_vm_zero_dependency_bootstrap" in script_text
-    assert "--validate-real-smoke --full-real-smoke --allow-downloads" in script_text
+    assert '"--validate-real-smoke", "--full-real-smoke", "--allow-downloads"' in script_text
     assert "validate_release_smoke.py" in script_text
     assert "MappedFolder" in config.read_text(encoding="utf-8")
 

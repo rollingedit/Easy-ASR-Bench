@@ -32,6 +32,108 @@ $Evidence = Join-Path $Repo "Temp\windows_sandbox_clean_bootstrap_evidence"
 New-Item -ItemType Directory -Force -Path $Evidence | Out-Null
 Set-Location $Repo
 
+function Write-StepJson {
+  param([string]$Name, [object]$Payload)
+  $path = Join-Path $Evidence ("step-" + $Name + ".json")
+  $Payload | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 -Path $path
+}
+
+function Invoke-ValidationStep {
+  param(
+    [string]$Name,
+    [string[]]$Command,
+    [int]$TimeoutSeconds = 3600
+  )
+  $stdoutPath = Join-Path $Evidence ($Name + ".stdout.log")
+  $stderrPath = Join-Path $Evidence ($Name + ".stderr.log")
+  $legacyLog = Join-Path $Evidence ($Name + ".log")
+  $exitCodePath = Join-Path $Evidence ($Name + ".exitcode.txt")
+  Write-StepJson -Name $Name -Payload ([ordered]@{
+    schema = "easy_asr_bench.sandbox_step.v1"
+    name = $Name
+    status = "running"
+    started_utc = (Get-Date).ToUniversalTime().ToString("o")
+    command = $Command
+    timeout_seconds = $TimeoutSeconds
+    stdout_path = $stdoutPath
+    stderr_path = $stderrPath
+    legacy_log_path = $legacyLog
+    exit_code_path = $exitCodePath
+  })
+  try {
+    $commandText = $Command -join "`n"
+    $job = Start-Job -ScriptBlock {
+      param($RepoPath, $StepCommandText, $OutPath, $ErrPath, $CodePath)
+      $ErrorActionPreference = "Stop"
+      Set-Location $RepoPath
+      try {
+        $StepCommand = @($StepCommandText -split "`n")
+        $exe = $StepCommand[0]
+        if (-not (Get-Command $exe -ErrorAction SilentlyContinue)) {
+          throw "Executable not found for sandbox validation step: $exe"
+        }
+        $args = @()
+        if ($StepCommand.Length -gt 1) {
+          $args = $StepCommand[1..($StepCommand.Length - 1)]
+        }
+        & $exe @args 1> $OutPath 2> $ErrPath
+        $code = if ($null -eq $LASTEXITCODE) {
+          if ($?) { 0 } else { 1 }
+        } else {
+          $LASTEXITCODE
+        }
+        Set-Content -Encoding ASCII -Path $CodePath -Value $code
+      } catch {
+        $_.Exception.Message | Set-Content -Encoding UTF8 -Path $ErrPath
+        Set-Content -Encoding ASCII -Path $CodePath -Value 1
+      }
+    } -ArgumentList $Repo, $commandText, $stdoutPath, $stderrPath, $exitCodePath
+    $completed = Wait-Job -Job $job -Timeout $TimeoutSeconds
+    if (-not $completed) {
+      Stop-Job -Job $job -ErrorAction SilentlyContinue
+      Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+      $exitCode = -1
+      $status = "timeout"
+    } else {
+      Receive-Job -Job $job -ErrorAction SilentlyContinue | Out-Null
+      Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+      if (Test-Path $exitCodePath) {
+        $exitCode = [int]((Get-Content $exitCodePath -Raw).Trim())
+      } else {
+        $exitCode = -1
+        $errorText = "step finished without writing an exit code file"
+      }
+      $status = if ($exitCode -eq 0) { "pass" } else { "fail" }
+    }
+  } catch {
+    $exitCode = -1
+    $status = "error"
+    $errorText = $_.Exception.Message
+  }
+  if (Test-Path $stdoutPath) {
+    Get-Content $stdoutPath -Raw -ErrorAction SilentlyContinue | Set-Content -Encoding UTF8 -Path $legacyLog
+  }
+  Write-StepJson -Name $Name -Payload ([ordered]@{
+    schema = "easy_asr_bench.sandbox_step.v1"
+    name = $Name
+    status = $status
+    finished_utc = (Get-Date).ToUniversalTime().ToString("o")
+    command = $Command
+    timeout_seconds = $TimeoutSeconds
+    exit_code = $exitCode
+    stdout_path = $stdoutPath
+    stdout_bytes = if (Test-Path $stdoutPath) { (Get-Item $stdoutPath).Length } else { 0 }
+    stderr_path = $stderrPath
+    stderr_bytes = if (Test-Path $stderrPath) { (Get-Item $stderrPath).Length } else { 0 }
+    legacy_log_path = $legacyLog
+    exit_code_path = $exitCodePath
+    error = $errorText
+  })
+  if ($exitCode -ne 0) {
+    throw "Sandbox validation step '$Name' failed with status $status and exit code $exitCode"
+  }
+}
+
 function Invoke-ProbeCommand {
   param([string[]]$Command)
   $resolved = Get-Command $Command[0] -ErrorAction SilentlyContinue
@@ -90,14 +192,16 @@ $fullRealSmokeLog = Join-Path $Evidence "full-real-smoke.log"
 $writeSmokeLog = Join-Path $Evidence "write-release-smoke.log"
 $mergeSmokeLog = Join-Path $Evidence "merge-release-evidence.log"
 $validateSmokeLog = Join-Path $Evidence "validate-release-smoke-evidence.log"
-cmd /c setup.bat --doctor --repair-all-safe *> $setupRepairLog
-cmd /c setup.bat --doctor --repair-model-layouts --allow-downloads *> $modelRepairLog
-python qa\runtime_matrix\run_row.py --row win11_clean_no_python_setup --workdir Temp\windows_sandbox_clean_bootstrap_evidence *> $win11RowLog
-python qa\runtime_matrix\run_row.py --row clean_vm_zero_dependency_bootstrap --workdir Temp\windows_sandbox_clean_bootstrap_evidence --install-deps --allow-downloads *> $cleanVmRowLog
-python -m app.doctor --config config.json --validate-real-smoke --full-real-smoke --allow-downloads *> $fullRealSmokeLog
-python scripts\write_release_smoke.py --tag v0.4.0 --output release-smoke-v0.4.0-sandbox.json *> $writeSmokeLog
-python scripts\merge_release_evidence.py --smoke release-smoke-v0.4.0-sandbox.json --evidence-dir Temp --output release-smoke-v0.4.0-sandbox.json --ignore-unknown *> $mergeSmokeLog
-python scripts\validate_release_smoke.py --smoke release-smoke-v0.4.0-sandbox.json --required tests\fixtures\release_required_rows_v2.json --require-log-hashes --require-environment-summary *> $validateSmokeLog
+Invoke-ValidationStep -Name "setup-dry-run-json" -Command @("cmd", "/c", "setup.bat", "--dry-run", "--local", "--json") -TimeoutSeconds 300
+Invoke-ValidationStep -Name "setup-local-no-post-menu" -Command @("cmd", "/c", "setup.bat", "--local", "--no-post-setup-menu") -TimeoutSeconds 3600
+Invoke-ValidationStep -Name "setup-repair-all-safe" -Command @("cmd", "/c", "setup.bat", "--doctor", "--repair-all-safe") -TimeoutSeconds 3600
+Invoke-ValidationStep -Name "setup-repair-model-layouts" -Command @("cmd", "/c", "setup.bat", "--doctor", "--repair-model-layouts", "--allow-downloads") -TimeoutSeconds 3600
+Invoke-ValidationStep -Name "win11-clean-no-python-row" -Command @("python", "qa\runtime_matrix\run_row.py", "--row", "win11_clean_no_python_setup", "--workdir", "Temp\windows_sandbox_clean_bootstrap_evidence") -TimeoutSeconds 600
+Invoke-ValidationStep -Name "clean-vm-bootstrap-row" -Command @("python", "qa\runtime_matrix\run_row.py", "--row", "clean_vm_zero_dependency_bootstrap", "--workdir", "Temp\windows_sandbox_clean_bootstrap_evidence", "--install-deps", "--allow-downloads") -TimeoutSeconds 3600
+Invoke-ValidationStep -Name "full-real-smoke" -Command @("python", "-m", "app.doctor", "--config", "config.json", "--validate-real-smoke", "--full-real-smoke", "--allow-downloads") -TimeoutSeconds 7200
+Invoke-ValidationStep -Name "write-release-smoke" -Command @("python", "scripts\write_release_smoke.py", "--tag", "v0.4.0", "--output", "release-smoke-v0.4.0-sandbox.json") -TimeoutSeconds 300
+Invoke-ValidationStep -Name "merge-release-evidence" -Command @("python", "scripts\merge_release_evidence.py", "--smoke", "release-smoke-v0.4.0-sandbox.json", "--evidence-dir", "Temp", "--output", "release-smoke-v0.4.0-sandbox.json", "--ignore-unknown") -TimeoutSeconds 600
+Invoke-ValidationStep -Name "validate-release-smoke-evidence" -Command @("python", "scripts\validate_release_smoke.py", "--smoke", "release-smoke-v0.4.0-sandbox.json", "--required", "tests\fixtures\release_required_rows_v2.json", "--require-log-hashes", "--require-environment-summary") -TimeoutSeconds 300
 '''
 
 

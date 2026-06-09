@@ -20,6 +20,8 @@ def test_setup_winget_accepts_required_agreements():
     setup = Path("setup.bat").read_text(encoding="utf-8")
 
     assert "winget install -e --id Python.Python.3.12 --accept-package-agreements --accept-source-agreements" in setup
+    assert "where winget >nul 2>nul" in setup
+    assert "Downloading Python 3.12.10 from python.org" in setup
 
 
 def test_setup_doctor_forwards_json_and_strict_flags():
