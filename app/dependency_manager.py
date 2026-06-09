@@ -930,10 +930,15 @@ def llama_mtmd_cli_status(config: dict | None = None) -> dict:
     candidates: list[tuple[str, str]] = []
     if configured:
         candidates.append(("config", configured))
-    cache_root = _native_tools_cache_root(config) / "llama_mtmd"
-    if cache_root.exists():
-        for name in LLAMA_MTMD_CLI_NAMES:
-            candidates.extend(("native_tools_cache", str(path)) for path in cache_root.glob(f"github*/**/{name}"))
+    cache_roots = [_native_tools_cache_root(config) / "llama_mtmd"]
+    default_cache_root = (Path.cwd() / "Cache" / "native_tools" / "llama_mtmd").resolve()
+    if default_cache_root not in cache_roots:
+        cache_roots.append(default_cache_root)
+    for index, cache_root in enumerate(cache_roots):
+        if cache_root.exists():
+            source = "native_tools_cache" if index == 0 else "project_native_tools_cache"
+            for name in LLAMA_MTMD_CLI_NAMES:
+                candidates.extend((source, str(path)) for path in cache_root.glob(f"github*/**/{name}"))
     for name in LLAMA_MTMD_CLI_NAMES:
         found = shutil.which(name)
         if found:

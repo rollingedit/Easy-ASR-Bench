@@ -164,6 +164,7 @@ def test_llama_cpp_gpu_capable_uses_isolated_marker_probe(monkeypatch):
 
 
 def test_llama_mtmd_group_reports_native_runtime_without_blocking_text_llm(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("app.dependency_manager.llama_cpp_qwen3_asr_handler_available", lambda: False)
     monkeypatch.setattr("app.dependency_manager.shutil.which", lambda name: None)
     monkeypatch.setattr("app.dependency_manager.os.environ", {})
@@ -212,6 +213,7 @@ def test_llama_mtmd_status_rejects_inaccessible_cli(monkeypatch, tmp_path: Path)
 
 
 def test_llama_mtmd_status_reuses_verified_runtime_resolution_after_transient_denial(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
     denied_cli = tmp_path / "WinGetPackage" / "llama-mtmd-cli.exe"
     denied_cli.parent.mkdir()
     denied_cli.write_text("", encoding="utf-8")
@@ -314,6 +316,7 @@ def test_llama_mtmd_status_stages_copy_when_installed_cli_is_temporarily_denied(
     cli.write_text("", encoding="utf-8")
     (package_dir / "llama.dll").write_text("", encoding="utf-8")
     cache = tmp_path / "Cache"
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("app.dependency_manager.llama_cpp_qwen3_asr_handler_available", lambda: False)
     monkeypatch.setattr("app.dependency_manager.shutil.which", lambda name: str(cli))
     monkeypatch.setattr("app.dependency_manager.os.environ", {})
@@ -341,6 +344,7 @@ def test_llama_mtmd_status_prefers_staged_copy_after_healthy_probe(monkeypatch, 
     cli.write_text("", encoding="utf-8")
     (package_dir / "llama.dll").write_text("", encoding="utf-8")
     cache = tmp_path / "Cache"
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("app.dependency_manager.llama_cpp_qwen3_asr_handler_available", lambda: False)
     monkeypatch.setattr("app.dependency_manager.shutil.which", lambda name: str(cli))
     monkeypatch.setattr("app.dependency_manager.os.environ", {})
@@ -355,7 +359,33 @@ def test_llama_mtmd_status_prefers_staged_copy_after_healthy_probe(monkeypatch, 
     assert (Path(status["path"]).parent / "llama.dll").exists()
 
 
+def test_llama_mtmd_status_stages_project_cache_for_isolated_row_cache(monkeypatch, tmp_path: Path):
+    project_root = tmp_path / "project"
+    package_dir = project_root / "Cache" / "native_tools" / "llama_mtmd" / "github_b9000"
+    package_dir.mkdir(parents=True)
+    cli = package_dir / "llama-mtmd-cli.exe"
+    cli.write_text("", encoding="utf-8")
+    (package_dir / "llama.dll").write_text("", encoding="utf-8")
+    row_cache = tmp_path / "row" / "Cache"
+
+    monkeypatch.chdir(project_root)
+    monkeypatch.setattr("app.dependency_manager.LLAMA_MTMD_CLI_NAMES", ("llama-mtmd-cli.exe",))
+    monkeypatch.setattr("app.dependency_manager.llama_cpp_qwen3_asr_handler_available", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.shutil.which", lambda name: None)
+    monkeypatch.setattr("app.dependency_manager.os.environ", {})
+    monkeypatch.setattr("app.dependency_manager.probe_llama_mtmd_cli_path", lambda path: {"ok": True, "path": str(path), "reason": "probe_ok"})
+
+    status = llama_mtmd_cli_status({"folders": {"cache": str(row_cache)}})
+
+    assert status["available"] is True
+    assert status["source"] == "staged_copy"
+    assert Path(status["path"]).parent == row_cache / "native_tools" / "llama_mtmd" / package_dir.name
+    assert Path(status["staged_runtime"]["source_path"]) == cli
+    assert (Path(status["path"]).parent / "llama.dll").exists()
+
+
 def test_llama_mtmd_staging_uses_existing_file_when_source_dependency_is_locked(monkeypatch, tmp_path: Path):
+    monkeypatch.chdir(tmp_path)
     package_dir = tmp_path / "WinGetPackage"
     package_dir.mkdir()
     cli = package_dir / "llama-mtmd-cli.exe"
