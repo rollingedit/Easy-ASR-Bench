@@ -30,10 +30,11 @@ def _windows_error_mode_prefix() -> str:
     )
 
 
-def _isolated_import_probe(modules: tuple[str, ...], timeout: int = 30) -> dict:
+def _isolated_import_probe(modules: tuple[str, ...], timeout: int = 30, pre_import_code: str = "") -> dict:
     payload = {"modules": list(modules)}
     code = (
         _windows_error_mode_prefix()
+        + pre_import_code
         + """
 import importlib
 import json
@@ -157,7 +158,10 @@ def backend_probe_for_group(group: str, config: dict) -> dict:
     if group == "llama_cpp":
         from .dependency_manager import llama_cpp_gpu_capable
 
-        imports = _isolated_import_probe(("llama_cpp",))
+        imports = _isolated_import_probe(
+            ("llama_cpp",),
+            pre_import_code="from app.dependency_manager import prepare_llama_cpp_dll_search_path\nprepare_llama_cpp_dll_search_path()\n",
+        )
         gpu_required = acceleration.get("accelerator") in {"cuda", "vulkan"}
         gpu_capable = llama_cpp_gpu_capable()
         return {

@@ -1401,7 +1401,13 @@ def test_repair_backend_probe_records_media_tool_status(monkeypatch):
 
 def test_repair_backend_probe_separates_llama_cpp_import_from_gpu_offload(monkeypatch):
     monkeypatch.setattr("app.repair_plan.acceleration_install_decision", lambda config, group: {"use_accelerator": True, "accelerator": "vulkan"})
-    monkeypatch.setattr("app.repair_plan._isolated_import_probe", lambda modules, timeout=30: {"ok": True, "loaded": [{"module": "llama_cpp", "version": "0.3.18"}]})
+    captured = {}
+
+    def fake_import_probe(modules, timeout=30, pre_import_code=""):
+        captured["pre_import_code"] = pre_import_code
+        return {"ok": True, "loaded": [{"module": "llama_cpp", "version": "0.3.18"}]}
+
+    monkeypatch.setattr("app.repair_plan._isolated_import_probe", fake_import_probe)
     monkeypatch.setattr("app.dependency_manager.llama_cpp_gpu_capable", lambda: False)
 
     probe = backend_probe_for_group("llama_cpp", {"runtime": {"provider": "auto", "prefer_gpu": True}})
@@ -1412,6 +1418,7 @@ def test_repair_backend_probe_separates_llama_cpp_import_from_gpu_offload(monkey
     assert probe["accelerator_probe"]["requested"] is True
     assert probe["accelerator_probe"]["accelerator"] == "vulkan"
     assert probe["accelerator_probe"]["ok"] is False
+    assert "prepare_llama_cpp_dll_search_path" in captured["pre_import_code"]
 
 
 def test_runtime_resolution_records_unverified_accelerator_fallback(tmp_path: Path):

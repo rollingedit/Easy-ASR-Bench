@@ -10,6 +10,8 @@ CORE_IMPORTS = {
     "imageio-ffmpeg": "imageio_ffmpeg",
     "psutil": "psutil",
     "huggingface-hub": "huggingface_hub",
+    "jinja2": "jinja2",
+    "jiwer": "jiwer",
 }
 
 
