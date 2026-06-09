@@ -13,7 +13,8 @@ def test_dependency_status_includes_descriptions_and_repair_commands():
     status = dependency_status()
 
     assert status["python_packaging"]["description"]
-    assert "pip" in status["python_packaging"]["missing"] or status["python_packaging"]["available"]
+    missing_packaging = status["python_packaging"]["missing"]
+    assert any(item == "pip" or item.startswith("pip<") or item.startswith("pip>") for item in missing_packaging) or status["python_packaging"]["available"]
     assert "requirements/python_packaging.txt" in status["python_packaging"]["recovery_command"]
     assert DEFAULT_CONFIG["runtime"]["prefer_gpu"] is True
     assert DEFAULT_CONFIG["dependency_install"]["allow_cuda_install"] is True
