@@ -136,6 +136,23 @@ def test_cuda_provider_matrix_parses_last_json_payload():
     assert _last_json_object(text) == {"schema": "payload", "metrics": {"device": "cuda"}}
 
 
+def test_clean_vm_bootstrap_parses_last_json_payload_from_mixed_stdout():
+    from qa.runtime_matrix.rows.clean_vm_bootstrap import _json_from_command_stdout
+
+    result = {
+        "stdout_tail": (
+            "Microsoft Visual C++ Redistributable is not installed\n"
+            '{"schema": "intermediate"}\n'
+            '{"schema": "easy_asr_bench.first_run_smoke.v1", "repair_plan_schema": "easy_asr_bench.repair_plan.v1"}\n'
+        )
+    }
+
+    assert _json_from_command_stdout(result) == {
+        "schema": "easy_asr_bench.first_run_smoke.v1",
+        "repair_plan_schema": "easy_asr_bench.repair_plan.v1",
+    }
+
+
 def test_windows_vc_runtime_repair_contract_row_records_winget_command(tmp_path):
     from qa.runtime_matrix.rows import windows_vc_runtime
 

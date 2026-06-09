@@ -140,6 +140,7 @@ REQUIREMENT_FILES = {name: group.requirement_file for name, group in DEPENDENCY_
 LLAMA_CPP_CUDA_WHEEL_TAGS = ("cu118", "cu121", "cu122", "cu123", "cu124", "cu125", "cu130", "cu132")
 LLAMA_CPP_CUDA_WHEEL_INDEX = "https://abetlen.github.io/llama-cpp-python/whl/cu124"
 LLAMA_CPP_CUDA_WHEEL_PROBE_URL = f"{LLAMA_CPP_CUDA_WHEEL_INDEX}/llama-cpp-python/"
+LLAMA_CPP_CPU_WHEEL_INDEX = "https://abetlen.github.io/llama-cpp-python/whl/cpu"
 LLAMA_CPP_VULKAN_WHEEL_INDEX = "https://abetlen.github.io/llama-cpp-python/whl/vulkan"
 
 
@@ -228,7 +229,7 @@ ONNX_PROVIDER_COMPATIBILITY = {
         "package": "onnxruntime-openvino",
         "provider": "OpenVINOExecutionProvider",
         "config_key": "onnxruntime_openvino_compatibility_versions",
-        "versions": ("1.24.0", "1.23.0", "1.22.0", "1.21.1", "1.20.1", "1.19.2", "1.18.1", "1.17.3"),
+        "versions": ("1.24.1", "1.24.0", "1.23.0", "1.22.0", "1.21.1", "1.20.1", "1.19.2", "1.18.1", "1.17.3"),
     },
 }
 
@@ -1110,7 +1111,11 @@ def _repair_onnx_provider_compatibility(group: str, decision: dict, config: dict
     for version in versions:
         package_spec = f"{metadata['package']}=={version}"
         command = [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", "--no-deps", package_spec]
-        _run_dependency_command(command, env, log_handle)
+        try:
+            _run_dependency_command(command, env, log_handle)
+        except subprocess.CalledProcessError as exc:
+            errors.append(f"{package_spec}: install failed with exit code {exc.returncode}")
+            continue
         providers, provider_error = onnxruntime_available_providers()
         if provider in providers:
             _run_dependency_command([sys.executable, "-m", "pip", "install", package_spec], env, log_handle)
@@ -1211,6 +1216,15 @@ def install_group_for_config(group: str, project_root: Path, config: dict, log_p
             override = ACCELERATOR_OVERRIDES[(group, decision["accelerator"])]
             requirement_files = list(override["requirement_files"])
             env = {**os.environ, **override.get("env", {})}
+    elif group == "llama_cpp" and sys.version_info < (3, 13) and llama_cpp_wheel_index_available(LLAMA_CPP_CPU_WHEEL_INDEX):
+        pip_args = ["--upgrade", "--force-reinstall", "--no-deps", "--extra-index-url", LLAMA_CPP_CPU_WHEEL_INDEX, "llama-cpp-python"]
+        requirement_files = []
+        decision = {
+            **decision,
+            "cpu_wheel_index": LLAMA_CPP_CPU_WHEEL_INDEX,
+            "cpu_wheel_fallback": True,
+            "reason": f"{decision.get('reason', '')} Using the official prebuilt CPU wheel index instead of a local source build.".strip(),
+        }
     log_handle = None
     if log_path is not None:
         log_path.parent.mkdir(parents=True, exist_ok=True)

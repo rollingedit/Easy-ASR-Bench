@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 from app.config import DEFAULT_CONFIG
@@ -2351,6 +2353,40 @@ def test_llama_cuda_install_falls_back_to_cpu_when_wheel_index_unavailable(tmp_p
     assert calls and str(calls[0][-1]).endswith("requirements\\llama_cpp.txt")
 
 
+def test_llama_cpp_cpu_fallback_uses_prebuilt_wheel_index(tmp_path, monkeypatch):
+    (tmp_path / "requirements").mkdir()
+    (tmp_path / "requirements" / "llama_cpp.txt").write_text("llama-cpp-python\n", encoding="utf-8")
+    calls = []
+
+    monkeypatch.setattr("app.dependency_manager.vulkan_detected", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.nvidia_gpu_detected", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.llama_cpp_wheel_index_available", lambda url: "whl/cpu" in url)
+    monkeypatch.setattr("app.dependency_manager.subprocess.check_call", lambda command, env=None: calls.append(command))
+
+    decision = install_group_for_config(
+        "llama_cpp",
+        tmp_path,
+        {"runtime": {"provider": "cpu", "prefer_gpu": False}, "dependency_install": {"allow_accelerator_install": True}},
+    )
+
+    assert decision["cpu_wheel_fallback"] is True
+    assert decision["cpu_wheel_index"].endswith("/whl/cpu")
+    assert calls == [
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "--force-reinstall",
+            "--no-deps",
+            "--extra-index-url",
+            "https://abetlen.github.io/llama-cpp-python/whl/cpu",
+            "llama-cpp-python",
+        ]
+    ]
+
+
 def test_directml_install_removes_conflicting_plain_onnxruntime(tmp_path, monkeypatch):
     (tmp_path / "requirements").mkdir()
     (tmp_path / "requirements" / "onnx_directml.txt").write_text("onnxruntime-directml\n", encoding="utf-8")
@@ -2376,6 +2412,41 @@ def test_directml_install_removes_conflicting_plain_onnxruntime(tmp_path, monkey
     assert calls[1][-2:] == ["-r", str(tmp_path / "requirements" / "onnx_directml.txt")]
     assert calls[2][-4:] == ["--upgrade", "--force-reinstall", "--no-deps", "onnxruntime-directml==1.24.4"]
     assert calls[3][-1] == "onnxruntime-directml==1.24.4"
+
+
+def test_openvino_provider_repair_skips_unavailable_versions(tmp_path, monkeypatch):
+    (tmp_path / "requirements").mkdir()
+    (tmp_path / "requirements" / "onnx_openvino.txt").write_text("onnxruntime-openvino\n", encoding="utf-8")
+    calls = []
+
+    monkeypatch.setattr("app.dependency_manager.nvidia_gpu_detected", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.intel_gpu_or_npu_detected", lambda: True)
+    monkeypatch.setattr("app.dependency_manager.distribution_installed", lambda package: False)
+    provider_results = iter([([], "missing"), (["OpenVINOExecutionProvider"], "")])
+    monkeypatch.setattr("app.dependency_manager.onnxruntime_available_providers", lambda: next(provider_results))
+
+    def fake_check_call(command, env=None):
+        calls.append(command)
+        if command[-1] == "onnxruntime-openvino==1.24.1":
+            raise subprocess.CalledProcessError(1, command)
+
+    monkeypatch.setattr("app.dependency_manager.subprocess.check_call", fake_check_call)
+
+    decision = install_group_for_config(
+        "onnx",
+        tmp_path,
+        {
+            "runtime": {"provider": "openvino"},
+            "dependency_install": {
+                "allow_accelerator_install": True,
+                "onnxruntime_openvino_compatibility_versions": ["1.24.1", "1.23.0"],
+            },
+        },
+    )
+
+    assert decision["provider_compatibility_repair"] == "onnxruntime-openvino==1.23.0"
+    assert any(command[-1] == "onnxruntime-openvino==1.24.1" for command in calls)
+    assert any(command[-1] == "onnxruntime-openvino==1.23.0" for command in calls)
 
 
 def test_runtime_environment_persists_cuda_diagnostics(monkeypatch):

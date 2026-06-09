@@ -397,10 +397,26 @@ def _row_payload(path: Path) -> dict:
 
 
 def _json_from_command_stdout(result: dict) -> dict:
+    text = str(result.get("stdout_tail") or "")
     try:
-        return json.loads(str(result.get("stdout_tail") or ""))
+        return json.loads(text)
     except json.JSONDecodeError as exc:
-        return {"schema": "invalid", "read_error": f"JSONDecodeError: {exc}"}
+        decoder = json.JSONDecoder()
+        last_payload = None
+        last_error = exc
+        for index, character in enumerate(text):
+            if character not in "[{":
+                continue
+            try:
+                payload, _end = decoder.raw_decode(text[index:])
+            except json.JSONDecodeError as parse_exc:
+                last_error = parse_exc
+                continue
+            if isinstance(payload, dict):
+                last_payload = payload
+        if last_payload is not None:
+            return last_payload
+        return {"schema": "invalid", "read_error": f"JSONDecodeError: {last_error}"}
 
 
 def _setup_repair_evidence_failures(payload: dict) -> list[str]:
