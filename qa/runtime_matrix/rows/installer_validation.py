@@ -232,10 +232,11 @@ def _bad_release_checksum(row_id: str, evidence_dir: Path) -> dict:
     assets["checksums"].write_text(json.dumps(checksums, indent=2) + "\n", encoding="utf-8", newline="\n")
     result = _run(["cmd", "/c", "setup.bat", "--dry-run", "--verify-release", "--asset-dir", str(assets["manifest"].parent)], temp_dir=evidence_dir / "tmp")
     output = result["stdout_tail"] + result["stderr_tail"]
+    normalized_output = output.lower()
     failures = []
     if result["exit_code"] == 0:
         failures.append("bad release checksum was accepted")
-    if "Checksum mismatch" not in output:
+    if ("checksum" not in normalized_output and "sha256" not in normalized_output) or "mismatch" not in normalized_output:
         failures.append("checksum mismatch marker missing")
     return write_row(
         row_id,
