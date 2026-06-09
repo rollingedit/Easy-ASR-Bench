@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -33,9 +34,7 @@ def current_commit() -> str:
         completed = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True)
         return completed.stdout.strip()
     except (FileNotFoundError, subprocess.CalledProcessError):
-        from app.version import RELEASE_COMMIT
-
-        return RELEASE_COMMIT or "unknown"
+        return os.environ.get("EASY_ASR_COMMIT") or "unknown"
 
 
 def run_check(name: str, command: list[str]) -> dict:

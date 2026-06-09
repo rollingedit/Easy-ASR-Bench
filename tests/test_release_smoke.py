@@ -48,7 +48,7 @@ def test_write_release_smoke_commit_falls_back_when_git_unavailable(monkeypatch)
         raise FileNotFoundError("git")
 
     monkeypatch.setattr(write_release_smoke.subprocess, "run", missing_git)
-    monkeypatch.setattr("app.version.RELEASE_COMMIT", "unknown")
+    monkeypatch.delenv("EASY_ASR_COMMIT", raising=False)
 
     assert write_release_smoke.current_commit() == "unknown"
 
@@ -58,7 +58,7 @@ def test_write_release_smoke_commit_uses_packaged_commit_when_git_fails(monkeypa
         raise subprocess.CalledProcessError(1, ["git", "rev-parse", "HEAD"])
 
     monkeypatch.setattr(write_release_smoke.subprocess, "run", failed_git)
-    monkeypatch.setattr("app.version.RELEASE_COMMIT", "abc123")
+    monkeypatch.setenv("EASY_ASR_COMMIT", "abc123")
 
     assert write_release_smoke.current_commit() == "abc123"
 
