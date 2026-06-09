@@ -1102,6 +1102,10 @@ def _run_dependency_command(command: list[str], env: dict[str, str] | None, log_
         raise subprocess.CalledProcessError(completed.returncode, command, output=completed.stdout)
 
 
+def _llama_cpp_cpu_wheel_pip_args() -> list[str]:
+    return ["--upgrade", "--force-reinstall", "--extra-index-url", LLAMA_CPP_CPU_WHEEL_INDEX, "llama-cpp-python"]
+
+
 def _repair_onnx_provider_compatibility(group: str, decision: dict, config: dict, env: dict[str, str] | None, log_handle) -> dict:
     accelerator = str(decision.get("accelerator"))
     metadata = ONNX_PROVIDER_COMPATIBILITY.get((group, accelerator))
@@ -1202,15 +1206,18 @@ def install_group_for_config(group: str, project_root: Path, config: dict, log_p
         if group == "llama_cpp" and decision["accelerator"] in {"cuda", "vulkan"}:
             if not llama_cpp_wheel_index_available(str(decision.get("extra_index_url", ""))):
                 fallback_url = str(decision.get("extra_index_url", ""))
-                requirement_files = [DEPENDENCY_GROUPS[group].requirement_file]
+                pip_args = _llama_cpp_cpu_wheel_pip_args()
+                requirement_files = []
                 decision = {
                     **decision,
                     "use_accelerator": False,
                     "accelerator_fallback": "cpu",
                     "accelerator_fallback_reason": (
                         f"llama-cpp-python {decision['accelerator']} wheel index was unavailable at {fallback_url}; "
-                        "installing the CPU package instead of falling back to a local source build."
+                        "installing the prebuilt CPU wheel instead of falling back to a local source build."
                     ),
+                    "cpu_wheel_index": LLAMA_CPP_CPU_WHEEL_INDEX,
+                    "cpu_wheel_fallback": True,
                     "requirement_files": requirement_files,
                 }
             else:
@@ -1222,7 +1229,7 @@ def install_group_for_config(group: str, project_root: Path, config: dict, log_p
             requirement_files = list(override["requirement_files"])
             env = {**os.environ, **override.get("env", {})}
     elif group == "llama_cpp" and sys.version_info < (3, 13):
-        pip_args = ["--upgrade", "--force-reinstall", "--extra-index-url", LLAMA_CPP_CPU_WHEEL_INDEX, "llama-cpp-python"]
+        pip_args = _llama_cpp_cpu_wheel_pip_args()
         requirement_files = []
         decision = {
             **decision,

@@ -2372,7 +2372,20 @@ def test_llama_cuda_install_falls_back_to_cpu_when_wheel_index_unavailable(tmp_p
     assert decision["use_accelerator"] is False
     assert decision["accelerator_fallback"] == "cpu"
     assert "unavailable" in decision["accelerator_fallback_reason"]
-    assert calls and str(calls[0][-1]).endswith("requirements\\llama_cpp.txt")
+    assert decision["cpu_wheel_fallback"] is True
+    assert calls == [
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "--force-reinstall",
+            "--extra-index-url",
+            "https://abetlen.github.io/llama-cpp-python/whl/cpu",
+            "llama-cpp-python",
+        ]
+    ]
 
 
 def test_llama_cpp_cpu_fallback_uses_prebuilt_wheel_index(tmp_path, monkeypatch):
