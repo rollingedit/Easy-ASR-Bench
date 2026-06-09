@@ -412,7 +412,7 @@ def _json_from_command_stdout(result: dict) -> dict:
             except json.JSONDecodeError as parse_exc:
                 last_error = parse_exc
                 continue
-            if isinstance(payload, dict):
+            if isinstance(payload, dict) and payload.get("schema"):
                 last_payload = payload
         if last_payload is not None:
             return last_payload

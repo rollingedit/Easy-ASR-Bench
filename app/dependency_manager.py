@@ -375,7 +375,12 @@ def missing_modules_for_config(group: str, config: dict) -> list[str]:
         missing.append("onnxruntime CUDAExecutionProvider")
     elif accelerator == "directml" and group == "onnx" and not onnx_provider_available("DmlExecutionProvider"):
         missing.append("onnxruntime DirectML provider")
-    elif accelerator == "openvino" and group == "onnx" and not onnx_provider_available("OpenVINOExecutionProvider"):
+    elif (
+        accelerator == "openvino"
+        and group == "onnx"
+        and provider_explicitly_requested(config, "openvino")
+        and not onnx_provider_available("OpenVINOExecutionProvider")
+    ):
         missing.append("onnxruntime OpenVINO provider")
     elif accelerator == "cuda" and group == "faster_whisper":
         for alternatives in CUDA_REPAIR_MARKERS[group]:
@@ -1216,8 +1221,8 @@ def install_group_for_config(group: str, project_root: Path, config: dict, log_p
             override = ACCELERATOR_OVERRIDES[(group, decision["accelerator"])]
             requirement_files = list(override["requirement_files"])
             env = {**os.environ, **override.get("env", {})}
-    elif group == "llama_cpp" and sys.version_info < (3, 13) and llama_cpp_wheel_index_available(LLAMA_CPP_CPU_WHEEL_INDEX):
-        pip_args = ["--upgrade", "--force-reinstall", "--no-deps", "--extra-index-url", LLAMA_CPP_CPU_WHEEL_INDEX, "llama-cpp-python"]
+    elif group == "llama_cpp" and sys.version_info < (3, 13):
+        pip_args = ["--upgrade", "--force-reinstall", "--extra-index-url", LLAMA_CPP_CPU_WHEEL_INDEX, "llama-cpp-python"]
         requirement_files = []
         decision = {
             **decision,

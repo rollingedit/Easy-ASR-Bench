@@ -366,6 +366,27 @@ def _run_python_doctor(command_args: list[str], evidence_dir: Path) -> tuple[dic
     )
 
 
+def _last_json_object(text: str) -> dict:
+    decoder = json.JSONDecoder()
+    last_payload = None
+    last_error: json.JSONDecodeError | None = None
+    for index, character in enumerate(text):
+        if character not in "[{":
+            continue
+        try:
+            payload, _end = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            continue
+        if isinstance(payload, dict) and payload.get("schema"):
+            last_payload = payload
+    if last_payload is not None:
+        return last_payload
+    if last_error is not None:
+        raise last_error
+    raise json.JSONDecodeError("No JSON object found", text, 0)
+
+
 def _setup_repair_all_safe(row_id: str, evidence_dir: Path, install_deps: bool) -> dict:
     config_path, folders = _write_isolated_config(evidence_dir)
     plan_result, plan_completed = _run_python_doctor(["--config", str(config_path), "--repair-plan"], evidence_dir)
@@ -374,7 +395,7 @@ def _setup_repair_all_safe(row_id: str, evidence_dir: Path, install_deps: bool) 
     failures = []
     plan = {}
     try:
-        plan = json.loads(plan_completed.stdout)
+        plan = _last_json_object(plan_completed.stdout)
         plan_path.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8", newline="\n")
     except json.JSONDecodeError as exc:
         failures.append(f"repair-plan JSON could not be parsed: {exc}")
@@ -407,7 +428,7 @@ def _setup_repair_all_safe(row_id: str, evidence_dir: Path, install_deps: bool) 
     repair_result, repair_completed = _run_python_doctor(["--config", str(config_path), "--repair-all-safe"], evidence_dir)
     repair = {}
     try:
-        repair = json.loads(repair_completed.stdout)
+        repair = _last_json_object(repair_completed.stdout)
         repair_path.write_text(json.dumps(repair, indent=2) + "\n", encoding="utf-8", newline="\n")
     except json.JSONDecodeError as exc:
         failures.append(f"repair-all-safe JSON could not be parsed: {exc}")

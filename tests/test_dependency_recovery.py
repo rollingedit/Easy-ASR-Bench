@@ -1605,6 +1605,28 @@ def test_directml_replaces_plain_onnxruntime_requirement_and_flags_conflict(monk
     assert "onnxruntime DirectML provider" in missing
 
 
+def test_auto_openvino_missing_provider_allows_cpu_fallback(monkeypatch):
+    monkeypatch.setattr("app.dependency_manager.nvidia_gpu_detected", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.intel_gpu_or_npu_detected", lambda: True)
+    monkeypatch.setattr("app.dependency_manager.windows_gpu_detected", lambda: True)
+    monkeypatch.setattr("app.dependency_manager._missing_import_modules", lambda metadata: [])
+    monkeypatch.setattr("app.dependency_manager.requirement_version_issues", lambda requirement_files, ignored_packages=None: [])
+    monkeypatch.setattr("app.dependency_manager.distribution_installed", lambda package: False)
+    monkeypatch.setattr("app.dependency_manager.onnx_provider_available", lambda provider: False)
+
+    missing_auto = missing_modules_for_config(
+        "onnx",
+        {"runtime": {"provider": "auto", "prefer_gpu": True, "fallback_to_cpu": True}, "dependency_install": {"allow_accelerator_install": True}},
+    )
+    missing_explicit = missing_modules_for_config(
+        "onnx",
+        {"runtime": {"provider": "openvino", "prefer_gpu": True, "fallback_to_cpu": True}, "dependency_install": {"allow_accelerator_install": True}},
+    )
+
+    assert "onnxruntime OpenVINO provider" not in missing_auto
+    assert "onnxruntime OpenVINO provider" in missing_explicit
+
+
 def test_llama_uses_vulkan_when_available_without_nvidia(monkeypatch):
     monkeypatch.setattr("app.dependency_manager.nvidia_gpu_detected", lambda: False)
     monkeypatch.setattr("app.dependency_manager.vulkan_detected", lambda: True)
@@ -2360,7 +2382,7 @@ def test_llama_cpp_cpu_fallback_uses_prebuilt_wheel_index(tmp_path, monkeypatch)
 
     monkeypatch.setattr("app.dependency_manager.vulkan_detected", lambda: False)
     monkeypatch.setattr("app.dependency_manager.nvidia_gpu_detected", lambda: False)
-    monkeypatch.setattr("app.dependency_manager.llama_cpp_wheel_index_available", lambda url: "whl/cpu" in url)
+    monkeypatch.setattr("app.dependency_manager.llama_cpp_wheel_index_available", lambda url: False)
     monkeypatch.setattr("app.dependency_manager.subprocess.check_call", lambda command, env=None: calls.append(command))
 
     decision = install_group_for_config(
@@ -2379,7 +2401,6 @@ def test_llama_cpp_cpu_fallback_uses_prebuilt_wheel_index(tmp_path, monkeypatch)
             "install",
             "--upgrade",
             "--force-reinstall",
-            "--no-deps",
             "--extra-index-url",
             "https://abetlen.github.io/llama-cpp-python/whl/cpu",
             "llama-cpp-python",

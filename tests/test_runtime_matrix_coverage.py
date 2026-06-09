@@ -643,7 +643,7 @@ def test_setup_repair_all_safe_row_blocks_before_install_without_permission(tmp_
     from qa.runtime_matrix.rows import installer_validation
 
     class Completed:
-        stdout = '{"schema":"easy_asr_bench.repair_plan.v1","summary":{"needs_repair":1,"can_auto_repair":1},"records":[]}'
+        stdout = 'diagnostic line before JSON\n{"schema":"easy_asr_bench.repair_plan.v1","summary":{"needs_repair":1,"can_auto_repair":1},"records":[]}'
         stderr = ""
         returncode = 0
 
