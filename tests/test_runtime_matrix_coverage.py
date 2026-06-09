@@ -280,6 +280,8 @@ def test_windows_sandbox_deploy_row_generates_launch_bundle(tmp_path, monkeypatc
     assert "setup-dry-run-json" in script_text
     assert "setup-local-no-post-menu" in script_text
     assert '"--local", "--no-post-setup-menu"' in script_text
+    assert '$SandboxPython = Join-Path $Repo ".venv\\Scripts\\python.exe"' in script_text
+    assert '@($SandboxPython, "qa\\runtime_matrix\\run_row.py"' in script_text
     assert "exit_code_path" in script_text
     assert "Start-Job" in script_text
     assert "Executable not found for sandbox validation step" in script_text

@@ -192,16 +192,17 @@ $fullRealSmokeLog = Join-Path $Evidence "full-real-smoke.log"
 $writeSmokeLog = Join-Path $Evidence "write-release-smoke.log"
 $mergeSmokeLog = Join-Path $Evidence "merge-release-evidence.log"
 $validateSmokeLog = Join-Path $Evidence "validate-release-smoke-evidence.log"
+$SandboxPython = Join-Path $Repo ".venv\Scripts\python.exe"
 Invoke-ValidationStep -Name "setup-dry-run-json" -Command @("cmd", "/c", "setup.bat", "--dry-run", "--local", "--json") -TimeoutSeconds 300
 Invoke-ValidationStep -Name "setup-local-no-post-menu" -Command @("cmd", "/c", "setup.bat", "--local", "--no-post-setup-menu") -TimeoutSeconds 3600
 Invoke-ValidationStep -Name "setup-repair-all-safe" -Command @("cmd", "/c", "setup.bat", "--doctor", "--repair-all-safe") -TimeoutSeconds 3600
 Invoke-ValidationStep -Name "setup-repair-model-layouts" -Command @("cmd", "/c", "setup.bat", "--doctor", "--repair-model-layouts", "--allow-downloads") -TimeoutSeconds 3600
-Invoke-ValidationStep -Name "win11-clean-no-python-row" -Command @("python", "qa\runtime_matrix\run_row.py", "--row", "win11_clean_no_python_setup", "--workdir", "Temp\windows_sandbox_clean_bootstrap_evidence") -TimeoutSeconds 600
-Invoke-ValidationStep -Name "clean-vm-bootstrap-row" -Command @("python", "qa\runtime_matrix\run_row.py", "--row", "clean_vm_zero_dependency_bootstrap", "--workdir", "Temp\windows_sandbox_clean_bootstrap_evidence", "--install-deps", "--allow-downloads") -TimeoutSeconds 3600
-Invoke-ValidationStep -Name "full-real-smoke" -Command @("python", "-m", "app.doctor", "--config", "config.json", "--validate-real-smoke", "--full-real-smoke", "--allow-downloads") -TimeoutSeconds 7200
-Invoke-ValidationStep -Name "write-release-smoke" -Command @("python", "scripts\write_release_smoke.py", "--tag", "v0.4.0", "--output", "release-smoke-v0.4.0-sandbox.json") -TimeoutSeconds 300
-Invoke-ValidationStep -Name "merge-release-evidence" -Command @("python", "scripts\merge_release_evidence.py", "--smoke", "release-smoke-v0.4.0-sandbox.json", "--evidence-dir", "Temp", "--output", "release-smoke-v0.4.0-sandbox.json", "--ignore-unknown") -TimeoutSeconds 600
-Invoke-ValidationStep -Name "validate-release-smoke-evidence" -Command @("python", "scripts\validate_release_smoke.py", "--smoke", "release-smoke-v0.4.0-sandbox.json", "--required", "tests\fixtures\release_required_rows_v2.json", "--require-log-hashes", "--require-environment-summary") -TimeoutSeconds 300
+Invoke-ValidationStep -Name "win11-clean-no-python-row" -Command @($SandboxPython, "qa\runtime_matrix\run_row.py", "--row", "win11_clean_no_python_setup", "--workdir", "Temp\windows_sandbox_clean_bootstrap_evidence") -TimeoutSeconds 600
+Invoke-ValidationStep -Name "clean-vm-bootstrap-row" -Command @($SandboxPython, "qa\runtime_matrix\run_row.py", "--row", "clean_vm_zero_dependency_bootstrap", "--workdir", "Temp\windows_sandbox_clean_bootstrap_evidence", "--install-deps", "--allow-downloads") -TimeoutSeconds 3600
+Invoke-ValidationStep -Name "full-real-smoke" -Command @($SandboxPython, "-m", "app.doctor", "--config", "config.json", "--validate-real-smoke", "--full-real-smoke", "--allow-downloads") -TimeoutSeconds 7200
+Invoke-ValidationStep -Name "write-release-smoke" -Command @($SandboxPython, "scripts\write_release_smoke.py", "--tag", "v0.4.0", "--output", "release-smoke-v0.4.0-sandbox.json") -TimeoutSeconds 300
+Invoke-ValidationStep -Name "merge-release-evidence" -Command @($SandboxPython, "scripts\merge_release_evidence.py", "--smoke", "release-smoke-v0.4.0-sandbox.json", "--evidence-dir", "Temp", "--output", "release-smoke-v0.4.0-sandbox.json", "--ignore-unknown") -TimeoutSeconds 600
+Invoke-ValidationStep -Name "validate-release-smoke-evidence" -Command @($SandboxPython, "scripts\validate_release_smoke.py", "--smoke", "release-smoke-v0.4.0-sandbox.json", "--required", "tests\fixtures\release_required_rows_v2.json", "--require-log-hashes", "--require-environment-summary") -TimeoutSeconds 300
 '''
 
 
