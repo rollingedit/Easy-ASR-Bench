@@ -28,6 +28,10 @@ def test_setup_embeds_current_installer_hash():
     assert match.group(1).lower() == sha256(ROOT / "installer" / "install.ps1")
 
 
+def test_setup_batch_has_no_utf8_bom():
+    assert not (ROOT / "setup.bat").read_bytes().startswith(b"\xef\xbb\xbf")
+
+
 def test_release_checksums_include_bootstrap_assets():
     checksums = json.loads((ROOT / "installer" / "checksums.json").read_text(encoding="utf-8"))
 
