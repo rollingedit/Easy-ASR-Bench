@@ -298,6 +298,12 @@ if errorlevel 1 (
   exit /b 1
 )
 
+call :ensure_vc_redist
+if errorlevel 1 (
+  pause
+  exit /b 1
+)
+
 echo Creating config if needed...
 ".venv\Scripts\python.exe" -m app.config --init
 if errorlevel 1 (
@@ -367,6 +373,45 @@ if /I not "%ACTUAL_SHA%"=="%EXPECTED_SHA%" (
 )
 echo Verified %VERIFY_LABEL% SHA256.
 exit /b 0
+
+:ensure_vc_redist
+reg query "HKLM\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" /v Installed >nul 2>nul
+if not errorlevel 1 exit /b 0
+reg query "HKLM\SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" /v Installed >nul 2>nul
+if not errorlevel 1 exit /b 0
+echo Installing Microsoft Visual C++ Redistributable for native ASR backends...
+where winget >nul 2>nul
+if not errorlevel 1 (
+  winget install -e --id Microsoft.VCRedist.2015+.x64 --accept-package-agreements --accept-source-agreements
+) else (
+  echo winget was not found. Downloading Visual C++ Redistributable from Microsoft...
+  set "VC_REDIST_URL=https://aka.ms/vc14/vc_redist.x64.exe"
+  set "VC_REDIST_INSTALLER=%TEMP%\vc_redist.x64.exe"
+  set VC_DOWNLOAD_OK=0
+  curl.exe --fail --location --connect-timeout 30 --max-time 300 --silent --show-error --output "!VC_REDIST_INSTALLER!" "!VC_REDIST_URL!"
+  if exist "!VC_REDIST_INSTALLER!" (
+    for %%F in ("!VC_REDIST_INSTALLER!") do if %%~zF GTR 1000000 set VC_DOWNLOAD_OK=1
+  )
+  if "!VC_DOWNLOAD_OK!"=="0" (
+    echo curl download did not produce a complete Visual C++ Redistributable installer. Trying PowerShell...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri '!VC_REDIST_URL!' -OutFile '!VC_REDIST_INSTALLER!'"
+  )
+  set VC_DOWNLOAD_OK=0
+  if exist "!VC_REDIST_INSTALLER!" (
+    for %%F in ("!VC_REDIST_INSTALLER!") do if %%~zF GTR 1000000 set VC_DOWNLOAD_OK=1
+  )
+  if "!VC_DOWNLOAD_OK!"=="0" (
+    echo Visual C++ Redistributable download failed. Install the Microsoft Visual C++ 2015-2022 Redistributable x64 and rerun setup.bat.
+    exit /b 1
+  )
+  "!VC_REDIST_INSTALLER!" /install /quiet /norestart
+)
+reg query "HKLM\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" /v Installed >nul 2>nul
+if not errorlevel 1 exit /b 0
+reg query "HKLM\SOFTWARE\WOW6432Node\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" /v Installed >nul 2>nul
+if not errorlevel 1 exit /b 0
+echo Visual C++ Redistributable install was not detected. Install it from https://aka.ms/vc14/vc_redist.x64.exe and rerun setup.bat.
+exit /b 1
 
 :emit_dry_run_json
 set JSON_EXIT=%~1

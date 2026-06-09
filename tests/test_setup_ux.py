@@ -28,6 +28,17 @@ def test_setup_winget_accepts_required_agreements():
     assert "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest" in setup
 
 
+def test_setup_installs_vc_redist_without_winget_for_clean_windows():
+    setup = Path("setup.bat").read_text(encoding="utf-8")
+
+    assert "call :ensure_vc_redist" in setup
+    assert "winget install -e --id Microsoft.VCRedist.2015+.x64 --accept-package-agreements --accept-source-agreements" in setup
+    assert "https://aka.ms/vc14/vc_redist.x64.exe" in setup
+    assert 'curl.exe --fail --location --connect-timeout 30 --max-time 300 --silent --show-error --output "!VC_REDIST_INSTALLER!" "!VC_REDIST_URL!"' in setup
+    assert "VC_DOWNLOAD_OK" in setup
+    assert '"!VC_REDIST_INSTALLER!" /install /quiet /norestart' in setup
+
+
 def test_setup_doctor_forwards_json_and_strict_flags():
     setup = Path("setup.bat").read_text(encoding="utf-8")
 
