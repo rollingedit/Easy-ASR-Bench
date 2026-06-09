@@ -16,7 +16,7 @@ from qa.runtime_matrix.rows.real_public_media_faster_whisper_smollm import _down
 from qa.runtime_matrix.rows.same_media_multi_model_smollm_benchmark import GROUPS
 from qa.runtime_matrix.rows.same_media_multi_model_smollm_benchmark import _ensure_faster_whisper
 from qa.runtime_matrix.rows.same_media_multi_model_smollm_benchmark import _ensure_generic_onnx_quality
-from qa.runtime_matrix.rows.same_media_multi_model_smollm_benchmark import _repair_dependencies
+from qa.runtime_matrix.rows.same_media_multi_model_smollm_benchmark import _repair_dependencies_with_safe_retry
 from qa.runtime_matrix.rows.smollm_reference_grading_report import SMOLLM_PATH, _smollm_candidate
 
 
@@ -84,7 +84,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
     config["runtime"]["llm_reference_temperature"] = 0.0
     config["input"]["recursive_folders"] = True
 
-    blockers, dependency_details, dependency_artifacts = _repair_dependencies(config, evidence_dir, install_deps)
+    blockers, dependency_details, dependency_artifacts = _repair_dependencies_with_safe_retry(config, evidence_dir, install_deps)
     if blockers:
         return write_row(
             row_id,

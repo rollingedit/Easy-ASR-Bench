@@ -1709,6 +1709,13 @@ def test_same_media_dependency_preflight_retries_safe_repair_before_blocking(tmp
     assert artifacts == [tmp_path / "onnx_repair.log"]
 
 
+def test_folder_batch_uses_safe_dependency_retry():
+    from qa.runtime_matrix.rows import real_public_folder_batch_smollm
+    from qa.runtime_matrix.rows import same_media_multi_model_smollm_benchmark
+
+    assert real_public_folder_batch_smollm._repair_dependencies_with_safe_retry is same_media_multi_model_smollm_benchmark._repair_dependencies_with_safe_retry
+
+
 def test_same_media_multi_model_row_blocks_without_smollm_fixture(tmp_path, monkeypatch):
     from qa.runtime_matrix.rows import same_media_multi_model_smollm_benchmark
 
