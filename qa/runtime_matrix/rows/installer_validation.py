@@ -146,7 +146,8 @@ def _install_path_with_spaces(row_id: str, evidence_dir: Path) -> dict:
 
 def _verify_release(row_id: str, evidence_dir: Path) -> dict:
     assets = _stage_release_assets(evidence_dir / "assets")
-    result = _run(["cmd", "/c", "setup.bat", "--dry-run", "--verify-release", "--asset-dir", str(assets["manifest"].parent)], temp_dir=evidence_dir / "tmp")
+    asset_dir_arg = os.path.relpath(assets["manifest"].parent, ROOT)
+    result = _run(["cmd", "/c", "setup.bat", "--dry-run", "--verify-release", "--asset-dir", asset_dir_arg], temp_dir=evidence_dir / "tmp")
     output = result["stdout_tail"] + result["stderr_tail"]
     failures = []
     for marker in ["Verified installer/install.ps1 SHA256", "[OK] release tag pinned", "[OK] ZIP layout valid", "[OK] release physical files valid"]:
@@ -159,7 +160,7 @@ def _verify_release(row_id: str, evidence_dir: Path) -> dict:
         "pass" if not failures else "fail",
         evidence_dir,
         summary="setup.bat --dry-run --verify-release validates staged release assets and ZIP layout." if not failures else "setup verify-release dry-run failed.",
-        details={"asset_dir": str(assets["manifest"].parent), "command": result, "failures": failures},
+        details={"asset_dir": str(assets["manifest"].parent), "asset_dir_arg": asset_dir_arg, "command": result, "failures": failures},
         artifacts=list(assets.values()),
     )
 
