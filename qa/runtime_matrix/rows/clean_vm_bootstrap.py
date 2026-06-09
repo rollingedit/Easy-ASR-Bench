@@ -177,6 +177,62 @@ def _windows_sandbox_executable() -> str:
     return ""
 
 
+def _running_windows_sandboxes() -> list[dict]:
+    if sys.platform != "win32":
+        return []
+    code = (
+        "Get-CimInstance Win32_Process | "
+        "Where-Object { $_.Name -like '*WindowsSandbox*' -or $_.Name -eq 'vmwp.exe' } | "
+        "Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Depth 4"
+    )
+    try:
+        completed = subprocess.run(["powershell", "-NoProfile", "-Command", code], cwd=ROOT, text=True, capture_output=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if completed.returncode != 0 or not completed.stdout.strip():
+        return []
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return []
+    if isinstance(payload, dict):
+        payload = [payload]
+    if not isinstance(payload, list):
+        return []
+    sandboxes = []
+    for item in payload:
+        if isinstance(item, dict):
+            sandboxes.append(
+                {
+                    "process_id": item.get("ProcessId"),
+                    "parent_process_id": item.get("ParentProcessId"),
+                    "name": item.get("Name", ""),
+                    "command_line": item.get("CommandLine", ""),
+                }
+            )
+    return sandboxes
+
+
+def _sandbox_contention(sandbox_config_path: str) -> dict:
+    expected = str(Path(sandbox_config_path).resolve()).lower()
+    processes = _running_windows_sandboxes()
+    windows_sandbox_processes = [process for process in processes if str(process.get("name", "")).lower() == "windowssandbox.exe"]
+    other = []
+    current = []
+    for process in windows_sandbox_processes:
+        command_line = str(process.get("command_line") or "")
+        if expected and expected in command_line.lower():
+            current.append(process)
+        else:
+            other.append(process)
+    return {
+        "running_processes": processes,
+        "current_easy_asr_sandbox": current,
+        "other_windows_sandboxes": other,
+        "blocked": bool(other and not current),
+    }
+
+
 def _windows_edition_details() -> dict:
     if sys.platform != "win32":
         return {"available": False, "reason": f"platform is {sys.platform}"}
@@ -488,6 +544,7 @@ def run(row_id: str, evidence_dir: Path, install_deps: bool, allow_downloads: bo
 def _run_windows_sandbox_deploy(row_id: str, evidence_dir: Path) -> dict:
     bundle = _write_windows_sandbox_bundle(evidence_dir)
     completion_details, completion_artifacts, completion_failures = _sandbox_completion_evidence()
+    contention = _sandbox_contention(bundle["config_path"])
     feature_result = ROOT / "Temp" / "windows_sandbox_feature_result.json"
     artifacts = [Path(bundle["script_path"]), Path(bundle["config_path"]), *completion_artifacts]
     if feature_result.exists():
@@ -502,6 +559,7 @@ def _run_windows_sandbox_deploy(row_id: str, evidence_dir: Path) -> dict:
         "bundle": bundle,
         "expected_sandbox_evidence_dir": "Temp\\windows_sandbox_clean_bootstrap_evidence",
         "completion_evidence": completion_details,
+        "sandbox_contention": contention,
     }
     if not completion_failures:
         return write_row(
@@ -566,6 +624,17 @@ def _run_windows_sandbox_deploy(row_id: str, evidence_dir: Path) -> dict:
                 "python qa\\runtime_matrix\\run_row.py --row windows_sandbox_clean_bootstrap_deploy "
                 "--workdir Temp\\runtime_matrix_windows_sandbox_clean_bootstrap_deploy"
             ),
+            details=details,
+            artifacts=artifacts,
+        )
+    if contention.get("blocked"):
+        return write_row(
+            row_id,
+            "blocked",
+            evidence_dir,
+            summary="Windows Sandbox clean-bootstrap launch is blocked because another Windows Sandbox instance is already running.",
+            block_reason="another Windows Sandbox process is active; close or finish it before launching Easy-ASR Sandbox validation",
+            external_requirement="Close the other Sandbox instance, then set EASY_ASR_BENCH_LAUNCH_WINDOWS_SANDBOX=1 and rerun this row.",
             details=details,
             artifacts=artifacts,
         )

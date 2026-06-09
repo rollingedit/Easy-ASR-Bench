@@ -314,6 +314,37 @@ def test_windows_sandbox_deploy_launch_success_waits_for_completion_evidence(tmp
     assert row["details"]["launch_exit_code"] == 0
 
 
+def test_windows_sandbox_deploy_blocks_when_other_sandbox_running(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import clean_vm_bootstrap
+
+    def fail_run(*args, **kwargs):
+        raise AssertionError("sandbox launch should not run while another Sandbox is active")
+
+    monkeypatch.setenv(clean_vm_bootstrap.SANDBOX_LAUNCH_ENV, "1")
+    monkeypatch.setattr(clean_vm_bootstrap, "_windows_sandbox_executable", lambda: r"C:\Windows\System32\WindowsSandbox.exe")
+    monkeypatch.setattr(clean_vm_bootstrap, "_windows_edition_details", lambda: {"available": True, "edition_id": "Professional", "sandbox_supported_edition": True})
+    monkeypatch.setattr(clean_vm_bootstrap, "_sandbox_completion_evidence", lambda: ({"evidence_root": "missing"}, [], ["completion evidence missing"]))
+    monkeypatch.setattr(
+        clean_vm_bootstrap,
+        "_running_windows_sandboxes",
+        lambda: [
+            {
+                "process_id": 123,
+                "parent_process_id": 1,
+                "name": "WindowsSandbox.exe",
+                "command_line": r'"C:\Windows\System32\WindowsSandbox.exe" "E:\other-project\smoke.wsb"',
+            }
+        ],
+    )
+    monkeypatch.setattr(clean_vm_bootstrap.subprocess, "run", fail_run)
+
+    row = clean_vm_bootstrap.run("windows_sandbox_clean_bootstrap_deploy", ROOT / "Temp" / f"pytest_windows_sandbox_busy_{tmp_path.name}", False, False)
+
+    assert row["status"] == "blocked"
+    assert "another Windows Sandbox" in row["block_reason"]
+    assert row["details"]["sandbox_contention"]["other_windows_sandboxes"][0]["process_id"] == 123
+
+
 def test_windows_sandbox_deploy_row_blocks_on_unsupported_edition(tmp_path, monkeypatch):
     from qa.runtime_matrix.rows import clean_vm_bootstrap
 
