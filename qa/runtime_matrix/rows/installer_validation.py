@@ -147,7 +147,22 @@ def _install_path_with_spaces(row_id: str, evidence_dir: Path) -> dict:
 def _verify_release(row_id: str, evidence_dir: Path) -> dict:
     assets = _stage_release_assets(evidence_dir / "assets")
     asset_dir_arg = os.path.relpath(assets["manifest"].parent, ROOT)
-    result = _run(["cmd", "/c", "setup.bat", "--dry-run", "--verify-release", "--asset-dir", asset_dir_arg], temp_dir=evidence_dir / "tmp")
+    result = _run([
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "installer\\install.ps1",
+        "-InstallDir",
+        str(evidence_dir / "Install"),
+        "-Version",
+        VERSION,
+        "-DryRun",
+        "-VerifyRelease",
+        "-AssetDir",
+        asset_dir_arg,
+    ], temp_dir=evidence_dir / "tmp")
     output = result["stdout_tail"] + result["stderr_tail"]
     failures = []
     for marker in ["Verified installer/install.ps1 SHA256", "[OK] release tag pinned", "[OK] ZIP layout valid", "[OK] release physical files valid"]:
