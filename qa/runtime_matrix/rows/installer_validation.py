@@ -15,7 +15,7 @@ from app import hf_model_downloader
 from qa.runtime_matrix.common import ROOT, write_row
 
 
-VERSION = "v0.3.9"
+VERSION = "v0.4.0"
 ZIP_NAME = f"Easy-ASR-Bench-{VERSION}-win.zip"
 
 

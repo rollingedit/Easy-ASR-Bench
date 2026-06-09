@@ -95,9 +95,9 @@ cmd /c setup.bat --doctor --repair-model-layouts --allow-downloads *> $modelRepa
 python qa\runtime_matrix\run_row.py --row win11_clean_no_python_setup --workdir Temp\windows_sandbox_clean_bootstrap_evidence *> $win11RowLog
 python qa\runtime_matrix\run_row.py --row clean_vm_zero_dependency_bootstrap --workdir Temp\windows_sandbox_clean_bootstrap_evidence --install-deps --allow-downloads *> $cleanVmRowLog
 python -m app.doctor --config config.json --validate-real-smoke --full-real-smoke --allow-downloads *> $fullRealSmokeLog
-python scripts\write_release_smoke.py --tag v0.3.9 --output release-smoke-v0.3.9-sandbox.json *> $writeSmokeLog
-python scripts\merge_release_evidence.py --smoke release-smoke-v0.3.9-sandbox.json --evidence-dir Temp --output release-smoke-v0.3.9-sandbox.json --ignore-unknown *> $mergeSmokeLog
-python scripts\validate_release_smoke.py --smoke release-smoke-v0.3.9-sandbox.json --required tests\fixtures\release_required_rows_v2.json --require-log-hashes --require-environment-summary *> $validateSmokeLog
+python scripts\write_release_smoke.py --tag v0.4.0 --output release-smoke-v0.4.0-sandbox.json *> $writeSmokeLog
+python scripts\merge_release_evidence.py --smoke release-smoke-v0.4.0-sandbox.json --evidence-dir Temp --output release-smoke-v0.4.0-sandbox.json --ignore-unknown *> $mergeSmokeLog
+python scripts\validate_release_smoke.py --smoke release-smoke-v0.4.0-sandbox.json --required tests\fixtures\release_required_rows_v2.json --require-log-hashes --require-environment-summary *> $validateSmokeLog
 '''
 
 

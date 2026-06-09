@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## v0.4.0 candidate
+
+- Bumped the active validation/release line to `v0.4.0`, extended `scripts/bump_version.py` so future bumps update installer metadata, checksum ZIP names, Sandbox release-smoke scripts, installer runtime rows, and release verification docs, then regenerated and validated the local `Easy-ASR-Bench-v0.4.0-win.zip` package metadata.
 - Fixed a syntax error in `qa/run_real_tiny_model_smoke.py` that prevented release validators from parsing the real faster-whisper smoke runner on the v0.4 validation machine; source, physical-file, and compile gates now pass after installing the validator's `PyYAML` dependency.
 
 ## v0.3.9 candidate

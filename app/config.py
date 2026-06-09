@@ -29,7 +29,7 @@ MEDIA_EXTENSIONS = [
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "app": {
-        "version": "0.3.9",
+        "version": "0.4.0",
         "version_channel": "prerelease",
         "check_for_updates_on_setup": True,
         "check_for_updates_on_run": False,
