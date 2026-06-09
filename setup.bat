@@ -236,7 +236,10 @@ if "%PYEXE%"=="" (
     echo winget was not found. Downloading Python 3.12.10 from python.org...
     set "PYTHON_INSTALLER_URL=https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe"
     set "PYTHON_INSTALLER=%TEMP%\python-3.12.10-amd64.exe"
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '!PYTHON_INSTALLER_URL!' -OutFile '!PYTHON_INSTALLER!'"
+    curl.exe --fail --location --connect-timeout 30 --max-time 300 --output "!PYTHON_INSTALLER!" "!PYTHON_INSTALLER_URL!"
+    if errorlevel 1 (
+      powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri '!PYTHON_INSTALLER_URL!' -OutFile '!PYTHON_INSTALLER!'"
+    )
     if errorlevel 1 (
       echo Python installer download failed. Install Python 3.12 and rerun setup.bat.
       pause
