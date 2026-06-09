@@ -198,14 +198,14 @@ def verify_smoke_asset(tag: str, expected_commit: str | None, manifest: dict, lo
     if smoke.get("schema") == "easy_asr_bench.release_smoke.v2" and not manual_rows:
         raise AssertionError(f"{smoke_name} must include explicit manual_rows, even when rows are not_run")
     manual_matrix = smoke.get("manual_matrix", {})
-    if manual_matrix and not _matrix_contains_not_run(manual_matrix):
-        raise AssertionError(f"{smoke_name} manual matrix does not clearly distinguish unrun rows")
+    if manual_matrix and not _matrix_contains_unfinished(manual_matrix):
+        raise AssertionError(f"{smoke_name} manual matrix does not clearly distinguish unfinished rows")
 
 
-def _matrix_contains_not_run(value: object) -> bool:
+def _matrix_contains_unfinished(value: object) -> bool:
     if isinstance(value, dict):
-        return any(_matrix_contains_not_run(child) for child in value.values())
-    return value == "not_run"
+        return any(_matrix_contains_unfinished(child) for child in value.values())
+    return value in {"not_run", "blocked"}
 
 
 def verify_checksum_manifest(checksums: dict, local_assets: dict[str, Path]) -> None:

@@ -189,6 +189,12 @@ def test_release_verifier_peels_annotated_tags():
         assert verify_github_release.resolve_tag_commit("owner/repo", "v1") == "commit-sha"
 
 
+def test_release_verifier_accepts_blocked_rows_as_unfinished_matrix_signal():
+    assert verify_github_release._matrix_contains_unfinished({"cuda": "blocked"}) is True
+    assert verify_github_release._matrix_contains_unfinished({"cuda": "not_run"}) is True
+    assert verify_github_release._matrix_contains_unfinished({"cuda": "pass"}) is False
+
+
 def test_release_verifier_finds_draft_release_when_tag_endpoint_404():
     def fake_request_json(url):
         if url.endswith("/releases/tags/v1"):
