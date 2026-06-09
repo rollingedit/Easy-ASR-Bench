@@ -366,7 +366,7 @@ def _run_python_doctor(command_args: list[str], evidence_dir: Path) -> tuple[dic
     )
 
 
-def _last_json_object(text: str) -> dict:
+def _last_repair_plan_payload(text: str, mode: str | None = None) -> dict:
     decoder = json.JSONDecoder()
     last_payload = None
     last_error: json.JSONDecodeError | None = None
@@ -378,8 +378,13 @@ def _last_json_object(text: str) -> dict:
         except json.JSONDecodeError as exc:
             last_error = exc
             continue
-        if isinstance(payload, dict) and payload.get("schema"):
-            last_payload = payload
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("schema") != "easy_asr_bench.repair_plan.v1":
+            continue
+        if mode is not None and payload.get("mode") != mode:
+            continue
+        last_payload = payload
     if last_payload is not None:
         return last_payload
     if last_error is not None:
@@ -395,7 +400,7 @@ def _setup_repair_all_safe(row_id: str, evidence_dir: Path, install_deps: bool) 
     failures = []
     plan = {}
     try:
-        plan = _last_json_object(plan_completed.stdout)
+        plan = _last_repair_plan_payload(plan_completed.stdout)
         plan_path.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8", newline="\n")
     except json.JSONDecodeError as exc:
         failures.append(f"repair-plan JSON could not be parsed: {exc}")
@@ -428,7 +433,7 @@ def _setup_repair_all_safe(row_id: str, evidence_dir: Path, install_deps: bool) 
     repair_result, repair_completed = _run_python_doctor(["--config", str(config_path), "--repair-all-safe"], evidence_dir)
     repair = {}
     try:
-        repair = _last_json_object(repair_completed.stdout)
+        repair = _last_repair_plan_payload(repair_completed.stdout, mode="repair_all_safe")
         repair_path.write_text(json.dumps(repair, indent=2) + "\n", encoding="utf-8", newline="\n")
     except json.JSONDecodeError as exc:
         failures.append(f"repair-all-safe JSON could not be parsed: {exc}")

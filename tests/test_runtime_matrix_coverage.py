@@ -663,6 +663,22 @@ def test_setup_repair_all_safe_row_blocks_before_install_without_permission(tmp_
     assert "setup_repair_all_safe --install-deps" in row["external_requirement"]
 
 
+def test_setup_repair_all_safe_parser_ignores_nested_runtime_schema():
+    from qa.runtime_matrix.rows.installer_validation import _last_repair_plan_payload
+
+    text = (
+        "diagnostic\n"
+        '{"schema":"easy_asr_bench.repair_plan.v1","mode":"repair_all_safe","summary":{"runtime_resolutions":1},'
+        '"records":[{"cached_runtime_resolution_check":{"schema":"easy_asr_bench.runtime_resolution_reuse.v1","status":"missing"}}]}\n'
+    )
+
+    payload = _last_repair_plan_payload(text, mode="repair_all_safe")
+
+    assert payload["schema"] == "easy_asr_bench.repair_plan.v1"
+    assert payload["mode"] == "repair_all_safe"
+    assert payload["summary"]["runtime_resolutions"] == 1
+
+
 def test_repair_all_safe_failure_isolation_row_runs_product_executor(tmp_path):
     from qa.runtime_matrix.rows import installer_validation
 
