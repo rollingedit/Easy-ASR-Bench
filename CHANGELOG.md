@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed a syntax error in `qa/run_real_tiny_model_smoke.py` that prevented release validators from parsing the real faster-whisper smoke runner on the v0.4 validation machine; source, physical-file, and compile gates now pass after installing the validator's `PyYAML` dependency.
+
 ## v0.3.9 candidate
 
 Product-path hardening:

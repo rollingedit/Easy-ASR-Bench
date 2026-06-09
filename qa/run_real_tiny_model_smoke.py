@@ -37,6 +37,8 @@ def suppress_windows_native_crash_dialogs() -> None:
 
 def generate_windows_sapi_wav(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    ps_path = str(path).replace("'", "''")
+    ps_text = text.replace("'", "''")
     command = [
         "powershell",
         "-NoProfile",
@@ -46,8 +48,8 @@ def generate_windows_sapi_wav(path: Path, text: str) -> None:
         (
             "Add-Type -AssemblyName System.Speech; "
             "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
-            f"$s.SetOutputToWaveFile('{str(path).replace("'", "''")}'); "
-            f"$s.Speak('{text.replace("'", "''")}'); "
+            f"$s.SetOutputToWaveFile('{ps_path}'); "
+            f"$s.Speak('{ps_text}'); "
             "$s.Dispose()"
         ),
     ]
