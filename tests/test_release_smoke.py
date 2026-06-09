@@ -1,4 +1,5 @@
 import json
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -40,6 +41,26 @@ def test_write_release_smoke_records_automated_passes_and_manual_not_run(tmp_pat
     assert data["manual_matrix"]["provider_smoke"]["nvidia_cuda_torch_onnx_faster_whisper_llama"] == "not_run"
     assert data["manual_matrix"]["model_smoke"]["gguf_reference_llm"] == "not_run"
     assert data["manual_matrix"]["model_smoke"]["audio_asr_gguf_mmproj"] == "not_run"
+
+
+def test_write_release_smoke_commit_falls_back_when_git_unavailable(monkeypatch):
+    def missing_git(*_args, **_kwargs):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr(write_release_smoke.subprocess, "run", missing_git)
+    monkeypatch.setattr("app.version.RELEASE_COMMIT", "unknown")
+
+    assert write_release_smoke.current_commit() == "unknown"
+
+
+def test_write_release_smoke_commit_uses_packaged_commit_when_git_fails(monkeypatch):
+    def failed_git(*_args, **_kwargs):
+        raise subprocess.CalledProcessError(1, ["git", "rev-parse", "HEAD"])
+
+    monkeypatch.setattr(write_release_smoke.subprocess, "run", failed_git)
+    monkeypatch.setattr("app.version.RELEASE_COMMIT", "abc123")
+
+    assert write_release_smoke.current_commit() == "abc123"
 
 
 def test_write_release_smoke_fails_when_automated_check_fails(tmp_path, monkeypatch):

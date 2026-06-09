@@ -76,7 +76,10 @@ function Invoke-ValidationStep {
         if ($StepCommand.Length -gt 1) {
           $args = $StepCommand[1..($StepCommand.Length - 1)]
         }
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
         & $exe @args 1> $OutPath 2> $ErrPath
+        $ErrorActionPreference = $previousErrorActionPreference
         $code = if ($null -eq $LASTEXITCODE) {
           if ($?) { 0 } else { 1 }
         } else {

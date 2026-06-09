@@ -29,8 +29,13 @@ def sha256(path: Path) -> str:
 
 
 def current_commit() -> str:
-    completed = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True)
-    return completed.stdout.strip()
+    try:
+        completed = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True)
+        return completed.stdout.strip()
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        from app.version import RELEASE_COMMIT
+
+        return RELEASE_COMMIT or "unknown"
 
 
 def run_check(name: str, command: list[str]) -> dict:
