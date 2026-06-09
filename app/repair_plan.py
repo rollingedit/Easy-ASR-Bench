@@ -134,7 +134,7 @@ def backend_probe_for_group(group: str, config: dict) -> dict:
             "error": error,
         }
     if group == "faster_whisper":
-        imports = _isolated_import_probe(("faster_whisper", "ctranslate2", "pkg_resources"))
+        imports = _isolated_import_probe(("faster_whisper", "ctranslate2", "pkg_resources"), timeout=90)
         ctranslate2 = ctranslate2_probe()
         ok = bool(imports.get("ok")) and bool(ctranslate2.get("ok"))
         accelerator_requested = acceleration.get("accelerator") == "cuda"

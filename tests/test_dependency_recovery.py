@@ -45,6 +45,27 @@ def test_dependency_checks_flag_installed_versions_outside_requirement_bounds(mo
     assert "ctranslate2<4.9,>=4.4 (installed 4.9.0)" in issues
 
 
+def test_llama_mtmd_probe_runs_from_cli_directory(monkeypatch, tmp_path: Path):
+    from app.dependency_manager import probe_llama_mtmd_cli_path
+
+    cli = tmp_path / "llama-mtmd-cli.exe"
+    cli.write_text("", encoding="utf-8")
+    captured = {}
+
+    def fake_run(command, cwd=None, text=True, capture_output=True, timeout=15):
+        captured["command"] = command
+        captured["cwd"] = cwd
+        return subprocess.CompletedProcess(command, 0, stdout="Usage: llama-mtmd-cli", stderr="")
+
+    monkeypatch.setattr("app.dependency_manager.subprocess.run", fake_run)
+
+    result = probe_llama_mtmd_cli_path(cli)
+
+    assert result["ok"] is True
+    assert captured["command"] == [str(cli), "--help"]
+    assert captured["cwd"] == cli.parent
+
+
 def test_gpu_capable_runtime_groups_have_cuda_overrides():
     expected = {"onnx", "transformers_cpu", "openai_whisper", "faster_whisper", "llama_cpp"}
 
@@ -142,12 +163,12 @@ def test_llama_cpp_gpu_capable_uses_isolated_marker_probe(monkeypatch):
     assert "llama_cpp/lib" in captured["code"]
 
 
-def test_llama_mtmd_group_reports_native_runtime_without_blocking_text_llm(monkeypatch):
+def test_llama_mtmd_group_reports_native_runtime_without_blocking_text_llm(monkeypatch, tmp_path: Path):
     monkeypatch.setattr("app.dependency_manager.llama_cpp_qwen3_asr_handler_available", lambda: False)
     monkeypatch.setattr("app.dependency_manager.shutil.which", lambda name: None)
     monkeypatch.setattr("app.dependency_manager.os.environ", {})
 
-    status = dependency_status({"runtime": {"provider": "cpu"}, "dependency_install": {}})
+    status = dependency_status({"runtime": {"provider": "cpu"}, "dependency_install": {}, "folders": {"cache": str(tmp_path / "Cache")}})
 
     assert status["llama_cpp"]["description"] == "GGUF text LLM reference/correction support"
     assert status["llama_mtmd"]["available"] is False
@@ -1370,7 +1391,13 @@ def test_repair_backend_probe_checks_expected_onnx_provider(monkeypatch):
 
 def test_repair_backend_probe_records_ctranslate2_native_probe(monkeypatch):
     monkeypatch.setattr("app.repair_plan.acceleration_install_decision", lambda config, group: {"use_accelerator": False, "accelerator": None})
-    monkeypatch.setattr("app.repair_plan._isolated_import_probe", lambda modules, timeout=30: {"ok": True, "loaded": [{"module": module} for module in modules]})
+    captured = {}
+
+    def fake_import_probe(modules, timeout=30):
+        captured["timeout"] = timeout
+        return {"ok": True, "loaded": [{"module": module} for module in modules]}
+
+    monkeypatch.setattr("app.repair_plan._isolated_import_probe", fake_import_probe)
     monkeypatch.setattr("app.repair_plan.ctranslate2_probe", lambda: {"ok": True, "cuda_available": False, "version": "4.8.0"})
 
     probe = backend_probe_for_group("faster_whisper", {"runtime": {"provider": "cpu"}})
@@ -1379,6 +1406,7 @@ def test_repair_backend_probe_records_ctranslate2_native_probe(monkeypatch):
     assert probe["ok"] is True
     assert probe["ctranslate2"]["version"] == "4.8.0"
     assert [item["module"] for item in probe["imports"]["loaded"]] == ["faster_whisper", "ctranslate2", "pkg_resources"]
+    assert captured["timeout"] == 90
     assert probe["accelerator_probe"]["requested"] is False
     assert probe["accelerator_probe"]["ok"] is True
 

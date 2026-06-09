@@ -658,7 +658,13 @@ def probe_llama_mtmd_cli_path(path: str | Path) -> dict:
     last_error = ""
     for attempt in range(6):
         try:
-            completed = subprocess.run([str(candidate), "--help"], text=True, capture_output=True, timeout=15)
+            completed = subprocess.run(
+                [str(candidate), "--help"],
+                cwd=candidate.parent,
+                text=True,
+                capture_output=True,
+                timeout=15,
+            )
         except PermissionError as exc:
             last_error = f"{type(exc).__name__}: {exc}"
             if attempt < 5:
