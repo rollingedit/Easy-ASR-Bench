@@ -236,16 +236,30 @@ if "%PYEXE%"=="" (
     echo winget was not found. Downloading Python 3.12.10 from python.org...
     set "PYTHON_INSTALLER_URL=https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe"
     set "PYTHON_INSTALLER=%TEMP%\python-3.12.10-amd64.exe"
-    curl.exe --fail --location --connect-timeout 30 --max-time 300 --output "!PYTHON_INSTALLER!" "!PYTHON_INSTALLER_URL!"
-    if errorlevel 1 (
+    set PYTHON_DOWNLOAD_OK=0
+    curl.exe --fail --location --connect-timeout 30 --max-time 300 --silent --show-error --output "!PYTHON_INSTALLER!" "!PYTHON_INSTALLER_URL!"
+    if exist "!PYTHON_INSTALLER!" (
+      for %%F in ("!PYTHON_INSTALLER!") do if %%~zF GTR 1000000 set PYTHON_DOWNLOAD_OK=1
+    )
+    if "!PYTHON_DOWNLOAD_OK!"=="0" (
+      echo curl download did not produce a complete Python installer. Trying PowerShell...
       powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest -Uri '!PYTHON_INSTALLER_URL!' -OutFile '!PYTHON_INSTALLER!'"
     )
-    if errorlevel 1 (
+    set PYTHON_DOWNLOAD_OK=0
+    if exist "!PYTHON_INSTALLER!" (
+      for %%F in ("!PYTHON_INSTALLER!") do if %%~zF GTR 1000000 set PYTHON_DOWNLOAD_OK=1
+    )
+    if "!PYTHON_DOWNLOAD_OK!"=="0" (
       echo Python installer download failed. Install Python 3.12 and rerun setup.bat.
       pause
       exit /b 1
     )
     "!PYTHON_INSTALLER!" /quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1 Include_pip=1 SimpleInstall=1
+    if errorlevel 1 (
+      echo Python installer failed. Install Python 3.12 and rerun setup.bat.
+      pause
+      exit /b 1
+    )
   )
   py -3.12 -c "import sys" >nul 2>nul
   if not errorlevel 1 set PYEXE=py -3.12

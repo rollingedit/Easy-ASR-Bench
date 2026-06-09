@@ -22,7 +22,9 @@ def test_setup_winget_accepts_required_agreements():
     assert "winget install -e --id Python.Python.3.12 --accept-package-agreements --accept-source-agreements" in setup
     assert "where winget >nul 2>nul" in setup
     assert "Downloading Python 3.12.10 from python.org" in setup
-    assert 'curl.exe --fail --location --connect-timeout 30 --max-time 300 --output "!PYTHON_INSTALLER!" "!PYTHON_INSTALLER_URL!"' in setup
+    assert 'curl.exe --fail --location --connect-timeout 30 --max-time 300 --silent --show-error --output "!PYTHON_INSTALLER!" "!PYTHON_INSTALLER_URL!"' in setup
+    assert "PYTHON_DOWNLOAD_OK" in setup
+    assert "curl download did not produce a complete Python installer. Trying PowerShell..." in setup
     assert "$ProgressPreference='SilentlyContinue'; Invoke-WebRequest" in setup
 
 
