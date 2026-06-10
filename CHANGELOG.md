@@ -9,6 +9,7 @@
 - Completed the automatic local GGUF reference scoring path. Valid generated reference JSON is now parsed, validated against source/chunk metadata, scored immediately, and published as `scored_report.json` plus `compare_scored.html`; invalid generated references are surfaced on the local reference attempt instead of silently recording raw text only.
 - Added configurable media subprocess timeouts. FFprobe/FFmpeg probing and conversion now use bounded timeouts, and timeout failures become normal media-preparation errors that can be captured in failed-file reports.
 - Added versioned schema contracts for results, chunk plans, run errors, and LLM references, and strengthened runtime results validation for source identity, chunk timing, transcript chunk IDs, runtime rankings, metrics, and structured errors before reports are written.
+- Made `config.json` writes atomic by writing a same-directory partial file and replacing the target only after JSON serialization succeeds; failed writes clean up the partial and leave the previous config intact.
 
 ## v0.4.0 candidate
 

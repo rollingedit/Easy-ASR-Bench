@@ -152,16 +152,27 @@ def load_config(path: Path) -> dict[str, Any]:
 
 def save_config(path: Path, config: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="\n") as handle:
-        json.dump(config, handle, indent=2)
-        handle.write("\n")
+    write_config_atomic(path, config)
 
 
 def save_default_config(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="\n") as handle:
-        json.dump(DEFAULT_CONFIG, handle, indent=2)
-        handle.write("\n")
+    write_config_atomic(path, DEFAULT_CONFIG)
+
+
+def write_config_atomic(path: Path, config: dict[str, Any]) -> None:
+    partial = path.with_suffix(path.suffix + ".partial")
+    try:
+        with partial.open("w", encoding="utf-8", newline="\n") as handle:
+            json.dump(config, handle, indent=2)
+            handle.write("\n")
+        partial.replace(path)
+    except Exception:
+        try:
+            partial.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def selected_variants(config: dict[str, Any]) -> list[str]:
