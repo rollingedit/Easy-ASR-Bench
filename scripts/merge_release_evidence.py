@@ -58,6 +58,8 @@ def _environment_summary(row: dict, smoke: dict) -> dict:
 
 def _sanitize_string(value: str) -> str:
     sanitized = re.sub(r"C:[\\/]+Users[\\/]+[^\\/\"\s]+", "%USERPROFILE%", value, flags=re.IGNORECASE)
+    sanitized = re.sub(r"[A-Z]:[\\/]+_github[\\/]+[^\\/\"\s<>]+", "%LOCAL_WORKSPACE%", sanitized, flags=re.IGNORECASE)
+    sanitized = re.sub(r"(<AccountPassword>)[^<]+(</AccountPassword>)", r"\1<redacted>\2", sanitized, flags=re.IGNORECASE)
     sanitized = re.sub(r"NVIDIA GeForce RTX\s+\d+(?:\s+\w+)?", "NVIDIA CUDA GPU", sanitized, flags=re.IGNORECASE)
     sanitized = re.sub(r"NVIDIA RTX\s+\d+(?:\s+\w+)?", "NVIDIA CUDA GPU", sanitized, flags=re.IGNORECASE)
     sanitized = re.sub(r"Intel\(R\)\s+UHD Graphics\s+\d+", "Intel integrated GPU", sanitized, flags=re.IGNORECASE)

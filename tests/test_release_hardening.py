@@ -7,6 +7,7 @@ from pathlib import Path
 
 import scripts.verify_github_release as verify_github_release
 from scripts.check_release_version_coherence import validate as validate_version_coherence
+from scripts.validate_public_hygiene import scan_paths
 from scripts.validate_raw_github_files import byte_diagnostics, compare_raw_to_zip, format_diagnostics, validate_bytes
 from scripts.validate_physical_files import validate_root
 
@@ -153,6 +154,24 @@ def test_release_smoke_writer_and_verifier_require_smoke_asset():
     assert "Release smoke asset is missing" in verifier
     assert "asset_hashes_verified" in verifier
     assert "--write-transcript" in verifier
+
+
+def test_public_hygiene_validator_catches_private_machine_details(tmp_path):
+    sensitive = tmp_path / "release-smoke.json"
+    sensitive.write_text(
+        "\n".join(
+            [
+                "NVIDIA GeForce RTX " + "40" + "90",
+                "C:" + "\\Users\\" + "PC" + "\\.cache",
+                "this " + "laptop",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    findings = scan_paths([sensitive])
+
+    assert len(findings) == 3
 
 
 def test_publish_workflow_refuses_public_asset_mutation_before_clobber():

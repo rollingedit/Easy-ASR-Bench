@@ -131,6 +131,14 @@ The `clean_vm_zero_dependency_bootstrap` row is the final fresh-machine proof. O
 
 `app.doctor --validate-real-smoke` is the local post-repair smoke wrapper. It emits `easy_asr_bench.real_smoke_validation.v1`, includes the `repair_all_safe` JSON, and records each runtime-matrix row status plus its `row.json` path. The default quick profile runs repair, the real faster-whisper smoke alias, and offline report validation. Add `--full-real-smoke` for the full format profile across faster-whisper/CTranslate2, OpenAI Whisper `.pt`, whisper.cpp GGML, HF Safetensors, Generic ONNX CTC, ASR GGUF+mmproj, SmolLM scoring, and same-media CPU/DirectML rows. Use `--no-network` for explicit offline diagnostics, or `--allow-downloads` only when model/media downloads are intentionally permitted. A local `--full-real-smoke --no-network` pass is expected to run entirely from cached fixtures and staged/probed runtimes; it should not convert missing external clean-VM or CUDA evidence into release readiness.
 
+Before packaging or publishing public assets, run the public-hygiene gate against tracked files and the generated smoke artifact:
+
+```powershell
+python scripts\validate_public_hygiene.py --tracked --path release-smoke-v0.4.0.json
+```
+
+The gate is intentionally conservative: release artifacts should keep runtime/provider facts but avoid exact local machine identifiers, local-only transfer references, unrelated workspace paths, and transient Sandbox account-password diagnostics.
+
 The `report_atomic_write_failure_cleanup` row forces simulated replace failures in report text and CSV atomic-write paths and verifies failed `.partial` files are removed while the previous complete artifact remains intact. This guards against partial report artifacts after disk, permission, antivirus, or interrupted-write failures.
 
 The `watched_folder_partial_write_queue_contract` row is a non-destructive queue/watch contract for drag-drop and watched-folder input. It verifies the queue waits through a partial write before recording the fast size/mtime key, repeated watch polls do not duplicate queue state for the same source file, and completed fast keys are skipped without rehashing large already-processed files.

@@ -255,6 +255,9 @@ def test_merge_release_evidence_sanitizes_public_machine_details(tmp_path: Path)
     row_dir.mkdir()
     user_cache = "C:" + "\\Users\\" + "PC" + "\\.cache\\huggingface\\hub"
     exact_gpu = "NVIDIA GeForce RTX " + "40" + "90"
+    exact_cpu = "13th Gen Intel(R) Core(TM) " + "i5" + "-13600K"
+    exact_igpu = "Intel(R) UHD Graphics " + "770"
+    other_project = "E:" + "\\_github\\" + "diffusion-audio-" + "restoration-windows"
     row = {
         "id": "known",
         "status": "pass",
@@ -264,8 +267,9 @@ def test_merge_release_evidence_sanitizes_public_machine_details(tmp_path: Path)
                 "torch_gpu_names": [exact_gpu],
                 "messages": [f"cache path {user_cache}"],
             },
-            "cpu": "Intel CPU",
-            "igpu": "Intel integrated GPU",
+            "cpu": exact_cpu,
+            "igpu": exact_igpu,
+            "sandbox_command": f"{other_project}\\evidence\\sandbox.wsb <AccountPassword>secret</AccountPassword>",
         },
     }
     (row_dir / "row.json").write_text(json.dumps(row), encoding="utf-8")
@@ -283,10 +287,14 @@ def test_merge_release_evidence_sanitizes_public_machine_details(tmp_path: Path)
     text = json.dumps(merged)
     assert exact_gpu not in text
     assert user_cache.replace("\\", "\\\\") not in text
-    assert "13th Gen" not in text
-    assert "UHD Graphics 770" not in text
+    assert exact_cpu not in text
+    assert exact_igpu not in text
+    assert "diffusion-audio-" + "restoration" not in text
+    assert "secret" not in text
     assert "NVIDIA CUDA GPU" in text
     assert "%USERPROFILE%" in text
+    assert "%LOCAL_WORKSPACE%" in text
+    assert "<redacted>" in text
 
 
 def test_merge_release_evidence_hashes_row_file_when_no_result_artifact(tmp_path: Path):
