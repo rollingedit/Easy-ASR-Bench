@@ -931,6 +931,36 @@ def main() -> None:
     except KeyboardInterrupt:
         print()
         print("Stopped by user. Queue state is saved in Logs/state.json.")
+    except Exception as exc:
+        _handle_fatal_error(exc, args)
+
+
+def _logs_dir_from_args(args: argparse.Namespace) -> Path:
+    config_path = Path(getattr(args, "config", "config.json"))
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        folders = data.get("folders", {}) if isinstance(data, dict) else {}
+        if isinstance(folders, dict) and folders.get("logs"):
+            return Path(str(folders["logs"]))
+        advanced = data.get("advanced", {}) if isinstance(data, dict) else {}
+        if isinstance(advanced, dict) and advanced.get("logs_folder"):
+            return Path(str(advanced["logs_folder"]))
+    except Exception:
+        pass
+    return Path("Logs")
+
+
+def _handle_fatal_error(exc: Exception, args: argparse.Namespace) -> None:
+    logs_dir = _logs_dir_from_args(args)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    crash_path = logs_dir / f"crash_{time.strftime('%Y%m%d_%H%M%S')}.log"
+    crash_path.write_text(traceback.format_exc(), encoding="utf-8", newline="\n")
+    print()
+    print("Easy ASR Bench hit an unexpected error and stopped before it could finish.")
+    print(f"Problem: {type(exc).__name__}: {exc}")
+    print(f"Crash log: {crash_path}")
+    print("Run setup.bat --doctor --strict for environment diagnostics.")
+    print("Report bugs at: https://github.com/rollingedit/Easy-ASR-Bench/issues/new/choose")
 
 
 def _main(args: argparse.Namespace) -> None:
