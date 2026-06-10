@@ -1,5 +1,6 @@
 onnxruntime-openvino
-openvino
+openvino==2025.4.1
+numpy>=1.26,<2.4
 onnx
-tokenizers
+tokenizers>=0.22,<0.23.1
 jinja2

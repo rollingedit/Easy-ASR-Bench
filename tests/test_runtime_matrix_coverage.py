@@ -894,6 +894,22 @@ def test_intel_openvino_row_has_explicit_provider_block_or_pass(tmp_path):
         assert "OpenVINOExecutionProvider" in row["block_reason"] or "OpenVINOExecutionProvider" in row["external_requirement"]
 
 
+def test_intel_directml_row_cannot_pass_with_cpu_fallback(tmp_path):
+    from qa.runtime_matrix.rows import generic_onnx_ctc_tiny
+
+    row = generic_onnx_ctc_tiny.run("intel_directml_onnx_smoke", tmp_path, False, False)
+
+    assert row["status"] in {"pass", "blocked", "fail"}
+    if row["status"] == "pass":
+        summary = row["details"]["metrics"]["provider_summary"]
+        assert summary["directml_active"] is True
+        assert summary["provider_fallback"] is False
+    if row["status"] == "blocked":
+        assert "DmlExecutionProvider" in row["block_reason"] or "Intel GPU/NPU" in row["block_reason"]
+    if row["status"] == "fail":
+        assert "fell back" in " ".join(row["details"].get("failures", []))
+
+
 def test_generic_onnx_openvino_fallback_row_preserves_requested_provider(tmp_path):
     from qa.runtime_matrix.rows import generic_onnx_ctc_tiny
 

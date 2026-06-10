@@ -44,6 +44,30 @@ def test_directml_session_disables_mem_pattern_and_uses_sequential(monkeypatch):
     assert options.inter_op_num_threads == 2
 
 
+def test_openvino_session_adds_openvino_dll_directories(tmp_path, monkeypatch):
+    onnx_common, fake = import_with_fake_onnxruntime(monkeypatch)
+    package = tmp_path / "openvino"
+    libs = package / "libs"
+    libs.mkdir(parents=True)
+    init_file = package / "__init__.py"
+    init_file.write_text("", encoding="utf-8")
+    fake_openvino = types.SimpleNamespace(__file__=str(init_file))
+    added: list[str] = []
+
+    class Handle:
+        pass
+
+    monkeypatch.setitem(sys.modules, "openvino", fake_openvino)
+    monkeypatch.setattr(onnx_common.os, "name", "nt")
+    monkeypatch.setattr(onnx_common.os, "add_dll_directory", lambda path: added.append(str(path)) or Handle(), raising=False)
+
+    onnx_common.make_session(Path("model.onnx"), ["OpenVINOExecutionProvider", "CPUExecutionProvider"], cpu_threads=0)
+
+    assert fake.created["providers"] == ["OpenVINOExecutionProvider", "CPUExecutionProvider"]
+    assert str(libs) in added
+    assert str(package) in added
+
+
 def test_choose_providers_directml_falls_back_to_cpu_when_unavailable(monkeypatch):
     onnx_common, fake = import_with_fake_onnxruntime(monkeypatch)
     fake.available = ["CPUExecutionProvider"]

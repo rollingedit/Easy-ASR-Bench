@@ -1648,7 +1648,7 @@ def test_directml_replaces_plain_onnxruntime_requirement_and_flags_conflict(monk
     monkeypatch.setattr("app.dependency_manager.onnx_provider_available", lambda provider: False)
 
     def fake_version(package):
-        versions = {"onnxruntime": "1.26.0", "onnxruntime-directml": "1.24.4", "onnx": "1.21.0", "tokenizers": "0.22.1", "jinja2": "3.1.6"}
+        versions = {"onnxruntime": "1.26.0", "onnxruntime-directml": "1.24.4", "numpy": "2.3.5", "onnx": "1.21.0", "tokenizers": "0.22.1", "jinja2": "3.1.6"}
         return versions[package]
 
     monkeypatch.setattr("app.dependency_manager.importlib.metadata.version", fake_version)

@@ -30,6 +30,19 @@ import sys
 payload = json.loads(sys.argv[1])
 try:
     import onnxruntime as ort
+    if "OpenVINOExecutionProvider" in payload.get("providers", []) and sys.platform == "win32":
+        import os
+        from pathlib import Path
+        try:
+            import openvino
+        except Exception:
+            openvino = None
+        _dll_handles = []
+        if openvino is not None and hasattr(os, "add_dll_directory"):
+            root = Path(openvino.__file__).resolve().parent
+            for path in (root / "libs", root):
+                if path.exists():
+                    _dll_handles.append(os.add_dll_directory(str(path)))
     options = ort.SessionOptions()
     cpu_threads = int(payload.get("cpu_threads") or 0)
     if cpu_threads:

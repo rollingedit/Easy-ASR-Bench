@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from app.adapters.generic_onnx_manifest import GenericOnnxManifestAdapter
-from app.dependency_manager import cuda_diagnostics
+from app.dependency_manager import cuda_diagnostics, install_group_for_config, recovery_command_for_config
 from app.model_scanner import scan_models
 from qa.runtime_matrix.common import package_versions, write_row
 
@@ -203,6 +203,36 @@ def _run_requested_provider_fallback(row_id: str, evidence_dir: Path, provider: 
     )
 
 
+def _provider_name(provider: str) -> str:
+    return {
+        "directml": "DmlExecutionProvider",
+        "openvino": "OpenVINOExecutionProvider",
+        "cuda": "CUDAExecutionProvider",
+    }.get(provider, "")
+
+
+def _ensure_provider(
+    provider: str,
+    evidence_dir: Path,
+    install_deps: bool,
+    diagnostics: dict,
+) -> tuple[dict, dict | None, Path]:
+    repair_log = evidence_dir / f"{provider}_provider_repair.log"
+    expected_provider = _provider_name(provider)
+    if install_deps and expected_provider and expected_provider not in diagnostics.get("onnxruntime_providers", []):
+        try:
+            repair_result = install_group_for_config(
+                "onnx",
+                Path.cwd(),
+                {"runtime": {"provider": provider}, "dependency_install": {"allow_accelerator_install": True}},
+                log_path=repair_log,
+            )
+        except Exception as exc:
+            repair_result = {"error_type": type(exc).__name__, "error": str(exc)}
+        return cuda_diagnostics(), repair_result, repair_log
+    return diagnostics, None, repair_log
+
+
 def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: bool) -> dict:
     if row_id == "generic_onnx_without_manifest_rejected":
         return _run_without_manifest_rejection(row_id, evidence_dir)
@@ -211,6 +241,7 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
     if row_id == "generic_onnx_openvino_unavailable_cpu_fallback":
         return _run_requested_provider_fallback(row_id, evidence_dir, "openvino")
     diagnostics = cuda_diagnostics()
+    provider = _provider_for_row(row_id)
     if "intel_directml" in row_id and not diagnostics.get("intel_gpu_or_npu_detected", False):
         return write_row(
             row_id,
@@ -231,7 +262,42 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
             external_requirement="AMD DirectML-capable Windows GPU",
             details={"cuda_provider_checks": diagnostics},
         )
+    repair_result = None
+    repair_log = evidence_dir / f"{provider}_provider_repair.log"
+    if provider in {"directml", "openvino"}:
+        diagnostics, repair_result, repair_log = _ensure_provider(provider, evidence_dir, _install_deps, diagnostics)
+    if ("intel_directml" in row_id or "amd_directml" in row_id) and "DmlExecutionProvider" not in diagnostics.get("onnxruntime_providers", []):
+        details = {
+            "cuda_provider_checks": diagnostics,
+            "dependency_versions": package_versions(["onnxruntime", "onnxruntime-directml"]),
+            "repair_command": recovery_command_for_config(
+                "onnx",
+                {"runtime": {"provider": "directml"}, "dependency_install": {"allow_accelerator_install": True}},
+            ),
+        }
+        if repair_result is not None:
+            details["repair_result"] = repair_result
+        return write_row(
+            row_id,
+            "blocked",
+            evidence_dir,
+            summary="DirectML ONNX row requires DmlExecutionProvider, which is not available in this environment.",
+            block_reason="DmlExecutionProvider missing from onnxruntime providers",
+            external_requirement="Windows DirectML-capable GPU with onnxruntime-directml installed and provider visible",
+            details=details,
+            artifacts=[repair_log] if repair_log.exists() else None,
+        )
     if "openvino" in row_id and "OpenVINOExecutionProvider" not in diagnostics.get("onnxruntime_providers", []):
+        details = {
+            "cuda_provider_checks": diagnostics,
+            "dependency_versions": package_versions(["onnxruntime", "onnxruntime-openvino"]),
+            "repair_command": recovery_command_for_config(
+                "onnx",
+                {"runtime": {"provider": "openvino"}, "dependency_install": {"allow_accelerator_install": True}},
+            ),
+        }
+        if repair_result is not None:
+            details["repair_result"] = repair_result
         return write_row(
             row_id,
             "blocked",
@@ -239,10 +305,8 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
             summary="Intel OpenVINO ONNX row requires OpenVINOExecutionProvider, which is not available in this environment.",
             block_reason="OpenVINOExecutionProvider missing from onnxruntime providers",
             external_requirement="Intel/OpenVINO-capable machine with onnxruntime-openvino installed and provider visible",
-            details={
-                "cuda_provider_checks": diagnostics,
-                "dependency_versions": package_versions(["onnxruntime", "onnxruntime-openvino"]),
-            },
+            details=details,
+            artifacts=[repair_log] if repair_log.exists() else None,
         )
     try:
         import onnx  # noqa: F401
@@ -272,7 +336,6 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
             artifacts=artifacts,
         )
 
-    provider = _provider_for_row(row_id)
     adapter = GenericOnnxManifestAdapter()
     candidate = candidates[0]
     try:
@@ -303,6 +366,30 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
             details={"provider": provider, "transcript": transcript, "metrics": metrics},
             artifacts=artifacts,
         )
+    if provider in {"directml", "openvino", "cuda"}:
+        provider_summary = metrics.get("provider_summary", {})
+        active_key = {
+            "directml": "directml_active",
+            "openvino": "openvino_active",
+            "cuda": "cuda_active",
+        }[provider]
+        if not provider_summary.get(active_key, False) or provider_summary.get("provider_fallback", False):
+            return write_row(
+                row_id,
+                "fail",
+                evidence_dir,
+                summary=f"Tiny ONNX CTC fixture decoded transcript, but requested provider {provider} was not active.",
+                details={
+                    "provider": provider,
+                    "transcript": transcript,
+                    "metrics": metrics,
+                    "provider_summary": provider_summary,
+                    "cuda_provider_checks": diagnostics,
+                    "dependency_versions": package_versions(["onnx", "onnxruntime", "onnxruntime-directml", "onnxruntime-openvino", "onnxruntime-gpu"]),
+                    "failures": [f"{provider} provider fell back instead of running as the active provider"],
+                },
+                artifacts=artifacts,
+            )
     return write_row(
         row_id,
         "pass",
@@ -313,7 +400,8 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
             "transcript": transcript,
             "metrics": metrics,
             "cuda_provider_checks": diagnostics,
+            "repair_result": repair_result,
             "dependency_versions": package_versions(["onnx", "onnxruntime", "onnxruntime-directml", "onnxruntime-openvino", "onnxruntime-gpu"]),
         },
-        artifacts=artifacts,
+        artifacts=artifacts + ([repair_log] if repair_log.exists() else []),
     )

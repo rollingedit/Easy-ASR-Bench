@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -7,6 +8,9 @@ import onnxruntime as ort
 from tokenizers import Tokenizer
 
 from .runtime_plan import HardwareInfo, hardware_from_dependency_manager
+
+_OPENVINO_DLL_HANDLES = []
+_OPENVINO_DLL_DIRS: set[str] = set()
 
 
 def precision_for_variant(variant: str) -> str:
@@ -49,7 +53,28 @@ def choose_providers(provider: str, hardware: HardwareInfo | None = None) -> lis
     return ["CPUExecutionProvider"]
 
 
+def add_openvino_dll_directories(providers: list[str]) -> None:
+    if "OpenVINOExecutionProvider" not in providers:
+        return
+    if os.name != "nt" or not hasattr(os, "add_dll_directory"):
+        return
+    try:
+        import openvino
+    except Exception:
+        return
+    root = Path(openvino.__file__).resolve().parent
+    for path in [root / "libs", root]:
+        if not path.exists():
+            continue
+        key = str(path)
+        if key in _OPENVINO_DLL_DIRS:
+            continue
+        _OPENVINO_DLL_HANDLES.append(os.add_dll_directory(key))
+        _OPENVINO_DLL_DIRS.add(key)
+
+
 def make_session(path: Path, providers: list[str], cpu_threads: int = 0) -> ort.InferenceSession:
+    add_openvino_dll_directories(providers)
     options = ort.SessionOptions()
     if cpu_threads:
         options.intra_op_num_threads = int(cpu_threads)
