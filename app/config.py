@@ -123,6 +123,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "advanced": {
         "keep_temp_wavs": False,
+        "stale_temp_wav_hours": 24,
     },
 }
 

@@ -21,6 +21,7 @@ from .interactive_menu import MenuAction, choose_one
 from .model_scanner import scan_models
 from .model_selector import choose_candidates, resolve_last_run_selection
 from .model_status import candidate_reason, model_status_label
+from .temp_cleanup import sweep_stale_temp_wavs
 from .utils import expand_inputs, parse_windows_path_list, sanitize_windows_drag_drop_path, wait_for_stable_file
 
 
@@ -969,6 +970,9 @@ def _main(args: argparse.Namespace) -> None:
     from .update_check import check_for_updates_from_config
 
     check_for_updates_from_config(config, context="run")
+    cleanup = sweep_stale_temp_wavs(config)
+    if cleanup["summary"]["removed"]:
+        print(f"Cleaned {cleanup['summary']['removed']} stale temp WAV file(s) from {cleanup['temp_root']}.")
     if args.doctor:
         from .doctor import run_doctor
 

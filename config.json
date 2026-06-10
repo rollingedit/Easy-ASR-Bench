@@ -110,6 +110,7 @@
     "mtmd_cli_path": ""
   },
   "advanced": {
-    "keep_temp_wavs": false
+    "keep_temp_wavs": false,
+    "stale_temp_wav_hours": 24
   }
 }

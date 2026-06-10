@@ -215,6 +215,8 @@ The batch dashboard is the main multi-file report. It shows several files side b
 
 Batch runs also write `Logs/batch_resume_manifest.json`. If the same input file, selected model IDs, reference LLM choice, and relevant runtime/transcription settings still match, reruns skip completed files and reuse the existing report folder. If a batch is interrupted after at least one file completes, Easy ASR Bench writes a partial `final_results.html` overview for the completed rows.
 
+Reports under `Output` are retained until you delete them. Generated normalization WAVs under `Temp` are cleaned automatically after they are older than `advanced.stale_temp_wav_hours` so interrupted conversions do not grow forever; set `advanced.keep_temp_wavs` to `true` when you intentionally want to inspect those temporary files.
+
 ## Windows Launchers
 
 - `setup.bat`: install or repair the app
@@ -265,6 +267,7 @@ Easy ASR Bench does not execute arbitrary Python files from model folders. Safet
 - **GPU unavailable:** run `setup.bat --doctor`. It reports NVIDIA, AMD, Intel, Vulkan, Torch CUDA, ONNX Runtime providers, and dependency repair commands. If setup cannot make GPU work, CPU fallback is reported explicitly.
 - **Cannot find a report:** run a benchmark first, then open `Open_Latest_Report.bat` or go to the newest folder under `Output`.
 - **Media conversion failed:** check that the file opens normally and that there is enough disk space in `Temp`.
+- **Output is getting large:** old reports are preserved by design. Delete older folders under `Output` when you no longer need them; temporary generated WAVs under `Temp` are swept automatically after the configured stale age.
 - **Install or model download says disk space is low:** free space on the install/model drive first. Advanced users can explicitly override low-space dependency installs with `dependency_install.allow_low_disk_space_install`, but model downloads still ask for typed confirmation before continuing.
 - **Doctor warns about install or profile paths:** non-ASCII, OneDrive, or redirected-profile paths can make some native Windows runtimes and large model caches less reliable. A short ASCII local path outside sync folders is the lowest-risk install location.
 - **GGUF dependency missing:** install the `llama_cpp` dependency group when prompted, or choose the manual ChatGPT/Claude workflow.

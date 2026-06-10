@@ -11,6 +11,7 @@ from .dependency_manager import acceleration_install_decision, cuda_diagnostics,
 from .hf_model_downloader import execute_persisted_missing_file_repair_plan
 from .path_diagnostics import build_path_diagnostics
 from .repair_plan import build_repair_plan, execute_repair_plan
+from .temp_cleanup import sweep_stale_temp_wavs
 from .version import RELEASE_CHANNEL, RELEASE_COMMIT, TAG
 
 
@@ -45,6 +46,7 @@ def build_doctor_report(config_path: Path) -> dict:
     status = dependency_status(config)
     cuda = cuda_diagnostics()
     path_diagnostics = build_path_diagnostics(config, project_root=Path.cwd())
+    temp_cleanup = sweep_stale_temp_wavs(config)
     return {
         "schema": "easy_asr_bench.doctor.v1",
         "version": TAG,
@@ -55,6 +57,7 @@ def build_doctor_report(config_path: Path) -> dict:
         "dependency_status": status,
         "cuda_provider_checks": cuda,
         "path_diagnostics": path_diagnostics,
+        "temp_cleanup": temp_cleanup,
         "folders": {key: str(value) for key, value in folders.items()},
         "repair_plan": build_repair_plan(config, status=status),
     }
@@ -286,6 +289,15 @@ def run_doctor(
         print("Path warnings:")
         for warning in path_diagnostics["warnings"]:
             print(f"  {warning['kind']}: {warning['message']} ({warning['path']})")
+    temp_cleanup = report.get("temp_cleanup", {})
+    if temp_cleanup:
+        print()
+        print("Temp cleanup:")
+        print(
+            f"  removed: {temp_cleanup.get('summary', {}).get('removed', 0)}; "
+            f"preserved recent: {temp_cleanup.get('summary', {}).get('preserved', 0)}; "
+            f"failed: {temp_cleanup.get('summary', {}).get('failed', 0)}"
+        )
     print()
     print("Folders checked:")
     for key, folder in report["folders"].items():

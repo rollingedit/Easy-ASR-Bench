@@ -89,6 +89,8 @@ Setup uses these network sources only for the actions you choose:
 
 Published setup assets are verified by SHA-256 checksums before installation. User media and local model files stay on the machine; Easy ASR Bench does not upload them. Reports are written under `Output`, logs under `Logs`, temporary audio under `Temp`, and downloaded/staged model/runtime files under `Models` or `Cache`.
 
+Report folders under `Output` are retained for review and manual cleanup. Generated normalization WAVs in `Temp` use the `*_16k_mono.wav` suffix and are swept on startup and doctor runs after `advanced.stale_temp_wav_hours`; recent files are preserved, and `advanced.keep_temp_wavs=true` disables the sweep.
+
 Hugging Face model downloads may temporarily need space for both the Hub cache and the final `Models` copy. When file-size metadata is available, Easy ASR Bench checks that combined estimate before downloading; when metadata is unavailable, it prints that the size is unknown before the confirmation step.
 
 If security software quarantines a release file, do not disable protection globally. Keep the warning details, verify the release checksums from GitHub, restore or allow only the specific Easy ASR Bench file if your policy permits it, and attach the warning plus `setup.bat --doctor --json` output when opening a bug report. On managed devices, ask the device administrator to review the exact release asset and hash.
