@@ -912,9 +912,10 @@ def _main(args: argparse.Namespace) -> None:
         return
     if args.download_model:
         destination = download_hf_model_interactive(models_root)
-        if destination is not None:
-            print(f"Model package saved. Run Easy ASR Bench again to rescan: {destination}")
-        return
+        if destination is None:
+            return
+        print(f"Model package saved. Rescanning models now: {destination}")
+        args.interactive = True
     if args.first_run:
         from .first_run import run_first_run_wizard
 

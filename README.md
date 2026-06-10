@@ -199,8 +199,10 @@ When a run processes multiple audio/video files, Easy ASR Bench also writes a ba
 ```text
 Output/
   batch__20260606_143012/
-    index.html
-    batch.json
+    final_results.html
+    _data/
+      batch.json
+      batch-records.json
 ```
 
 The batch dashboard shows several files side by side, pages through large file sets, filters by path/status, summarizes every model per file with speed/RAM/VRAM/errors, and links to the full `compare.html` for detailed transcript review.

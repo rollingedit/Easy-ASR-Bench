@@ -214,6 +214,15 @@ def test_write_batch_report_writes_index_and_json(tmp_path: Path):
     assert "topic-specific terms, dialogue flow, names, acronyms" in final_html
 
 
+def test_readme_documents_current_batch_output_layout():
+    readme = Path("README.md").read_text(encoding="utf-8")
+
+    assert "final_results.html" in readme
+    assert "_data/" in readme
+    assert "batch-records.json" in readme
+    assert "  batch__20260606_143012/\n    index.html\n    batch.json" not in readme
+
+
 def test_batch_report_shows_failed_file_stage_and_problem(tmp_path: Path):
     failed = tmp_path / "failed"
     make_failed_result(failed)
