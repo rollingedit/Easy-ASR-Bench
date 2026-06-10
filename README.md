@@ -1,248 +1,268 @@
 # Easy ASR Bench
 
-Windows app for answering one practical question:
+Transcribe audio and video with local speech-to-text models on Windows, then compare models on your own files and your own hardware.
+
+Think of it as:
 
 ```text
-Which local speech-to-text model should I use for these files, on this machine?
+The Open ASR Leaderboard, but for your audio, on your machine.
 ```
 
-Easy ASR Bench is built for people who want to compare ASR models without building a Python project, writing benchmark scripts, or guessing whether a model package is complete. Install it, add models, drop in audio or video, select the models to compare, and open one HTML report.
+Public ASR leaderboards are useful, but they are not your podcast, meeting, lecture, noisy phone recording, language mix, CPU, GPU, driver stack, or patience budget. Easy ASR Bench is for the practical moment when a new model drops, you paste the Hugging Face link, and you want to know whether it is actually better for your work without spending the evening wiring Python packages by hand.
 
-The app keeps the workflow deliberately simple:
+The normal user flow is intentionally small:
 
 ```text
 Download setup.bat
 Double-click
-Add or download models
-Drop in audio or video
+Paste a Hugging Face model link or use a model in Models
+Drop in audio/video
 Open final_results.html
 ```
 
-It runs each selected model against the same normalized audio and chunk boundaries, then reports transcript text, runtime, RAM, available VRAM/GPU-memory telemetry, failures, provider diagnostics, and optional quality scoring against an LLM-corrected reference.
+Use one model when you just want a transcript. Use several models when you want to compare quality, speed, RAM, GPU memory, provider behavior, and failures side by side.
 
-Everything is local-first. Your media and local model files stay on your machine. Network access is used for setup, optional dependency installs, update checks, and Hugging Face model downloads that you choose.
+Easy ASR Bench owns the messy middle: setup, model detection, Hugging Face package selection, missing-file repair prompts, dependency planning, CPU/GPU provider probing, runtime repair, fallback reporting, batch continuation, and the final report.
+
+Your media and local model files stay on your machine. Network access is used for setup, optional dependency installs, update checks, and model downloads that you choose.
 
 <details>
 <summary><strong>Contents</strong></summary>
 
-- [How To Use](#how-to-use)
-- [What You Get](#what-you-get)
-- [Features](#features)
-- [The Main Report](#the-main-report)
-- [Hugging Face Model Downloader](#hugging-face-model-downloader)
-- [Supported Model Packages](#supported-model-packages)
-- [LLM-Corrected Reference Scoring](#llm-corrected-reference-scoring)
-- [Batch Runs And Resume](#batch-runs-and-resume)
-- [Installation, Repair, And Launchers](#installation-repair-and-launchers)
-- [Dependencies And Acceleration](#dependencies-and-acceleration)
-- [Output Files](#output-files)
-- [Safety Model](#safety-model)
-- [Release Verification](#release-verification)
+- [Quick Start](#quick-start)
+- [What It Does](#what-it-does)
+- [Why It Exists](#why-it-exists)
+- [The Smart Hugging Face Downloader](#the-smart-hugging-face-downloader)
+- [The One Report To Open](#the-one-report-to-open)
+- [Corrected Reference Scoring](#corrected-reference-scoring)
+- [Model And Runtime Coverage](#model-and-runtime-coverage)
+- [Doctor, Repair, And Recovery](#doctor-repair-and-recovery)
+- [Batch Runs](#batch-runs)
+- [Validation And Release Evidence](#validation-and-release-evidence)
+- [Installed Files And Launchers](#installed-files-and-launchers)
+- [Safety](#safety)
 - [Troubleshooting](#troubleshooting)
-- [Support](#support)
 
 </details>
 
-## How To Use
+## Quick Start
 
 1. Go to the [latest release](../../releases/latest).
 2. Download `setup.bat`.
-3. Double-click `setup.bat`.
-4. When setup finishes, choose one of the normal actions:
-   - `R`: run Easy ASR Bench
-   - `P`: paste a Hugging Face model link
-   - `M`: open the `Models` folder
-   - `I`: open the `Input` folder
-5. Add at least one ASR model:
-   - paste a Hugging Face ASR model link in the downloader,
-   - choose the small CPU first-run baseline for a quick sanity check, or
-   - copy a supported model package into `Models`.
-6. Add media:
-   - put audio/video files in `Input`,
-   - paste file or folder paths when prompted, or
-   - drag files/folders onto `Drop_Audio_Or_Folders_Here.bat`.
-7. Choose the models to compare.
-8. Open `Open_Latest_Report.bat` or the newest `Output/.../final_results.html`.
+3. Double-click it.
+4. After setup, choose:
+   - `R` to run now,
+   - `P` to paste a Hugging Face model link,
+   - `M` to open the model folder,
+   - `I` to open the input folder.
+5. Add a model by pasting a Hugging Face ASR link, using the first-run CPU baseline, or copying a supported model package into `Models`.
+6. Add media by dropping files into `Input`, pasting paths when prompted, or dragging files/folders onto `Drop_Audio_Or_Folders_Here.bat`.
+7. Choose one model for transcription or multiple models for comparison.
+8. Open `Open_Latest_Report.bat` or the newest `final_results.html` under `Output`.
 
-The first-run baseline is intentionally small and CPU-safe. It is a sanity check that proves the app can run a model, not a benchmark pack that ranks several models.
+The first-run baseline is a small CPU-safe sanity check. It proves the app can run a model; it is not meant to be a full ranking pack.
 
-Interactive model selections are saved in `config.json`. A later drag/drop run can reuse the saved selection without prompting. If the selected model IDs become stale because model folders moved or changed, the app stops and asks you to choose again instead of silently changing the benchmark set.
+## What It Does
 
-## What You Get
+Easy ASR Bench has two everyday modes:
 
-Easy ASR Bench produces a report folder for each run with:
+- **Transcribe:** run one local ASR model on your files and get readable transcripts plus an offline HTML report.
+- **Compare:** run multiple models on the same files, with the same normalized audio and chunk boundaries, then see which one is faster, lighter, more reliable, or better against a corrected reference.
 
-- `final_results.html`: the main report entry point.
-- `compare.html`: detailed per-file transcript comparison.
-- `results.txt`: readable transcript and benchmark report.
-- `results.json`: canonical machine-readable run data.
-- `benchmark.csv`: spreadsheet-friendly performance rows.
-- Optional `scored_report.json` and `compare_scored.html` when a corrected reference is imported or generated successfully.
+It is not only a benchmark harness. The benchmark is the comparison layer on top of a local transcription workflow.
 
-The HTML report is offline and self-contained for normal review. It is designed to answer the real questions after a run:
+After a run, the report answers:
 
+- What did each model transcribe?
 - Which model was fastest?
 - Which model used the most RAM or GPU memory?
-- Which runs failed, and why?
-- Which provider actually ran?
-- Which transcript looks best?
-- If a corrected reference is available, which model scored best?
+- Did the requested provider actually run, or did it fall back?
+- Which models failed, and at what stage?
+- If a corrected reference is available, which model had the best WER/CER/rank?
 
-## Features
+## Why It Exists
 
-- Windows-first app with a double-click setup and launcher flow.
-- Drag-and-drop or paste-path media input for audio, video, files, and folders.
-- Interactive model selection with saved repeat-last-run behavior.
-- Built-in Hugging Face downloader for supported ASR packages and reference GGUF packages.
-- Model scanner that recognizes runnable, incomplete, blocked, and unsupported packages without guessing.
-- Same-media, same-chunk benchmarking across selected models.
-- Lazy chunk materialization so long audio is not fully retained in memory as chunk arrays.
-- Runtime-only ranking before a corrected reference is available.
-- Accuracy-aware scoring after an LLM-corrected reference is imported or generated.
-- Batch dashboard for many files, with filtering, paging, model summaries, per-file links, and resume support.
-- Browser-local corrected-reference persistence in `final_results.html`.
-- Export/import for edited corrected-reference data.
-- Local GGUF reference/correction LLM workflow through llama.cpp when dependencies are available.
-- Manual external LLM workflow through copy/paste prompts.
-- Structured errors for model failures, media failures, and chunk failures.
-- Dependency groups installed only when selected models need them.
-- Doctor and repair commands for missing or broken runtime dependencies.
-- Public release support matrix generated from release-smoke evidence.
+Local ASR is messy in the real world.
 
-## The Main Report
+A user may have:
 
-`final_results.html` is the main report entry point.
+- a Hugging Face repo link instead of a clean model folder;
+- a subfolder or file URL instead of the package root;
+- missing tokenizer, config, shard, ONNX sidecar, or projector files;
+- a model that is not actually ASR;
+- a broken Python environment;
+- a missing media backend;
+- a CPU-only machine;
+- a GPU provider that installed but does not actually run;
+- a batch where one model or one file fails but the rest should continue.
 
-For a single file, it opens the single-file report wrapper and links to the detailed `compare.html`. For a batch, it opens the batch dashboard with every processed file and model summarized in one place.
+Easy ASR Bench treats that as the product problem, not the user's problem.
 
-The report can:
+The app follows a control-plane loop:
 
-- show runtime, memory, provider, transcript, and error details for each model;
-- compare transcripts side by side;
-- show runtime-only ranking when no quality reference exists;
-- accept pasted corrected-reference JSON;
-- validate and score against that corrected reference;
-- persist pasted reference edits in the browser;
-- export edited reference data as JSON;
-- import edited reference data again later;
-- link from batch rows to per-file `compare.html` details.
+```text
+inspect environment, model, and media
+classify package/runtime/input state
+plan needed downloads, dependencies, providers, or fallbacks
+probe real runtime behavior
+repair what can be repaired safely
+run transcription
+continue past isolated failures
+report what happened truthfully
+```
 
-This is the intended day-to-day workflow: run the benchmark, open `final_results.html`, inspect transcripts, paste or generate a corrected reference when you want quality scoring, and export edited reference data if you need to preserve browser edits outside local storage.
+That is the main moat: the app is a model-aware ASR runtime orchestrator, not just a launcher wrapped around one backend.
 
-## Hugging Face Model Downloader
+## The Smart Hugging Face Downloader
 
-From the interactive model menu, choose `D` or choose `P` from the setup post-install menu to paste a Hugging Face link.
+The downloader is built for the way people actually find models.
 
-Accepted input includes:
+Paste:
 
-- `owner/model` repo IDs;
-- normal repo URLs;
-- `/tree/main` URLs;
-- nested folder URLs;
-- direct file URLs;
-- links with extra trailing slashes.
+- `owner/model`
+- a normal Hugging Face repo URL
+- a `/tree/main` URL
+- a nested folder URL
+- a direct file URL
+- a link with trailing slashes
 
-The downloader inspects the repo file list before downloading. If you paste a nested folder that is not itself a complete model package, it walks back to the nearest package parent when it can do so safely.
+Easy ASR Bench inspects the repo file list first, identifies the nearest model package it can safely use, and downloads the selected runnable package plus required companion files.
 
-It downloads the selected package plus required companion files, such as:
+It can pull the files that usually make or break local ASR packages:
 
-- config, tokenizer, processor, and preprocessor files;
+- tokenizer/config/processor metadata;
 - selected ONNX sidecars;
-- Safetensors shard indexes and selected shard files;
-- matching GGUF `mmproj` projector files for ASR GGUF packages;
-- split GGUF parts for a selected GGUF package.
+- Safetensors shard indexes and shard files;
+- matching ASR GGUF projector files;
+- split GGUF parts for a chosen package.
 
-It does not download every weight variant in a repo by default. For large or uncertain choices, it shows the file count and asks before downloading. When Hugging Face reports file sizes, the app checks space for both the Hub cache and the `Models` copy.
+It does not blindly download every weight variant in a repo. For large or uncertain packages, it shows the file count and asks first. When file sizes are available, it checks disk space for both the Hugging Face cache and the final `Models` copy.
 
-If a downloaded package is incomplete, the app rescans it. When exact missing-file matches exist in the same Hugging Face repo, it can ask before downloading those files. If the missing requirement is ambiguous, it reports the ambiguity instead of guessing. It can also write `hf_missing_file_request.json` and `hf_missing_file_prompt.txt` next to the package so a local or external LLM can recommend exact filenames from the repo list.
+If a package lands incomplete, the app rescans it. When exact missing files exist in the same repo, it can offer a targeted repair download. If the missing requirement is ambiguous, it says so instead of guessing. For harder cases, it writes local missing-file request files that can be pasted into a local or external LLM; any returned recommendation still has to match exact repo filenames before the app will offer to download it.
 
-Before download, the app estimates projected local path lengths and warns or blocks when a package would exceed a conservative Windows path budget. Short install/model folders are still the lowest-risk path for very deep model repos.
+It also preflights deep Windows paths before model downloads, because long Hugging Face cache/package paths are a real source of Windows failures.
 
-## Supported Model Packages
+## The One Report To Open
 
-Release verification is evidence-based. Code support means the scanner and adapter know the package family. A release claim means the release-smoke artifact proves that row for that release.
+`final_results.html` is the report users should open.
 
-The generated release support matrix is in [docs/support_matrix.generated.md](docs/support_matrix.generated.md). Rows that have not been proven for the release stay marked `Not verified`.
+For a single file, it links into the detailed comparison report. For a batch, it becomes the dashboard for all files.
+
+The HTML report can show:
+
+- transcripts for every selected model;
+- runtime-only rankings before any reference exists;
+- speed, RAM, and available GPU-memory telemetry;
+- provider and fallback diagnostics;
+- structured model/media/chunk failure messages;
+- side-by-side transcript comparison;
+- corrected-reference paste, validation, scoring, browser persistence, export, and import.
+
+The other output files exist for automation and auditability, but the user-facing path is simple: open `final_results.html`.
+
+## Corrected Reference Scoring
+
+Benchmarks need a reference, but Easy ASR Bench does not pretend an LLM is human ground truth.
+
+You can:
+
+- use no reference and compare runtime/transcripts manually;
+- paste corrected-reference JSON from ChatGPT, Claude, or another external LLM;
+- use a local GGUF reference/correction LLM through llama.cpp when available;
+- paste a GGUF path from another app and save it for future runs.
+
+When reference JSON is pasted or generated, the app validates it against the run's source hash and chunk metadata before scoring. Valid references produce WER, normalized WER, CER, balanced rank, timing, memory, pairwise differences, `scored_report.json`, and `compare_scored.html`.
+
+Invalid references are reported as invalid instead of silently producing misleading scores.
+
+## Model And Runtime Coverage
 
 Runnable ASR package families include:
 
-- known multi-file ONNX ASR layouts, including AR and NAR exports with precision folders;
-- Hugging Face Whisper and Transformers ASR folders using `.safetensors` weights;
-- sharded Hugging Face Safetensors folders when the index and shards are complete;
+- known multi-file ONNX ASR layouts, including AR and NAR exports;
+- Hugging Face Whisper and Transformers ASR folders using Safetensors;
+- complete sharded Hugging Face Safetensors folders;
 - faster-whisper / CTranslate2 folders;
 - whisper.cpp GGML `.bin` models;
 - Generic ONNX CTC manifest v1 folders with `modelbench.json`;
 - Audio/ASR GGUF packages with matching `mmproj` projectors when the packaged llama.cpp MTMD path is available.
 
-Recognized but blocked, incomplete, or explained packages include:
+Reference/correction LLM support is GGUF-focused. Hugging Face text-generation Safetensors folders are recognized as needing a GGUF export for this app's local reference workflow.
 
-- standalone `.safetensors` files without the rest of the Hugging Face model folder;
-- incomplete Safetensors shard folders;
-- OpenAI Whisper `.pt` checkpoints without explicit checksum allowlisting;
-- NeMo `.nemo` archives;
-- FunASR folders;
-- sherpa-onnx Whisper packages;
-- split Whisper/Transformers.js ONNX, Granite-style split ONNX, Qwen split ONNX, and ORT edge graph packages;
-- Core ML / WhisperKit `.mlmodelc` packages;
-- mismatched or incomplete ASR GGUF plus projector packages;
-- Hugging Face text-generation folders that need a GGUF export before they can be used as local reference LLMs.
+The scanner also recognizes common packages that should not be misclassified as runnable ASR, including standalone Safetensors files, incomplete shard folders, unchecked OpenAI Whisper `.pt` checkpoints, NeMo, FunASR, sherpa-onnx, split ONNX app packages, Core ML / WhisperKit packages, and incomplete ASR GGUF projector pairs.
 
-Generic ONNX CTC models need a manifest so the app knows how to preprocess audio, feed inputs, select outputs, and decode safely. See [docs/supported_models.md](docs/supported_models.md) for package details.
+Provider paths are detected and reported rather than assumed:
 
-## LLM-Corrected Reference Scoring
+- CPU paths for supported backends;
+- ONNX Runtime CUDA where verified;
+- OpenVINO where verified;
+- DirectML where verified;
+- PyTorch CUDA for Hugging Face/OpenAI Whisper where verified;
+- CTranslate2 CUDA for faster-whisper where verified;
+- llama.cpp CPU/CUDA/Vulkan paths where the matching dependency path is available and verified.
 
-Easy ASR Bench can score models against an LLM-corrected reference. This is useful for benchmarking, but it is not human ground truth.
+The generated release support matrix is in [docs/support_matrix.generated.md](docs/support_matrix.generated.md). It is built from release-smoke evidence, so unproven rows stay marked `Not verified`.
 
-You can use:
+## Doctor, Repair, And Recovery
 
-- an auto-detected local GGUF reference/correction LLM from `Models`;
-- a pasted GGUF file or folder path from another app;
-- ChatGPT, Claude, or another external LLM manually;
-- no reference, leaving the report in runtime-only mode.
+`setup.bat --doctor` and repair flows are part of the product, not an afterthought.
 
-The normal manual workflow is:
+The app can diagnose and report:
 
-1. Run the benchmark.
-2. Open `final_results.html`.
-3. Copy the report's LLM reference prompt or use the prompt text files.
-4. Ask the LLM to return JSON with schema `easy_asr_bench.llm_reference.v1`.
-5. Paste the JSON into the report.
-6. Validate and score the models.
-7. Export edited reference data if you want a portable copy of browser edits.
+- Python and virtual environment problems;
+- missing or incompatible dependency groups;
+- missing FFmpeg/media tooling;
+- Hugging Face cache/path issues;
+- ONNX provider visibility;
+- Torch CUDA availability;
+- CTranslate2/faster-whisper import problems;
+- Transformers/OpenAI Whisper import problems;
+- llama.cpp and native ASR GGUF runtime availability;
+- stale saved runtime-resolution evidence.
 
-When a local GGUF reference LLM is selected, the app can generate a corrected reference, validate the returned JSON against source and chunk metadata, score the ASR outputs, and write `scored_report.json` plus `compare_scored.html`.
+Repair flows are conservative. They install or repair only the dependency groups needed by selected models, record what they did, probe the backend afterward, and skip only the affected models if a repair fails.
 
-The score view includes strict WER, normalized WER, CER, balanced rank, timing, memory, pairwise differences, and readable validation errors when reference JSON does not match the run.
+The goal is not "never fail." The goal is to avoid silent failure, avoid fake success, keep the rest of a batch alive when possible, and produce a report that tells the user what failed and what to try next.
 
-## Batch Runs And Resume
+## Batch Runs
 
-Batch mode processes many files while keeping each per-file report separate and publishing a batch dashboard:
+Batch mode processes many files and writes one dashboard:
 
 ```text
 Output/
-  batch__20260606_143012/
+  batch__...
     final_results.html
     _data/
       batch.json
       batch-records.json
 ```
 
-The batch dashboard shows files side by side, filters by status/path, pages through large sets, summarizes every model per file, stores corrected-reference edits in the browser, supports reference export/import, and links to each detailed `compare.html`.
+The dashboard filters and pages through files, summarizes every model per file, keeps corrected-reference edits in the browser, supports reference export/import, and links to detailed per-file reports.
 
-Batch runs write `Logs/batch_resume_manifest.json`. If the same input file, selected model IDs, reference choice, and relevant runtime/transcription settings still match, reruns skip completed files and reuse the existing published report folder. Missing, corrupt, empty, or failed reports are not treated as complete.
+Batch runs also write `Logs/batch_resume_manifest.json`. If the same file, selected models, reference choice, and runtime settings still match, reruns skip completed files. Missing, corrupt, empty, or failed reports do not count as complete.
 
-If a batch is interrupted after at least one file completes, the app writes a partial `final_results.html` overview for completed rows.
+## Validation And Release Evidence
 
-## Installation, Repair, And Launchers
+The source suite has hundreds of tests covering model scanning, downloader behavior, setup/repair flows, runtime contracts, reports, schemas, validators, and release tooling. The current local audit pass has run the full suite at more than 600 tests.
 
-Normal users only need `setup.bat`. It downloads and verifies the matching installer script, manifest, checksums, and app ZIP for the release.
+Release readiness is stricter than source tests. A release can have passing unit/package checks while still lacking manual runtime evidence for a provider, OS, or clean-machine row. Easy ASR Bench uses release-smoke JSON and generated support matrices so public docs do not imply unproven support.
+
+A public release should include:
+
+- `setup.bat`
+- installer metadata and checksums
+- the Windows ZIP
+- release-smoke evidence
+- release verification notes
+
+See [docs/release_verification.md](docs/release_verification.md) for the release process.
+
+## Installed Files And Launchers
+
+Normal users only need `setup.bat`. It verifies the release assets and installs the app.
 
 Common launchers:
 
-- `setup.bat`: install or repair the app.
-- `setup.bat --dry-run`: verify setup command structure without changing files or network access.
-- `setup.bat --dry-run --verify-release`: download release assets to temp, verify hashes and ZIP layout, and exit without installing.
-- `setup.bat --doctor`: run environment checks.
 - `Run.bat`: scan models, choose models, and process inputs.
 - `Drop_Audio_Or_Folders_Here.bat`: drag files/folders directly onto the app.
 - `Open_Latest_Report.bat`: open the newest `final_results.html`.
@@ -251,101 +271,36 @@ Common launchers:
 - `Open_Output_Folder.bat`: open the report folder.
 - `Edit_Config.bat`: edit configuration.
 
-Installed releases also create Start Menu shortcuts for run, drag/drop, latest report, output folder, config editing, repair, and uninstall. Uninstall preserves user data by default.
+Installed releases also create Start Menu shortcuts for the same actions. Uninstall preserves user data by default.
 
-Installer update and repair paths preserve `Models`, `Input`, `Output`, `Logs`, `Cache`, `Temp`, and `config.json` separately from the staged app until validation succeeds. If setup or installed validation fails, preserved data is restored to the previous install path.
+Update and repair paths preserve user data folders separately from the staged app until setup and installed validation succeed.
 
-## Dependencies And Acceleration
+## Safety
 
-Setup installs the core runtime first. Model-specific packages are installed only when a selected model needs them. Before installing an optional dependency group, the app shows the package names, requirement files, package indexes, install location, network destinations, PATH changes, size class, and fallback behavior.
-
-If an optional dependency install fails, Easy ASR Bench skips only the affected model and continues with any other runnable models. `setup.bat --doctor` lists dependency groups, what they enable, what is missing, and the repair command.
-
-Acceleration is detected, not assumed. Reports include provider diagnostics so you can see whether a requested provider actually ran or fell back.
-
-Provider paths include:
-
-- ONNX Runtime CPU for Generic ONNX and known ONNX ASR layouts.
-- ONNX Runtime CUDA on NVIDIA when installed and verified.
-- OpenVINO on Intel when installed and verified.
-- DirectML on Windows GPUs when installed and verified.
-- PyTorch CUDA for Hugging Face/OpenAI Whisper when installed and verified.
-- CTranslate2 CUDA for faster-whisper when installed and verified.
-- llama.cpp CPU, CUDA, or Vulkan paths for GGUF reference/ASR flows when the matching dependency path is available and verified.
-
-CPU fallback is explicit. If a requested accelerator is unavailable and a safe CPU path exists, the report records the request, fallback, and active provider instead of pretending the accelerator ran.
-
-`whisper.cpp` through `pywhispercpp` remains CPU-only in the packaged dependency flow because GPU support currently requires source/build flags rather than a stable simple wheel install. Use faster-whisper or Hugging Face/OpenAI Whisper for common GPU ASR workflows.
-
-## Output Files
-
-Single-file reports look like:
-
-```text
-Output/
-  meeting__20260606_142231_a1b2c3d4/
-    results.txt
-    results.json
-    benchmark.csv
-    final_results.html
-    compare.html
-```
-
-Report directories are created through hidden staging folders and published only after required artifacts exist. IDs include time and source identity data to avoid same-name collisions.
-
-Generated normalization WAVs under `Temp` are cleaned automatically after they are older than `advanced.stale_temp_wav_hours`. Set `advanced.keep_temp_wavs` to `true` only when you intentionally want to inspect those temporary files.
-
-## Safety Model
-
-Easy ASR Bench is conservative about model files and release claims:
+Easy ASR Bench is conservative about external model artifacts:
 
 - It does not execute arbitrary Python files from model folders.
-- Hugging Face ASR folders use Safetensors instead of pickle-backed checkpoint loading.
-- OpenAI Whisper `.pt` files are blocked by default unless the checksum is explicitly allowlisted or trusted-file loading is deliberately enabled.
-- Generic ONNX models run only through built-in manifest recipes.
-- Unsupported or incomplete packages are explained instead of treated as runnable by guesswork.
+- Hugging Face ASR uses Safetensors rather than pickle-backed checkpoint loading.
+- OpenAI Whisper `.pt` checkpoints are blocked by default unless checksum allowlisted or explicitly trusted.
+- Generic ONNX runs only through built-in manifest recipes.
+- Unsupported and incomplete packages are explained rather than guessed.
+- CPU/GPU fallback is reported explicitly.
 - Chunk failures are structured errors, not fake transcript text.
-- Missing, corrupt, empty, or failed reports do not count as completed batch work.
-- Config writes and report publishing use atomic replace/publish patterns.
-- Release support claims are tied to smoke evidence, not hopeful documentation.
-
-## Release Verification
-
-A public release should include:
-
-- `setup.bat`
-- `install.ps1`
-- `manifest.json`
-- `checksums.json`
-- the Windows ZIP
-- `release-smoke-vX.Y.Z.json`
-- release verification transcripts or notes
-
-The release-smoke artifact is the authority for what was proven in that release. Automated package checks can pass while optional hardware/model/media rows remain `not_run`; those rows should not be described as verified until evidence exists.
-
-See [docs/release_verification.md](docs/release_verification.md) and [docs/support_matrix.generated.md](docs/support_matrix.generated.md).
+- Config writes and report publishing use atomic write/publish patterns.
+- Release support claims are tied to evidence.
 
 ## Troubleshooting
 
-- **No runnable ASR models:** add a complete supported model folder to `Models` or use the Hugging Face downloader.
-- **Standalone `.safetensors` file:** download or copy the complete Hugging Face model folder, not only the weights file.
+- **No runnable ASR models:** paste a Hugging Face ASR link or add a complete supported model folder to `Models`.
+- **Standalone `.safetensors` file:** use the complete Hugging Face model folder, not only the weights file.
 - **Generic `.onnx` file:** add `modelbench.json` with CTC decoding metadata and a vocab file. Non-CTC ONNX graphs need a dedicated adapter.
-- **Dependency missing:** accept the install prompt for the selected model group, or run `setup.bat --doctor` and use the printed repair command.
-- **Saved selection is stale:** run interactively once, choose the intended models again, and the saved drag/drop selection will be refreshed.
-- **GPU unavailable:** run `setup.bat --doctor`. It reports provider visibility and repair commands. Reports also show actual provider/fallback metadata.
-- **Cannot find a report:** run a benchmark first, then open `Open_Latest_Report.bat` or the newest folder under `Output`.
+- **Dependency missing:** accept the install prompt for the selected model group, or run `setup.bat --doctor`.
+- **Saved selection is stale:** run interactively once and choose the intended models again.
+- **GPU unavailable:** run `setup.bat --doctor`; reports also show actual provider and fallback metadata.
+- **Cannot find a report:** run a transcription/benchmark first, then open `Open_Latest_Report.bat`.
 - **Media conversion failed:** check that the file opens normally and that there is enough disk space in `Temp`.
-- **Output is getting large:** delete older folders under `Output` when you no longer need them. Temporary generated WAVs are swept automatically.
-- **Install or model download says disk space is low:** free space on the install/model drive first. Model downloads still ask for typed confirmation before continuing in risky cases.
-- **Doctor warns about install or profile paths:** a short ASCII local path outside synced folders is the lowest-risk install location for native Windows runtimes and deep model caches.
-- **GGUF dependency missing:** install the `llama_cpp` dependency group when prompted, or use the manual external LLM workflow.
-- **GGUF model lives in another app folder:** choose the paste-path option in the reference LLM menu. The path is saved in `config.json`.
-- **Whisper model not detected:** see [docs/whisper_models.md](docs/whisper_models.md).
-- **Unexpected app error:** check the printed `Logs/crash_*.log`, run `Run.bat --doctor --json`, and open a GitHub issue with the requested diagnostics.
-- **SmartScreen, Defender, or antivirus warning:** see [docs/what_setup_installs.md](docs/what_setup_installs.md). The release uses unsigned batch/PowerShell launchers, verifies published setup assets by checksum, and keeps your media/model files local unless you choose a download.
-
-## Support
-
-For bugs, use the GitHub bug report template and include `Run.bat --doctor --json`, the latest run/setup/crash log, Windows version, install mode, and model/runtime type.
-
-Do not upload private media or model files unless you intentionally choose to share them.
+- **Model download says disk space or path length is risky:** use a short local install/model path and free space on the target drive.
+- **Doctor warns about install/profile paths:** short ASCII local paths outside synced folders are the lowest-risk Windows setup.
+- **GGUF dependency missing:** install the `llama_cpp` dependency group when prompted or use the manual external LLM workflow.
+- **Unexpected app error:** check `Logs/crash_*.log`, run `Run.bat --doctor --json`, and open a GitHub issue with the requested diagnostics.
+- **SmartScreen, Defender, or antivirus warning:** see [docs/what_setup_installs.md](docs/what_setup_installs.md). The release uses unsigned batch/PowerShell launchers, verifies setup assets by checksum, and keeps media/model files local unless you choose a download.
