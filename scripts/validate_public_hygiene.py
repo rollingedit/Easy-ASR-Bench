@@ -11,7 +11,6 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _sensitive_terms() -> list[str]:
     return [
-        "40" + "90",
         "agents" + ".md",
         "private" + " hand" + "off",
         "private" + "_hand" + "off",
@@ -34,6 +33,7 @@ def _sensitive_patterns() -> list[re.Pattern[str]]:
     patterns = [re.compile(re.escape(term), re.IGNORECASE) for term in _sensitive_terms()]
     patterns.extend(
         [
+            re.compile(r"\b40" + r"90\b", re.IGNORECASE),
             re.compile(r"NVIDIA\s+GeForce\s+RTX\s+\d{4}(?:\s+\w+)?", re.IGNORECASE),
             re.compile(r"Intel\(R\)\s+UHD\s+Graphics\s+\d+", re.IGNORECASE),
             re.compile(r"\b\d{1,2}th\s+Gen\s+Intel\(R\)\s+Core\(TM\)\s+i\d+-\d+\w*\b", re.IGNORECASE),
@@ -46,6 +46,7 @@ def _history_patterns() -> list[tuple[str, str]]:
     terms = [(re.escape(term), "local/private literal") for term in _sensitive_terms()]
     terms.extend(
         [
+            (r"(^|[^[:alnum:]_])40" + r"90([^[:alnum:]_]|$)", "standalone exact GPU model number"),
             (r"NVIDIA[[:space:]]+GeForce[[:space:]]+RTX[[:space:]]+[0-9]{4}([[:space:]]+[[:alnum:]_+-]+)?", "exact GPU model"),
             (r"Intel\(R\)[[:space:]]+UHD[[:space:]]+Graphics[[:space:]]+[0-9]+", "exact Intel iGPU model"),
             (

@@ -2,13 +2,11 @@
 
 Transcribe audio and video with local speech-to-text models on Windows, then compare models on your own files and your own hardware.
 
-Think of it as:
+It is the Open ASR Leaderboard for your audio, on your machine.
 
-```text
-The Open ASR Leaderboard, but for your audio, on your machine.
-```
+Public ASR leaderboards are useful, but they are not your files: fast speech, accents, casual slang, crosstalk, bad mics, lectures, meetings, songs, fast rap, noisy clips, language switches, and whatever else you actually need transcribed. They also are not your CPU, GPU, driver stack, or patience budget.
 
-Public ASR leaderboards are useful, but they are not your podcast, meeting, lecture, noisy phone recording, language mix, CPU, GPU, driver stack, or patience budget. Easy ASR Bench is for the practical moment when a new model drops, you paste the Hugging Face link, and you want to know whether it is actually better for your work without spending the evening wiring Python packages by hand.
+Easy ASR Bench is for the practical moment when a new model drops and you want to know whether it is actually better for your work. Paste the Hugging Face link, let the app download the right package pieces, run it on your own test files, and compare the result against the models you already trust.
 
 The normal user flow is intentionally small:
 
@@ -23,8 +21,6 @@ Open final_results.html
 Use one model when you just want a transcript. Use several models when you want to compare quality, speed, RAM, GPU memory, provider behavior, and failures side by side.
 
 Easy ASR Bench owns the messy middle: setup, model detection, Hugging Face package selection, missing-file repair prompts, dependency planning, CPU/GPU provider probing, runtime repair, fallback reporting, batch continuation, and the final report.
-
-Your media and local model files stay on your machine. Network access is used for setup, optional dependency installs, update checks, and model downloads that you choose.
 
 <details>
 <summary><strong>Contents</strong></summary>

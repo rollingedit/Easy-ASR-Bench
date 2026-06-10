@@ -23,6 +23,7 @@ SKIP_DIRS = {
     "Cache",
     "Models",
     "Input",
+    "_local",
 }
 SKIP_DIR_PREFIXES = (".pytest_tmp",)
 if str(ROOT) not in sys.path:

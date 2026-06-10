@@ -180,6 +180,19 @@ def test_public_hygiene_validator_catches_private_machine_details(tmp_path):
     assert len(findings) == 3
 
 
+def test_public_hygiene_validator_ignores_hash_substrings(tmp_path):
+    checksums = tmp_path / "checksums.json"
+    checksums.write_text(
+        json.dumps({"files": {"artifact.zip": "sha256:" + ("a" * 20) + ("40" + "90") + ("b" * 40)}}),
+        encoding="utf-8",
+    )
+    standalone = tmp_path / "note.txt"
+    standalone.write_text("validated on " + ("40" + "90") + " host\n", encoding="utf-8")
+
+    assert scan_paths([checksums]) == []
+    assert scan_paths([standalone])
+
+
 def test_public_hygiene_validator_scans_reachable_history_without_echoing_match(tmp_path):
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
     subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=tmp_path, check=True)
@@ -369,5 +382,8 @@ def test_physical_validator_ignores_suffixed_pytest_tmp_dirs(tmp_path):
     ignored = app_root / ".pytest_tmp_llama_mtmd_stage10" / "bad.json"
     ignored.parent.mkdir()
     ignored.write_text("{bad json\r\n", encoding="utf-8")
+    local_ignored = app_root / "_local" / "private" / "bad.json"
+    local_ignored.parent.mkdir(parents=True)
+    local_ignored.write_text("{bad json\r\n", encoding="utf-8")
 
     validate_root(app_root)
