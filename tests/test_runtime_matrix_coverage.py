@@ -115,6 +115,8 @@ def test_runtime_matrix_includes_native_runtime_prerequisite_rows():
     assert ROWS["directml_provider_conflict_repair"].module == "qa.runtime_matrix.rows.windows_directml_provider"
     assert ROWS["windows_vulkan_runtime"].module == "qa.runtime_matrix.rows.windows_vulkan_runtime"
     assert ROWS["amd_directml_onnx_smoke"].module == "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"
+    assert ROWS["intel_cpu_onnx_smoke"].module == "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"
+    assert ROWS["intel_cpu_onnx_smoke"].hardware == "intel_cpu"
     assert ROWS["intel_openvino_onnx_smoke"].module == "qa.runtime_matrix.rows.generic_onnx_ctc_tiny"
     assert ROWS["nvidia_cuda_torch_onnx_faster_whisper_llama"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
     assert ROWS["nvidia_cuda_hardware_detection"].module == "qa.runtime_matrix.rows.cuda_provider_matrix"
@@ -237,6 +239,7 @@ def test_release_manual_matrix_includes_granular_cuda_rows():
         "faster_whisper_ctranslate2_cuda_smoke",
         "llama_cpp_cuda_smollm_smoke",
         "llama_cpp_vulkan_smollm_smoke",
+        "intel_cpu_onnx_smoke",
         "transformers_cuda_unavailable_cpu_fallback",
         "generic_onnx_cuda_unavailable_cpu_fallback",
     } <= ids
@@ -939,6 +942,39 @@ def test_intel_directml_row_cannot_pass_with_cpu_fallback(tmp_path):
         assert "DmlExecutionProvider" in row["block_reason"] or "Intel GPU/NPU" in row["block_reason"]
     if row["status"] == "fail":
         assert "fell back" in " ".join(row["details"].get("failures", []))
+
+
+def test_intel_cpu_onnx_row_requires_intel_cpu_and_cpu_only_provider(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import generic_onnx_ctc_tiny
+
+    monkeypatch.setattr(
+        generic_onnx_ctc_tiny,
+        "_cpu_vendor_details",
+        lambda: {"vendor": "GenuineIntel", "intel_cpu_detected": True},
+    )
+
+    row = generic_onnx_ctc_tiny.run("intel_cpu_onnx_smoke", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    summary = row["details"]["metrics"]["provider_summary"]
+    assert summary["active_providers"] == ["CPUExecutionProvider"]
+    assert summary["provider_fallback"] is False
+    assert row["details"]["cpu_vendor"]["intel_cpu_detected"] is True
+
+
+def test_intel_cpu_onnx_row_blocks_on_non_intel_cpu(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import generic_onnx_ctc_tiny
+
+    monkeypatch.setattr(
+        generic_onnx_ctc_tiny,
+        "_cpu_vendor_details",
+        lambda: {"vendor": "AuthenticAMD", "intel_cpu_detected": False},
+    )
+
+    row = generic_onnx_ctc_tiny.run("intel_cpu_onnx_smoke", tmp_path, False, False)
+
+    assert row["status"] == "blocked"
+    assert row["block_reason"] == "Intel CPU not detected"
 
 
 def test_generic_onnx_openvino_fallback_row_preserves_requested_provider(tmp_path):

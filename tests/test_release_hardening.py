@@ -9,6 +9,7 @@ from pathlib import Path
 import scripts.verify_github_release as verify_github_release
 from scripts.check_release_version_coherence import validate as validate_version_coherence
 from scripts.validate_public_hygiene import scan_history, scan_paths
+from scripts.validate_public_history_candidate import compare_trees, validate_candidate
 from scripts.validate_raw_github_files import byte_diagnostics, compare_raw_to_zip, format_diagnostics, validate_bytes
 from scripts.validate_physical_files import validate_root
 from scripts.rewrite_public_history_hygiene import rewrite_to_candidate_repo
@@ -219,6 +220,27 @@ def test_history_rewrite_helper_creates_clean_candidate_repo(tmp_path):
     rewrite_to_candidate_repo("main", candidate, source_root=source)
 
     assert scan_history(["main"], root=candidate) == []
+    assert validate_candidate(source, "main", candidate, "main") == []
+
+
+def test_public_history_candidate_validator_rejects_tip_tree_drift(tmp_path):
+    source = tmp_path / "source"
+    candidate = tmp_path / "candidate"
+    source.mkdir()
+    candidate.mkdir()
+    for repo in [source, candidate]:
+        subprocess.run(["git", "init", "-b", "main"], cwd=repo, check=True, capture_output=True)
+        subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=repo, check=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+    (source / "note.txt").write_text("source tree\n", encoding="utf-8")
+    (candidate / "note.txt").write_text("candidate tree\n", encoding="utf-8")
+    for repo in [source, candidate]:
+        subprocess.run(["git", "add", "note.txt"], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-m", "tip"], cwd=repo, check=True, capture_output=True)
+
+    errors = compare_trees(source, "main", candidate, "main")
+
+    assert "candidate blob content differs for note.txt" in errors
 
 
 def test_publish_workflow_refuses_public_asset_mutation_before_clobber():

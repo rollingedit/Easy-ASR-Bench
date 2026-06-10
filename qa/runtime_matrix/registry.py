@@ -88,6 +88,7 @@ ROWS: dict[str, RowDefinition] = {
     "llama_cpp_cuda_smollm_smoke": row("llama_cpp_cuda_smollm_smoke", "qa.runtime_matrix.rows.cuda_provider_matrix", hardware="nvidia_cuda"),
     "llama_cpp_vulkan_smollm_smoke": row("llama_cpp_vulkan_smollm_smoke", "qa.runtime_matrix.rows.windows_vulkan_runtime", hardware="vulkan"),
     "amd_directml_onnx_smoke": row("amd_directml_onnx_smoke", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny", hardware="directml"),
+    "intel_cpu_onnx_smoke": row("intel_cpu_onnx_smoke", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny", hardware="intel_cpu"),
     "intel_directml_onnx_smoke": row("intel_directml_onnx_smoke", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny", hardware="intel_directml"),
     "intel_openvino_onnx_smoke": row("intel_openvino_onnx_smoke", "qa.runtime_matrix.rows.generic_onnx_ctc_tiny", hardware="intel_openvino"),
     "vulkan_runtime_no_sdk": row("vulkan_runtime_no_sdk", "qa.runtime_matrix.rows.windows_vulkan_runtime", hardware="vulkan_no_sdk"),

@@ -37,6 +37,7 @@
     "transformers_cuda_unavailable_cpu_fallback",
     "whisper_cpp_ggml_speech_smollm_grading",
     "real_public_video_whisper_cpp_ggml_smollm_grading",
+    "intel_cpu_onnx_smoke",
     "generic_onnx_manifest_cpu",
     "generic_onnx_cuda_unavailable_cpu_fallback",
     "generic_onnx_openvino_unavailable_cpu_fallback",

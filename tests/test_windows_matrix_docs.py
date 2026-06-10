@@ -209,6 +209,14 @@ def test_release_verification_documents_generic_onnx_cuda_fallback_row():
     assert "normal Generic ONNX adapter does not silently hide a CUDA-to-CPU fallback" in text
 
 
+def test_release_verification_documents_intel_cpu_onnx_row():
+    text = Path("docs/release_verification.md").read_text(encoding="utf-8")
+
+    assert "qa\\runtime_matrix\\run_row.py --row intel_cpu_onnx_smoke" in text
+    assert "requires an Intel CPU host" in text
+    assert "CPUExecutionProvider" in text
+
+
 def test_release_verification_documents_whisper_cpp_speech_smollm_row():
     text = Path("docs/release_verification.md").read_text(encoding="utf-8")
 

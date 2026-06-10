@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import platform
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,6 +22,45 @@ def _provider_for_row(row_id: str) -> str:
     if "cuda" in row_id:
         return "cuda"
     return "cpu"
+
+
+def _cpu_vendor_details() -> dict:
+    details = {
+        "processor": platform.processor(),
+        "machine": platform.machine(),
+        "vendor": "",
+        "manufacturer": "",
+        "name": "",
+        "intel_cpu_detected": False,
+    }
+    if platform.system().lower() == "windows":
+        try:
+            completed = subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    "Get-CimInstance Win32_Processor | Select-Object -First 1 Manufacturer,Name | ConvertTo-Json -Compress",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if completed.returncode == 0 and completed.stdout.strip():
+                payload = json.loads(completed.stdout)
+                if isinstance(payload, dict):
+                    details["manufacturer"] = str(payload.get("Manufacturer") or "")
+                    details["name"] = str(payload.get("Name") or "")
+        except Exception as exc:
+            details["probe_error"] = f"{type(exc).__name__}: {exc}"
+    probe_text = " ".join(str(value) for value in details.values()).lower()
+    details["intel_cpu_detected"] = any(marker in probe_text for marker in ("genuineintel", "intel(r)", "intel "))
+    if details["manufacturer"]:
+        details["vendor"] = details["manufacturer"]
+    elif details["intel_cpu_detected"]:
+        details["vendor"] = "Intel"
+    return details
 
 
 def _write_tiny_ctc_fixture(model_dir: Path) -> list[Path]:
@@ -242,6 +283,17 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
         return _run_requested_provider_fallback(row_id, evidence_dir, "openvino")
     diagnostics = cuda_diagnostics()
     provider = _provider_for_row(row_id)
+    cpu_vendor = _cpu_vendor_details() if "intel_cpu" in row_id else {}
+    if "intel_cpu" in row_id and not cpu_vendor.get("intel_cpu_detected", False):
+        return write_row(
+            row_id,
+            "blocked",
+            evidence_dir,
+            summary="Intel CPU ONNX row requires an Intel CPU, which is not detected on this machine.",
+            block_reason="Intel CPU not detected",
+            external_requirement="Intel CPU Windows host",
+            details={"cpu_vendor": cpu_vendor, "cuda_provider_checks": diagnostics},
+        )
     if "intel_directml" in row_id and not diagnostics.get("intel_gpu_or_npu_detected", False):
         return write_row(
             row_id,
@@ -390,6 +442,26 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
                 },
                 artifacts=artifacts,
             )
+    if provider == "cpu":
+        provider_summary = metrics.get("provider_summary", {})
+        if provider_summary.get("provider_fallback", False) or provider_summary.get("active_providers") != ["CPUExecutionProvider"]:
+            return write_row(
+                row_id,
+                "fail",
+                evidence_dir,
+                summary="Tiny ONNX CTC fixture decoded transcript, but CPU provider evidence was not CPU-only.",
+                details={
+                    "provider": provider,
+                    "transcript": transcript,
+                    "metrics": metrics,
+                    "provider_summary": provider_summary,
+                    "cpu_vendor": cpu_vendor,
+                    "cuda_provider_checks": diagnostics,
+                    "dependency_versions": package_versions(["onnx", "onnxruntime", "onnxruntime-directml", "onnxruntime-openvino", "onnxruntime-gpu"]),
+                    "failures": ["CPU row did not report CPUExecutionProvider as the only active provider"],
+                },
+                artifacts=artifacts,
+            )
     return write_row(
         row_id,
         "pass",
@@ -399,6 +471,7 @@ def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: 
             "provider": provider,
             "transcript": transcript,
             "metrics": metrics,
+            "cpu_vendor": cpu_vendor,
             "cuda_provider_checks": diagnostics,
             "repair_result": repair_result,
             "dependency_versions": package_versions(["onnx", "onnxruntime", "onnxruntime-directml", "onnxruntime-openvino", "onnxruntime-gpu"]),

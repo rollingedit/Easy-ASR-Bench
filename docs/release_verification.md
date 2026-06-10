@@ -56,6 +56,7 @@ python qa\runtime_matrix\run_row.py --row report_atomic_write_failure_cleanup --
 python qa\runtime_matrix\run_row.py --row watched_folder_partial_write_queue_contract --workdir Temp\runtime_matrix_watched_folder_partial_write_queue_contract
 python qa\runtime_matrix\run_row.py --row model_fixture_quality_claims --workdir Temp\runtime_matrix_model_fixture_quality_claims
 python qa\runtime_matrix\run_row.py --row hf_downloader_package_variant_taxonomy --workdir Temp\runtime_matrix_hf_downloader_package_variant_taxonomy
+python qa\runtime_matrix\run_row.py --row intel_cpu_onnx_smoke --workdir Temp\runtime_matrix_intel_cpu_onnx_smoke
 python qa\runtime_matrix\run_row.py --row generic_onnx_cuda_unavailable_cpu_fallback --workdir Temp\runtime_matrix_generic_onnx_cuda_unavailable_cpu_fallback
 python qa\runtime_matrix\run_row.py --row generic_onnx_openvino_unavailable_cpu_fallback --workdir Temp\runtime_matrix_generic_onnx_openvino_unavailable_cpu_fallback
 python -m app.doctor --config config.json --validate-real-smoke --full-real-smoke
@@ -183,6 +184,8 @@ The `hf_downloader_package_variant_taxonomy` row validates fixture-backed Huggin
 The `generic_onnx_openvino_unavailable_cpu_fallback` row requests OpenVINO for the tiny Generic ONNX CTC fixture and validates provider fallback metadata. It passes when OpenVINO is active on an OpenVINO machine, or when OpenVINO is unavailable and the adapter records `requested_runtime_provider=openvino`, `openvino_requested=true`, `provider_fallback=true`, active CPU providers, and the expected transcript.
 
 The `generic_onnx_cuda_unavailable_cpu_fallback` row requests CUDA for the tiny Generic ONNX CTC fixture and validates provider fallback metadata. It passes when CUDA is active on a CUDA machine, or when CUDA is unavailable and the adapter records `requested_runtime_provider=cuda`, `cuda_requested=true`, `provider_fallback=true`, active CPU providers, and the expected transcript. This is separate from NVIDIA hardware rows because it proves the normal Generic ONNX adapter does not silently hide a CUDA-to-CPU fallback on non-CUDA machines.
+
+The `intel_cpu_onnx_smoke` row requires an Intel CPU host, runs the tiny Generic ONNX CTC fixture with the CPU provider, and fails if provider metadata records a fallback or any active provider other than `CPUExecutionProvider`. This row is separate from the generic CPU row so Intel CPU validation is explicit when v0.4.0 evidence is collected on an Intel validation host.
 
 The `whisper_cpp_ggml_speech_smollm_grading` row is the required quality-bearing whisper.cpp release proof. It uses the `ggerganov/whisper.cpp` `ggml-tiny.en-q5_1.bin` fixture, generated Windows SAPI speech, the normal app report pipeline, a non-empty transcript and WER threshold, then SmolLM 135M GGUF scoring/report validation. The packaged `pywhispercpp` path is CPU-only by design; GPU/offload validation belongs to llama.cpp GGUF rows, not whisper.cpp ASR.
 

@@ -181,6 +181,7 @@
       "expected_max_mb": 100,
       "rows": [
         "generic_onnx_ctc_manifest_v1",
+        "intel_cpu_onnx_smoke",
         "generic_onnx_manifest_cpu",
         "generic_onnx_ctc_quality_smollm_grading_cpu",
         "real_public_media_generic_onnx_ctc_smollm_grading_cpu",
@@ -199,6 +200,7 @@
         "generic_onnx_smollm_grading_cpu",
         "generic_onnx_smollm_grading_directml",
         "amd_directml_onnx_smoke",
+        "intel_cpu_onnx_smoke",
         "intel_directml_onnx_smoke"
       ],
       "notes": "Deterministic generated fixture for provider/session/CTC-decode regression. It proves the app's Generic ONNX CTC manifest path can load an ONNX graph and decode non-numeric text, but it is not a quality-bearing ASR model."
