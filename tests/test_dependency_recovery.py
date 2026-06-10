@@ -6,7 +6,7 @@ from pathlib import Path
 from app.config import DEFAULT_CONFIG
 from app.dependency_manager import ACCELERATOR_OVERRIDES, CUDA_INSTALL_OVERRIDES, acceleration_install_decision, cuda_diagnostics, cuda_install_decision, dependency_status, huggingface_cache_status, install_group_for_config, llama_cpp_cuda_tag_for_driver, llama_cpp_gpu_capable, llama_mtmd_cli_status, media_tools_status, missing_modules_for_config, recovery_command, recovery_command_for_config, requirement_version_issues, resolve_llama_cpp_wheel, visual_cpp_redistributable_status
 from app.doctor import run_doctor, run_model_layout_repair_sweep, run_real_smoke_validation
-from app.main import _dependency_install_confirmation, ensure_dependencies, warn_runtime_dependency_fallbacks
+from app.main import _dependency_install_batch_confirmation, _dependency_install_confirmation, ensure_dependencies, warn_runtime_dependency_fallbacks
 from app.repair_plan import backend_probe_for_group, build_repair_plan, execute_repair_plan, reusable_saved_runtime_resolution
 from app.results_writer import dependency_resolution_environment, runtime_environment
 
@@ -2017,6 +2017,24 @@ def test_dependency_install_prompt_skip_means_skip_affected_models(monkeypatch):
     assert _dependency_install_confirmation("onnx", "repair") == "skip_group"
 
 
+def test_dependency_install_batch_prompt_lists_all_repair_commands(monkeypatch, capsys):
+    answers = iter(["r", "q"])
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("app.main.choose_one", lambda *args, **kwargs: None)
+    monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
+
+    decision = _dependency_install_batch_confirmation(
+        ["onnx", "faster_whisper"],
+        {"onnx": "repair onnx", "faster_whisper": "repair faster-whisper"},
+    )
+
+    output = capsys.readouterr().out
+    assert decision == "quit"
+    assert "Manual repair command for onnx: repair onnx" in output
+    assert "Manual repair command for faster_whisper: repair faster-whisper" in output
+
+
 def test_optional_install_failure_prints_repair_and_skips_only_affected(monkeypatch, tmp_path: Path, capsys):
     from app.adapters.base import ModelCandidate
 
@@ -2065,9 +2083,84 @@ def test_optional_install_failure_prints_repair_and_skips_only_affected(monkeypa
 
     output = capsys.readouterr().out
     assert kept == [good]
-    assert "Skipped dependency install for onnx" in output
+    assert "Dependency install was not confirmed before processing" in output
     assert "Skipping Bad model" in output
     assert "Good model" not in output
+
+
+def test_optional_install_confirms_all_missing_groups_before_installing(monkeypatch, tmp_path: Path):
+    from app.adapters.base import ModelCandidate
+
+    class FakeAdapter:
+        name = "fake"
+
+        def required_dependency_groups(self, candidate):
+            return list(candidate.metadata.get("groups", []))
+
+    first = ModelCandidate(
+        candidate_id="first",
+        display_name="First model",
+        family_name="First",
+        backend="test",
+        container_format="test",
+        task="automatic-speech-recognition",
+        precision="fp32",
+        quantization_label="fp32",
+        path=tmp_path / "first",
+        adapter_name="fake",
+        runnable=True,
+        metadata={"groups": ["onnx"]},
+    )
+    second = ModelCandidate(
+        candidate_id="second",
+        display_name="Second model",
+        family_name="Second",
+        backend="test",
+        container_format="test",
+        task="automatic-speech-recognition",
+        precision="fp32",
+        quantization_label="fp32",
+        path=tmp_path / "second",
+        adapter_name="fake",
+        runnable=True,
+        metadata={"groups": ["faster_whisper"]},
+    )
+    missing = {"onnx": True, "faster_whisper": True}
+    installs: list[str] = []
+    prompts: list[tuple[str, list[str]]] = []
+
+    def fake_choose_one(title, options, *, actions=()):
+        prompts.append((title, list(options)))
+        return None
+
+    def fake_missing(group, config):
+        return [f"{group}-module"] if missing[group] else []
+
+    def fake_install(group, root, config, log_path=None):
+        installs.append(group)
+        missing[group] = False
+
+    monkeypatch.setattr("app.main.adapter_for", lambda candidate: FakeAdapter())
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("app.main.choose_one", fake_choose_one)
+    monkeypatch.setattr("builtins.input", lambda prompt: "")
+    monkeypatch.setattr(
+        "app.main._dependency_install_confirmation",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("per-group prompt should not run")),
+    )
+    monkeypatch.setattr("app.dependency_manager.missing_modules_for_config", fake_missing)
+    monkeypatch.setattr("app.dependency_manager.install_group_for_config", fake_install)
+
+    kept, _ = ensure_dependencies(
+        [first, second],
+        {"dependency_install": {"auto_install_missing_runtime_dependencies": True}},
+    )
+
+    assert kept == [first, second]
+    assert installs == ["onnx", "faster_whisper"]
+    assert len(prompts) == 1
+    assert prompts[0][0] == "Install missing runtime package groups before processing"
+    assert "onnx, faster_whisper" in prompts[0][1][0]
 
 
 def test_disabled_auto_install_skips_only_models_with_missing_groups(monkeypatch, tmp_path: Path, capsys):

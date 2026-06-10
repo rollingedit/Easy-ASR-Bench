@@ -102,7 +102,11 @@ def ensure_dependencies(candidates: list[ModelCandidate], config: dict, referenc
         for group in adapter.required_dependency_groups(candidate):
             if group not in groups:
                 groups.append(group)
-    missing = {group: missing_modules_for_config(group, config) for group in groups if missing_modules_for_config(group, config)}
+    missing: dict[str, list[str]] = {}
+    for group in groups:
+        group_missing = missing_modules_for_config(group, config)
+        if group_missing:
+            missing[group] = group_missing
     if not missing:
         return candidates, reference_llm
     print()
@@ -129,20 +133,18 @@ def ensure_dependencies(candidates: list[ModelCandidate], config: dict, referenc
         print("Automatic dependency repair is disabled in config.json.")
         failed_groups = set(missing)
         return _drop_candidates_for_failed_dependency_groups(candidates, reference_llm, candidate_groups, failed_groups)
+    repair_commands = {group: recovery_command_for_config(group, config) for group in missing}
+    decision = _dependency_install_batch_confirmation(list(missing), repair_commands)
+    if decision == "quit":
+        print("Quit requested before dependency installs. No selected models that need missing dependency groups will run.")
+        return _drop_candidates_for_failed_dependency_groups(candidates, reference_llm, candidate_groups, set(missing))
+    if decision != "install":
+        print("Dependency install was not confirmed before processing. Models requiring missing dependency groups will not run.")
+        return _drop_candidates_for_failed_dependency_groups(candidates, reference_llm, candidate_groups, set(missing))
     failed_groups: set[str] = set()
     for group in missing:
         acceleration_decision = acceleration_install_decision(config, group)
         log_path = _dependency_install_log_path(config, group)
-        plan = build_install_plan(group, project_root, config, group_candidates.get(group, []), log_path)
-        decision = _dependency_install_confirmation(group, recovery_command_for_config(group, config))
-        if decision == "quit":
-            print(f"Quit requested while installing {group}. Skipping all remaining models that need missing dependency groups.")
-            failed_groups.update(missing)
-            break
-        if decision != "install":
-            print(f"Skipped dependency install for {group}. Only models requiring this dependency group are skipped; other selected models continue.")
-            failed_groups.add(group)
-            continue
         accelerator = acceleration_decision.get("accelerator") if acceleration_decision["use_accelerator"] else ""
         install_label = f"{group} with {str(accelerator).upper()} packages" if accelerator else group
         print(f"Installing {install_label}...")
@@ -176,6 +178,58 @@ def _dependency_install_log_path(config: dict, group: str) -> str:
         logs_dir = Path("Logs")
     stamp = time.strftime("%Y%m%d_%H%M%S")
     return str(logs_dir / f"dependency_install_{group}_{stamp}.log")
+
+
+def _dependency_install_batch_confirmation(groups: list[str], repair_commands: dict[str, str] | None = None) -> str:
+    group_label = ", ".join(groups)
+    if not sys.stdin.isatty():
+        print(
+            "Skipping dependency installs before processing: noninteractive input cannot confirm optional installs "
+            f"for {group_label}."
+        )
+        return "skip_all"
+    menu_result = choose_one(
+        "Install missing runtime package groups before processing",
+        [
+            f"Install all now ({group_label})",
+            "Skip affected models",
+            "Show repair commands",
+            "Quit batch",
+        ],
+        actions=[MenuAction("I", "install all"), MenuAction("S", "skip affected models"), MenuAction("R", "show repair commands"), MenuAction("Q", "quit batch")],
+    )
+    if menu_result == 0 or menu_result == "i":
+        return "install"
+    if menu_result == 1 or menu_result == "s":
+        return "skip_all"
+    if menu_result == 3 or menu_result == "q":
+        return "quit"
+    if menu_result == 2 or menu_result == "r":
+        _print_dependency_repair_commands(groups, repair_commands)
+    try:
+        answer = input(
+            f"{key('I')} install all, {key('S')} skip affected models, {key('R')} show repair commands, {key('Q')} quit batch: "
+        ).strip().lower()
+    except EOFError:
+        print("Skipping dependency installs before processing: input closed before confirmation.")
+        return "skip_all"
+    if answer in {"", "i", "install", "install all", "y", "yes"}:
+        return "install"
+    if answer in {"s", "skip", "skip affected", "skip affected models", "n", "no"}:
+        return "skip_all"
+    if answer in {"r", "repair", "show repair", "show repair commands"}:
+        _print_dependency_repair_commands(groups, repair_commands)
+        return _dependency_install_batch_confirmation(groups, repair_commands)
+    if answer in {"q", "quit", "exit"}:
+        return "quit"
+    print("Unrecognized dependency install choice; skipping affected models so the rest of the batch can continue.")
+    return "skip_all"
+
+
+def _print_dependency_repair_commands(groups: list[str], repair_commands: dict[str, str] | None = None) -> None:
+    commands = repair_commands or {}
+    for group in groups:
+        print(f"Manual repair command for {group}: {commands.get(group) or 'Run setup.bat --doctor for a repair command.'}")
 
 
 def _repair_native_backend_preflights(candidates: list[ModelCandidate], config: dict) -> list[ModelCandidate]:
