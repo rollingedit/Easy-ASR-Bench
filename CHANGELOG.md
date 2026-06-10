@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Hardened installer update and repair rollback around preserved user data. Existing `Models`, `Input`, `Output`, `Logs`, `Cache`, `Temp`, and `config.json` are now stashed separately from the staged app until local setup and installed validation succeed, and repair failures restore preserved data back into the previous install instead of leaving it in a directory that may be deleted.
+- Made per-file report output directories collision-proof and directory-atomic. Report IDs now include microsecond precision plus a short source identity hash, same-ID collisions receive a bounded counter suffix, report files are staged under a hidden partial directory, and the final report folder is published only after required artifacts exist.
 
 ## v0.4.0 candidate
 

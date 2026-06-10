@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import html
 import importlib.metadata
 import json
 import os
 import platform
+import shutil
 import sys
 import re
 from datetime import datetime
@@ -20,7 +22,7 @@ from .llm_reference_prompt import build_llm_reference_prompt
 from .results_schema import validate_results_schema
 from .reference_scoring import runtime_rankings
 from .scoring import pairwise_metrics
-from .utils import format_timestamp, now_stamp, safe_stem, sha256_file
+from .utils import format_timestamp, safe_stem, sha256_file
 
 
 DEPENDENCY_PACKAGES = [
@@ -384,23 +386,70 @@ def build_results(
     return results
 
 
-def write_all_reports(results: dict, output_root: Path) -> Path:
-    source_name = safe_stem(Path(results["source"]["name"]))
-    output_dir = output_root / f"{source_name}__{now_stamp()}"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    json_path = output_dir / "results.json"
-    txt_path = output_dir / "results.txt"
-    html_path = output_dir / "compare.html"
-    final_path = output_dir / "final_results.html"
-    csv_path = output_dir / "benchmark.csv"
+REQUIRED_REPORT_FILES = ("results.json", "results.txt", "compare.html", "final_results.html", "benchmark.csv")
 
-    _atomic_write_text(json_path, json.dumps(results, ensure_ascii=False, indent=2))
-    _atomic_write_text(txt_path, render_text_report(results))
-    _atomic_write_text(html_path, build_html_report(results))
-    _atomic_write_text(final_path, render_single_file_final_results(results))
-    write_benchmark_csv(csv_path, results)
-    write_prompt_packs(output_dir, results)
-    return output_dir
+
+def _report_identity_hash(results: dict) -> str:
+    source = results.get("source", {})
+    identity = "|".join(
+        [
+            str(source.get("sha256") or ""),
+            str(source.get("path") or ""),
+            str(source.get("name") or ""),
+            str(source.get("duration_seconds") or ""),
+        ]
+    )
+    return hashlib.sha256(identity.encode("utf-8", errors="replace")).hexdigest()[:10]
+
+
+def _report_timestamp() -> str:
+    return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+
+
+def _prepare_report_directories(results: dict, output_root: Path) -> tuple[Path, Path]:
+    source_name = safe_stem(Path(results["source"]["name"]))
+    base_name = f"{source_name}__{_report_timestamp()}__{_report_identity_hash(results)}"
+    output_root.mkdir(parents=True, exist_ok=True)
+    for index in range(100):
+        suffix = "" if index == 0 else f"__{index:02d}"
+        output_dir = output_root / f"{base_name}{suffix}"
+        partial_dir = output_root / f".{output_dir.name}.partial"
+        if output_dir.exists() or partial_dir.exists():
+            continue
+        partial_dir.mkdir(parents=False, exist_ok=False)
+        return output_dir, partial_dir
+    raise FileExistsError(f"Could not allocate a unique report directory under {output_root}")
+
+
+def _validate_report_directory(output_dir: Path) -> None:
+    missing = [name for name in REQUIRED_REPORT_FILES if not (output_dir / name).is_file()]
+    if missing:
+        raise RuntimeError("Report directory is missing required files: " + ", ".join(missing))
+
+
+def write_all_reports(results: dict, output_root: Path) -> Path:
+    output_dir, staging_dir = _prepare_report_directories(results, output_root)
+    json_path = staging_dir / "results.json"
+    txt_path = staging_dir / "results.txt"
+    html_path = staging_dir / "compare.html"
+    final_path = staging_dir / "final_results.html"
+    csv_path = staging_dir / "benchmark.csv"
+
+    try:
+        _atomic_write_text(json_path, json.dumps(results, ensure_ascii=False, indent=2))
+        _atomic_write_text(txt_path, render_text_report(results))
+        _atomic_write_text(html_path, build_html_report(results))
+        _atomic_write_text(final_path, render_single_file_final_results(results))
+        write_benchmark_csv(csv_path, results)
+        write_prompt_packs(staging_dir, results)
+        _validate_report_directory(staging_dir)
+        staging_dir.replace(output_dir)
+        _validate_report_directory(output_dir)
+        return output_dir
+    except Exception:
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir, ignore_errors=True)
+        raise
 
 
 def render_single_file_final_results(results: dict) -> str:
