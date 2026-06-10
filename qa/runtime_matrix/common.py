@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.metadata
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -50,6 +51,27 @@ def environment_summary() -> dict:
         "python": platform.python_version(),
         "python_executable": sys.executable,
     }
+
+
+def git_state(root: Path = ROOT) -> dict:
+    try:
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, text=True, capture_output=True, check=True).stdout.strip()
+        status = subprocess.run(["git", "status", "--porcelain"], cwd=root, text=True, capture_output=True, check=True).stdout
+        return {
+            "execution_git_commit": commit,
+            "execution_git_dirty": bool(status.strip()),
+            "execution_git_status": "dirty" if status.strip() else "clean",
+        }
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        fallback = {
+            "execution_git_commit": "unknown",
+            "execution_git_dirty": None,
+            "execution_git_status": "unknown",
+        }
+        env_commit = os.environ.get("EASY_ASR_COMMIT")
+        if env_commit:
+            fallback["execution_git_commit"] = env_commit
+        return fallback
 
 
 def dependency_resolution_report_failures(results: dict, *, expected_groups: set[str] | None = None) -> tuple[list[str], dict]:
@@ -118,6 +140,7 @@ def write_row(
         "details": details or {},
         "artifacts": artifact_rows,
     }
+    row.update(git_state())
     if status == "blocked":
         row["block_reason"] = block_reason
         row["external_requirement"] = external_requirement

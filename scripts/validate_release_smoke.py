@@ -52,6 +52,7 @@ def validate_smoke(
     errors: list[str] = []
     if smoke.get("schema") not in {"easy_asr_bench.release_smoke.v1", "easy_asr_bench.release_smoke.v2"}:
         errors.append("release smoke has an unexpected schema")
+    smoke_commit = str(smoke.get("commit") or "")
     rows = flatten_manual_rows(smoke)
     for row_id in required_rows:
         if row_id not in rows:
@@ -72,6 +73,14 @@ def validate_smoke(
                     errors.append(f"{row_id} is missing app_version")
                 if not row.get("release_commit"):
                     errors.append(f"{row_id} is missing release_commit")
+                execution_commit = str(row.get("execution_git_commit") or "")
+                if not execution_commit:
+                    errors.append(f"{row_id} is missing execution_git_commit")
+                if row.get("execution_git_dirty") is True and not row.get("dirty_tree_exception"):
+                    errors.append(f"{row_id} was collected from a dirty git tree")
+                target_commit = str(row.get("target_release_commit") or smoke_commit)
+                if target_commit and execution_commit and execution_commit != target_commit and not row.get("execution_commit_exception"):
+                    errors.append(f"{row_id} execution_git_commit {execution_commit} does not match release commit {target_commit}")
             if require_log_hashes and not (row.get("logs_sha256") or row.get("results_sha256")):
                 errors.append(f"{row_id} is missing logs_sha256/results_sha256")
             if require_environment_summary and not isinstance(row.get("environment_summary"), dict):

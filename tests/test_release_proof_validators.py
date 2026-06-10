@@ -58,6 +58,60 @@ def test_validate_release_smoke_requires_version_and_commit_when_strict():
 
     assert "win11_clean_no_python_setup is missing app_version" in errors
     assert "win11_clean_no_python_setup is missing release_commit" in errors
+    assert "win11_clean_no_python_setup is missing execution_git_commit" in errors
+
+
+def test_validate_release_smoke_rejects_stale_execution_commit_when_strict():
+    smoke = {
+        "schema": "easy_asr_bench.release_smoke.v2",
+        "commit": "release123",
+        "manual_rows": [
+            {
+                "id": "win11_clean_no_python_setup",
+                "status": "pass",
+                "app_version": "v0.4.0",
+                "release_commit": "old123",
+                "target_release_commit": "release123",
+                "execution_git_commit": "old123",
+                "execution_git_dirty": False,
+            }
+        ],
+    }
+
+    errors = validate_smoke(smoke, ["win11_clean_no_python_setup"], require_all_pass=True)
+
+    assert "win11_clean_no_python_setup execution_git_commit old123 does not match release commit release123" in errors
+
+
+def test_validate_release_smoke_allows_documented_external_execution_commit_exception_when_strict():
+    smoke = {
+        "schema": "easy_asr_bench.release_smoke.v2",
+        "commit": "release123",
+        "manual_rows": [
+            {
+                "id": "nvidia_cuda_torch_onnx_faster_whisper_llama",
+                "status": "pass",
+                "app_version": "v0.4.0",
+                "release_commit": "external123",
+                "target_release_commit": "release123",
+                "execution_git_commit": "external123",
+                "execution_git_dirty": False,
+                "execution_commit_exception": "External hardware row ran from an immutable release-candidate artifact before final history rewrite.",
+                "results_sha256": "sha256:result",
+                "environment_summary": {"system": "Windows"},
+            }
+        ],
+    }
+
+    errors = validate_smoke(
+        smoke,
+        ["nvidia_cuda_torch_onnx_faster_whisper_llama"],
+        require_all_pass=True,
+        require_log_hashes=True,
+        require_environment_summary=True,
+    )
+
+    assert errors == []
 
 
 def test_validate_release_smoke_requires_evidence_fields_when_strict():
@@ -288,6 +342,37 @@ def test_merge_release_evidence_prefers_newest_duplicate_at_same_status(tmp_path
     assert {variant["block_reason"] for variant in row["merged_evidence_variants"]} == {"old reason", "new reason"}
 
 
+def test_merge_release_evidence_fail_variant_dominates_duplicate_pass(tmp_path: Path):
+    pass_dir = tmp_path / "evidence" / "pass" / "same_row"
+    fail_dir = tmp_path / "evidence" / "fail" / "same_row"
+    pass_dir.mkdir(parents=True)
+    fail_dir.mkdir(parents=True)
+    pass_row = {
+        "id": "same_row",
+        "status": "pass",
+        "created_utc": "2026-06-10T00:00:00+00:00",
+        "summary": "later pass",
+    }
+    fail_row = {
+        "id": "same_row",
+        "status": "fail",
+        "created_utc": "2026-06-09T00:00:00+00:00",
+        "summary": "older fail",
+    }
+    (pass_dir / "row.json").write_text(json.dumps(pass_row), encoding="utf-8")
+    (fail_dir / "row.json").write_text(json.dumps(fail_row), encoding="utf-8")
+
+    merged = merge_manual_rows(
+        {"schema": "easy_asr_bench.release_smoke.v2", "manual_rows": [{"id": "same_row", "status": "not_run"}]},
+        evidence_rows(tmp_path / "evidence"),
+    )
+
+    row = merged["manual_rows"][0]
+    assert row["status"] == "fail"
+    assert row["summary"] == "older fail"
+    assert {variant["status"] for variant in row["merged_evidence_variants"]} == {"pass", "fail"}
+
+
 def test_merge_release_evidence_reads_powershell_utf8_bom(tmp_path: Path):
     evidence = tmp_path / "evidence" / "row1"
     evidence.mkdir(parents=True)
@@ -348,6 +433,8 @@ def test_merge_release_evidence_adds_strict_evidence_fields(tmp_path: Path):
             "known": {
                 "id": "known",
                 "status": "pass",
+                "execution_git_commit": "abc123",
+                "execution_git_dirty": False,
                 "environment": {"system": "Windows", "python": "3.12"},
                 "artifacts": [{"path": str(result), "sha256": "sha256:result"}],
             }
@@ -357,8 +444,31 @@ def test_merge_release_evidence_adds_strict_evidence_fields(tmp_path: Path):
     row = merged["manual_rows"][0]
     assert row["app_version"] == "v0.3.9"
     assert row["release_commit"] == "abc123"
+    assert row["target_release_commit"] == "abc123"
+    assert row["execution_git_commit"] == "abc123"
     assert row["environment_summary"] == {"system": "Windows", "python": "3.12"}
     assert row["results_sha256"] == "sha256:result"
+
+
+def test_runtime_matrix_write_row_records_execution_git_state(tmp_path: Path, monkeypatch):
+    import qa.runtime_matrix.common as common
+
+    monkeypatch.setattr(
+        common,
+        "git_state",
+        lambda: {
+            "execution_git_commit": "abc123",
+            "execution_git_dirty": False,
+            "execution_git_status": "clean",
+        },
+    )
+
+    row = common.write_row("known", "pass", tmp_path, summary="ok")
+
+    assert row["execution_git_commit"] == "abc123"
+    assert row["execution_git_dirty"] is False
+    assert row["execution_git_status"] == "clean"
+    assert json.loads((tmp_path / "row.json").read_text(encoding="utf-8"))["execution_git_commit"] == "abc123"
 
 
 def test_merge_release_evidence_sanitizes_public_machine_details(tmp_path: Path):

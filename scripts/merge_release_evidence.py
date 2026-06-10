@@ -20,7 +20,7 @@ def sha256(path: Path) -> str:
 
 
 def _status_rank(row: dict) -> int:
-    return {"pass": 4, "fail": 3, "blocked": 2, "not_run": 1}.get(str(row.get("status", "unknown")), 0)
+    return {"fail": 5, "pass": 4, "blocked": 2, "not_run": 1}.get(str(row.get("status", "unknown")), 0)
 
 
 def _row_sort_key(row: dict) -> tuple[int, str]:
@@ -89,7 +89,9 @@ def _enrich_release_evidence(row: dict, smoke: dict) -> dict:
     if tag:
         output.setdefault("app_version", tag)
     if commit:
-        output.setdefault("release_commit", commit)
+        output.setdefault("target_release_commit", commit)
+    if "release_commit" not in output and output.get("execution_git_commit"):
+        output["release_commit"] = output["execution_git_commit"]
     environment_summary = _environment_summary(output, smoke)
     if environment_summary:
         output.setdefault("environment_summary", environment_summary)
