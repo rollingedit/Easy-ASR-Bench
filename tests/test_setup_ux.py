@@ -60,6 +60,13 @@ def test_setup_doctor_forwards_json_and_strict_flags():
     assert "python -m app.doctor --config config.json %DOCTOR_ARGS%" in setup
 
 
+def test_setup_runs_configured_update_check_after_config_init():
+    setup = Path("setup.bat").read_text(encoding="utf-8")
+
+    assert "Checking for updates..." in setup
+    assert '".venv\\Scripts\\python.exe" -m app.update_check --config config.json --context setup' in setup
+
+
 def test_setup_repair_forwards_repair_mode_to_public_installer():
     setup = Path("setup.bat").read_text(encoding="utf-8")
 

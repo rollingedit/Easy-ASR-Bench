@@ -935,6 +935,9 @@ def main() -> None:
 
 def _main(args: argparse.Namespace) -> None:
     config = load_config(Path(args.config))
+    from .update_check import check_for_updates_from_config
+
+    check_for_updates_from_config(config, context="run")
     if args.doctor:
         from .doctor import run_doctor
 

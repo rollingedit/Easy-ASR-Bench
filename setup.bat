@@ -311,6 +311,9 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo Checking for updates...
+".venv\Scripts\python.exe" -m app.update_check --config config.json --context setup
+
 echo Running doctor...
 ".venv\Scripts\python.exe" -m app.doctor --config config.json
 

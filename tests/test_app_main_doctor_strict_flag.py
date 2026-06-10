@@ -99,3 +99,50 @@ def test_download_model_flag_rescans_without_requiring_restart(monkeypatch, tmp_
 
     assert args.interactive is True
     assert calls == {"scan": 1, "summary": 1}
+
+
+def test_app_main_runs_update_check_from_config(monkeypatch, tmp_path: Path):
+    calls = {"update": 0}
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        '{"app":{"check_for_updates_on_run":true},"folders":{"models":"Models","input":"Input","output":"Output","temp":"Temp","logs":"Logs","cache":"Cache"}}\n',
+        encoding="utf-8",
+    )
+
+    def fake_update(config, *, context, print_func=print):
+        calls["update"] += 1
+        assert context == "run"
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("app.update_check.check_for_updates_from_config", fake_update)
+    monkeypatch.setattr(app_main, "scan_models", lambda models_root: ([], []))
+    monkeypatch.setattr(app_main, "print_scan_summary", lambda runnable, unsupported: None)
+
+    args = argparse.Namespace(
+        paths=[],
+        config=str(config_path),
+        interactive=False,
+        scan_only=True,
+        doctor=False,
+        json=False,
+        strict=False,
+        repair_plan=False,
+        repair_all_safe=False,
+        validate_real_smoke=False,
+        install_deps=False,
+        allow_downloads=False,
+        no_network=False,
+        full_real_smoke=False,
+        first_run=False,
+        first_run_smoke=False,
+        download_model=False,
+        download_model_first=False,
+        open_models=False,
+        open_input=False,
+        watch=False,
+        once=False,
+    )
+
+    app_main._main(args)
+
+    assert calls["update"] == 1
