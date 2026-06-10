@@ -33,7 +33,7 @@ METADATA_NAMES = {
     "vocabulary.txt",
 }
 
-LARGE_CHOICE_FILE_COUNT = 20
+LARGE_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024
 MAX_DESTINATION_FOLDER_CHARS = 96
 MAX_WINDOWS_DOWNLOAD_PATH_CHARS = 240
 SAME_PACKAGE_REPAIR_LIMIT = 12
@@ -56,6 +56,15 @@ class DownloadChoice:
     files: tuple[str, ...]
     task_hint: str = "unknown"
     notes: tuple[str, ...] = ()
+    total_bytes: int | None = None
+    recommended: bool = False
+
+
+@dataclass(frozen=True)
+class RepoInspection:
+    ref: HFModelRef
+    files: list[str]
+    file_sizes: dict[str, int]
 
 
 def parse_hf_model_ref(raw: str) -> HFModelRef:
@@ -198,6 +207,90 @@ def _gguf_choice_name(gguf: str) -> str:
     name = _basename(gguf)
     match = re.match(r"(.+)-00001-of-\d{5}\.gguf$", name, re.IGNORECASE)
     return f"{match.group(1)} split GGUF" if match else Path(name).stem
+
+
+def _gguf_quant_rank(gguf: str) -> int:
+    base = _basename(gguf).lower()
+    ranks = {
+        "q4_k_m": 100,
+        "q4_k_s": 95,
+        "iq4_xs": 90,
+        "q5_k_m": 85,
+        "q5_k_s": 80,
+        "q3_k_m": 70,
+        "q3_k_l": 68,
+        "q3_k_s": 65,
+        "q6_k": 60,
+        "q2_k": 50,
+        "q8_0": 40,
+        "f16": 30,
+        "bf16": 30,
+        "f32": 20,
+    }
+    for marker, rank in ranks.items():
+        if re.search(rf"(?:^|[._-]){re.escape(marker)}(?:[._-]|\.gguf$)", base):
+            return rank
+    return 0
+
+
+def _is_recommended_gguf_choice(gguf: str) -> bool:
+    return _gguf_quant_rank(gguf) >= 90
+
+
+def _gguf_recommendation_notes(gguf: str, *, selected: bool) -> tuple[str, ...]:
+    if not selected:
+        return ()
+    return ("Recommended GGUF default: a Q4-family quant usually balances RAM use, speed, and transcript quality for first downloads.",)
+
+
+def _format_bytes(size: int | None) -> str:
+    if size is None:
+        return "unknown"
+    units = ["B", "KB", "MB", "GB", "TB"]
+    value = float(size)
+    unit = units[0]
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
+            break
+        value /= 1024
+    return f"{value:.1f} {unit}" if unit != "B" else f"{int(value)} B"
+
+
+def _choice_total_bytes(files: tuple[str, ...], file_sizes: dict[str, int] | None) -> int | None:
+    sizes = file_sizes or {}
+    if not files or not sizes:
+        return None
+    total = 0
+    for filename in files:
+        if filename not in sizes:
+            return None
+        total += int(sizes[filename])
+    return total
+
+
+def annotate_choice_metadata(choices: list[DownloadChoice], file_sizes: dict[str, int] | None = None) -> list[DownloadChoice]:
+    annotated: list[DownloadChoice] = []
+    for choice in choices:
+        recommended = choice.recommended
+        notes = choice.notes
+        if choice.kind == "gguf" and choice.primary_files:
+            recommended = recommended or _is_recommended_gguf_choice(choice.primary_files[0])
+            for note in _gguf_recommendation_notes(choice.primary_files[0], selected=recommended):
+                if note not in notes:
+                    notes = (*notes, note)
+        annotated.append(
+            DownloadChoice(
+                label=choice.label,
+                kind=choice.kind,
+                primary_files=choice.primary_files,
+                files=choice.files,
+                task_hint=choice.task_hint,
+                notes=notes,
+                total_bytes=_choice_total_bytes(choice.files, file_sizes),
+                recommended=recommended,
+            )
+        )
+    return annotated
 
 
 def _safetensors_choice_name(weight: str) -> str:
@@ -371,7 +464,7 @@ def build_download_choices(files: list[str], ref: HFModelRef) -> list[DownloadCh
     unique: dict[tuple[str, tuple[str, ...]], DownloadChoice] = {}
     for choice in choices:
         unique[(choice.kind, choice.files)] = choice
-    return list(unique.values())
+    return annotate_choice_metadata(list(unique.values()))
 
 
 def build_smart_download_choices(files: list[str], ref: HFModelRef) -> tuple[HFModelRef, list[DownloadChoice]]:
@@ -968,7 +1061,10 @@ def offer_missing_file_repair(
         print_func("Exact missing-file matches are available in the repo:")
         for index, filename in enumerate(repair_files, 1):
             print_func(f"[{key(str(index))}] {filename}")
-        answer = input_func(f"Download these missing files now? [{key('Y')}/{key('n')}] ").strip().lower()
+        answer_raw = _read_input(input_func, f"Download these missing files now? [{key('Y')}/{key('n')}] ", print_func)
+        if answer_raw is None:
+            return repair_plan
+        answer = answer_raw.strip().lower()
         if answer not in {"n", "no"}:
             execution = execute_missing_file_repair_plan(ref, choice, repo_files, destination, repair_plan, allow_downloads=True, print_func=print_func)
             repair_plan["last_execution"] = execution
@@ -988,7 +1084,10 @@ def offer_missing_file_repair(
             print_func(f"[{key(str(index))}] {filename}")
         if len(same_package_files) > SAME_PACKAGE_REPAIR_LIMIT:
             print_func(f"This repair set has {len(same_package_files)} file(s). Review before downloading.")
-        answer = input_func(f"Download these same-package repair files now? [{key('y')}/{key('N')}] ").strip().lower()
+        answer_raw = _read_input(input_func, f"Download these same-package repair files now? [{key('y')}/{key('N')}] ", print_func)
+        if answer_raw is None:
+            return repair_plan
+        answer = answer_raw.strip().lower()
         if answer in {"y", "yes"}:
             execution = execute_missing_file_repair_plan(ref, choice, repo_files, destination, repair_plan, allow_downloads=True, print_func=print_func)
             repair_plan["last_execution"] = execution
@@ -999,10 +1098,16 @@ def offer_missing_file_repair(
     print_func("No automatic repair download was attempted for the remaining ambiguous requirements.")
     write_llm_file_audit_request(ref, choice, repo_files, destination, missing)
     print_func(f"Wrote structured LLM/file-audit request to {destination / 'hf_missing_file_request.json'}")
-    answer = input_func(f"Paste validated LLM recommendation JSON now? [{key('y')}/{key('N')}] ").strip().lower()
+    answer_raw = _read_input(input_func, f"Paste validated LLM recommendation JSON now? [{key('y')}/{key('N')}] ", print_func)
+    if answer_raw is None:
+        return repair_plan
+    answer = answer_raw.strip().lower()
     if answer not in {"y", "yes"}:
         return repair_plan
-    raw_recommendation = input_func(prompt_label("Recommendation JSON or file path> ")).strip()
+    recommendation_answer = _read_input(input_func, prompt_label("Recommendation JSON or file path> "), print_func)
+    if recommendation_answer is None:
+        return repair_plan
+    raw_recommendation = recommendation_answer.strip()
     if raw_recommendation:
         path_text = raw_recommendation.strip('"').strip("'")
         maybe_path = Path(path_text)
@@ -1019,7 +1124,10 @@ def offer_missing_file_repair(
     print_func("Validated LLM-recommended repo files:")
     for index, filename in enumerate(recommended_files, 1):
         print_func(f"[{key(str(index))}] {filename}")
-    answer = input_func(f"Download these recommended files now? [{key('y')}/{key('N')}] ").strip().lower()
+    answer_raw = _read_input(input_func, f"Download these recommended files now? [{key('y')}/{key('N')}] ", print_func)
+    if answer_raw is None:
+        return repair_plan
+    answer = answer_raw.strip().lower()
     if answer in {"y", "yes"}:
         _download_validated_files(ref, choice, recommended_files, destination, print_func=print_func)
     return repair_plan
@@ -1070,22 +1178,135 @@ def list_repo_files(ref: HFModelRef) -> list[str]:
     return list(HfApi().list_repo_files(ref.repo_id, revision=ref.revision))
 
 
+_ORIGINAL_LIST_REPO_FILES = list_repo_files
+
+
+def _hub_error_guidance(exc: Exception) -> str:
+    text = f"{type(exc).__name__}: {exc}"
+    lower = text.lower()
+    if any(marker in lower for marker in ["401", "403", "gated", "private", "unauthorized", "forbidden", "repository not found"]):
+        return (
+            text
+            + " This repo may be gated or private. Sign in with `huggingface-cli login`, accept the model terms on huggingface.co if required, "
+            "or choose a public model package."
+        )
+    return text
+
+
+def inspect_repo(ref: HFModelRef) -> RepoInspection:
+    if list_repo_files is not _ORIGINAL_LIST_REPO_FILES:
+        return RepoInspection(ref=ref, files=list_repo_files(ref), file_sizes={})
+    try:
+        from huggingface_hub import HfApi
+
+        api = HfApi()
+        try:
+            info = api.model_info(ref.repo_id, revision=ref.revision, files_metadata=True)
+        except TypeError:
+            info = api.model_info(ref.repo_id, revision=ref.revision)
+        resolved_revision = str(getattr(info, "sha", "") or ref.revision or "")
+        files: list[str] = []
+        file_sizes: dict[str, int] = {}
+        for sibling in getattr(info, "siblings", []) or []:
+            name = str(getattr(sibling, "rfilename", "") or "")
+            if not name:
+                continue
+            files.append(name)
+            size = getattr(sibling, "size", None)
+            if isinstance(size, int) and size >= 0:
+                file_sizes[name] = size
+        if not files:
+            files = list_repo_files(ref)
+        return RepoInspection(ref=HFModelRef(ref.repo_id, resolved_revision or ref.revision, ref.subfolder), files=sorted(files), file_sizes=file_sizes)
+    except Exception as exc:
+        raise RuntimeError(_hub_error_guidance(exc)) from exc
+
+
+def _doctor_model_layout_repair_command() -> str:
+    return "setup.bat --doctor --repair-model-layouts --allow-downloads"
+
+
+def _write_initial_download_repair_plan(ref: HFModelRef, choice: DownloadChoice, repo_files: list[str], destination: Path) -> Path:
+    records = [
+        {
+            "issue_id": "hf_download:selected_package",
+            "status": "needs_repair",
+            "severity": "download_incomplete",
+            "affected_dependency_group": "",
+            "affected_models": [str(destination)],
+            "adapter_name": "",
+            "container_format": choice.kind,
+            "missing": list(choice.files),
+            "exact_repo_files": list(choice.files),
+            "same_package_files": [],
+            "safe_download_files": list(choice.files),
+            "can_auto_repair": True,
+            "requires_confirmation": True,
+            "repair_action": "download_selected_hf_package",
+            "repair_command": _doctor_model_layout_repair_command(),
+            "block_reason": "",
+        }
+    ]
+    plan = {
+        "schema": "easy_asr_bench.model_layout_repair_plan.v1",
+        "repo_id": ref.repo_id,
+        "revision": ref.revision,
+        "selected_choice": {
+            "label": choice.label,
+            "kind": choice.kind,
+            "task_hint": choice.task_hint,
+            "primary_files": list(choice.primary_files),
+            "downloaded_files": [],
+            "planned_download_files": list(choice.files),
+            "total_bytes": choice.total_bytes,
+        },
+        "destination": str(destination),
+        "repo_files": list(repo_files),
+        "records": records,
+        "summary": {
+            "total": len(records),
+            "needs_repair": len(records),
+            "can_auto_repair": len(records),
+            "blocked": 0,
+            "planned_download_files": len(choice.files),
+            "planned_download_bytes": choice.total_bytes,
+        },
+    }
+    return write_missing_file_repair_plan(destination, plan)
+
+
+def _read_input(input_func, prompt: str, print_func=print) -> str | None:
+    try:
+        return input_func(prompt)
+    except EOFError:
+        print_func("Input closed before the Hugging Face download choice was confirmed.")
+        return None
+
+
 def download_hf_model_from_ref(models_root: Path, raw: str, input_func=input, print_func=print) -> Path | None:
     try:
         ref = parse_hf_model_ref(raw)
-        files = list_repo_files(ref)
+        inspection = inspect_repo(ref)
+        ref = inspection.ref
+        files = inspection.files
         ref, choices = build_smart_download_choices(files, ref)
+        choices = annotate_choice_metadata(choices, inspection.file_sizes)
     except Exception as exc:
-        print_func(f"Could not inspect that Hugging Face model: {exc}")
+        print_func(f"Could not inspect that Hugging Face model: {_hub_error_guidance(exc)}")
         return None
     if not choices:
         print_func("No supported GGUF, Safetensors, or ONNX package choices were found in that repo/subfolder.")
         return None
     print_func("")
     print_func("Available download choices:")
+    recommended_indexes = [index for index, choice in enumerate(choices, 1) if choice.recommended]
+    default_index = recommended_indexes[0] if recommended_indexes else (1 if len(choices) == 1 else None)
     for index, choice in enumerate(choices, 1):
-        print_func(f"[{key(str(index))}] {choice.label}")
+        default_marker = " (default)" if default_index == index else ""
+        print_func(f"[{key(str(index))}] {choice.label}{default_marker}")
         print_func(f"    files: {len(choice.files)} initial file(s)")
+        if choice.total_bytes is not None:
+            print_func(f"    size: {_format_bytes(choice.total_bytes)}")
         if choice.task_hint == "reference_llm":
             print_func("    use: local LLM reference/correction, not direct ASR")
         elif choice.task_hint == "asr_audio":
@@ -1098,26 +1319,44 @@ def download_hf_model_from_ref(models_root: Path, raw: str, input_func=input, pr
         selected = choices[0]
     else:
         while True:
-            raw_choice = input_func(prompt_label("Download choice> ")).strip()
+            prompt = "Download choice"
+            if default_index is not None:
+                prompt += f" [Enter={default_index}]"
+            answer = _read_input(input_func, prompt_label(prompt + "> "), print_func)
+            if answer is None:
+                return None
+            raw_choice = answer.strip()
+            if not raw_choice and default_index is not None:
+                selected = choices[default_index - 1]
+                break
             if raw_choice.isdigit() and 1 <= int(raw_choice) <= len(choices):
                 selected = choices[int(raw_choice) - 1]
                 break
             print_func("Choose one download number.")
-    if selected.task_hint == "unknown" or len(selected.files) > LARGE_CHOICE_FILE_COUNT:
+    if selected.task_hint == "unknown" or (selected.total_bytes is not None and selected.total_bytes >= LARGE_DOWNLOAD_BYTES):
         print_func("")
-        print_func(f"Selected package has {len(selected.files)} file(s).")
+        print_func(f"Selected package has {len(selected.files)} file(s), size {_format_bytes(selected.total_bytes)}.")
         if selected.task_hint == "unknown":
             print_func("This is an unknown package layout and may not be runnable.")
-        print_func("Large or unknown packages require typed confirmation to prevent accidental multi-GB downloads.")
-        answer = input_func(f"Type {key(TYPED_DOWNLOAD_CONFIRMATION)} to download, or press Enter to cancel: ").strip()
+        print_func("Large or unknown packages require typed confirmation to prevent accidental downloads.")
+        answer_raw = _read_input(input_func, f"Type {key(TYPED_DOWNLOAD_CONFIRMATION)} to download, or press Enter to cancel: ", print_func)
+        if answer_raw is None:
+            return None
+        answer = answer_raw.strip()
         if answer != TYPED_DOWNLOAD_CONFIRMATION:
             print_func("Download cancelled.")
             return None
     destination = destination_for(models_root, ref, selected)
+    plan_path = _write_initial_download_repair_plan(ref, selected, files, destination)
+    print_func(f"Wrote download repair plan to {plan_path}")
+    print_func("Repair/resume command: " + _doctor_model_layout_repair_command())
+    print_func("Note: Hugging Face Hub may keep a cache copy in addition to the Easy ASR Bench Models folder; setup.bat --doctor reports cache behavior.")
     try:
         downloaded = download_choice(ref, selected, destination, print_func=print_func)
     except Exception as exc:
-        print_func(f"Download failed: {exc}")
+        print_func(f"Download failed: {_hub_error_guidance(exc)}")
+        print_func(f"Download repair plan: {plan_path}")
+        print_func("Resume command: " + _doctor_model_layout_repair_command())
         return None
     print_func(f"Downloaded {len(downloaded)} file(s) to {destination}")
     offer_missing_file_repair(ref, selected, files, destination, input_func=input_func, print_func=print_func)
@@ -1128,7 +1367,10 @@ def download_hf_model_interactive(models_root: Path, input_func=input, print_fun
     last_destination: Path | None = None
     print_func("Paste Hugging Face model URLs or repo ids one at a time. Press Enter when done.")
     while True:
-        raw = input_func(prompt_label("Hugging Face model URL or repo id> ")).strip()
+        answer = _read_input(input_func, prompt_label("Hugging Face model URL or repo id> "), print_func)
+        if answer is None:
+            return last_destination
+        raw = answer.strip()
         if not raw:
             return last_destination
         try:

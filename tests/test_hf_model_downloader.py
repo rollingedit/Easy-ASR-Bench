@@ -6,6 +6,7 @@ from app.hf_model_downloader import (
     DownloadChoice,
     HFModelRef,
     RECOMMENDED_BASELINE_REPO,
+    RepoInspection,
     build_missing_file_repair_plan,
     build_download_choices,
     build_smart_download_choices,
@@ -518,7 +519,8 @@ def test_destination_for_shrinks_further_under_deep_roots(tmp_path: Path):
 def test_interactive_download_requires_confirmation_for_large_choice(tmp_path: Path, monkeypatch):
     files = ["config.json", "tokenizer.json", "preprocessor_config.json"]
     files.extend(f"onnx/encoder_model_{index}.onnx" for index in range(21))
-    monkeypatch.setattr("app.hf_model_downloader.list_repo_files", lambda ref: files)
+    sizes = {filename: 120 * 1024 * 1024 for filename in files}
+    monkeypatch.setattr("app.hf_model_downloader.inspect_repo", lambda ref: RepoInspection(ref, files, sizes))
     called = {"downloaded": False}
 
     def fake_download(ref, choice, destination, print_func=print):
@@ -537,7 +539,8 @@ def test_interactive_download_requires_confirmation_for_large_choice(tmp_path: P
 def test_interactive_download_rejects_y_for_large_choice(tmp_path: Path, monkeypatch):
     files = ["config.json", "tokenizer.json", "preprocessor_config.json"]
     files.extend(f"onnx/encoder_model_{index}.onnx" for index in range(21))
-    monkeypatch.setattr("app.hf_model_downloader.list_repo_files", lambda ref: files)
+    sizes = {filename: 120 * 1024 * 1024 for filename in files}
+    monkeypatch.setattr("app.hf_model_downloader.inspect_repo", lambda ref: RepoInspection(ref, files, sizes))
     called = {"downloaded": False}
 
     def fake_download(ref, choice, destination, print_func=print):
@@ -556,7 +559,8 @@ def test_interactive_download_rejects_y_for_large_choice(tmp_path: Path, monkeyp
 def test_interactive_download_accepts_typed_download_for_large_choice(tmp_path: Path, monkeypatch):
     files = ["config.json", "tokenizer.json", "preprocessor_config.json"]
     files.extend(f"onnx/encoder_model_{index}.onnx" for index in range(21))
-    monkeypatch.setattr("app.hf_model_downloader.list_repo_files", lambda ref: files)
+    sizes = {filename: 120 * 1024 * 1024 for filename in files}
+    monkeypatch.setattr("app.hf_model_downloader.inspect_repo", lambda ref: RepoInspection(ref, files, sizes))
     called = {"downloaded": False}
 
     def fake_download(ref, choice, destination, print_func=print):
@@ -588,6 +592,31 @@ def test_interactive_download_inspection_failure_returns_to_user_without_crash(t
     assert any("network down" in message for message in messages)
 
 
+def test_interactive_download_gated_repo_error_prints_token_guidance(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("app.hf_model_downloader.inspect_repo", lambda ref: (_ for _ in ()).throw(RuntimeError("403 gated repo")))
+    messages: list[str] = []
+    answers = iter(["owner/private", ""])
+
+    result = download_hf_model_interactive(tmp_path, input_func=lambda prompt: next(answers), print_func=messages.append)
+
+    assert result is None
+    assert any("huggingface-cli login" in message for message in messages)
+    assert any("accept the model terms" in message for message in messages)
+
+
+def test_interactive_download_eof_returns_without_crash(tmp_path: Path):
+    messages: list[str] = []
+
+    result = download_hf_model_interactive(
+        tmp_path,
+        input_func=lambda prompt: (_ for _ in ()).throw(EOFError()),
+        print_func=messages.append,
+    )
+
+    assert result is None
+    assert any("Input closed" in message for message in messages)
+
+
 def test_interactive_download_loops_until_blank_enter(tmp_path: Path, monkeypatch):
     files = ["config.json", "tokenizer.json", "preprocessor_config.json", "model.safetensors"]
     monkeypatch.setattr("app.hf_model_downloader.list_repo_files", lambda ref: files)
@@ -608,6 +637,51 @@ def test_interactive_download_loops_until_blank_enter(tmp_path: Path, monkeypatc
     assert result == destination_for(tmp_path, HFModelRef("owner/second"), build_smart_download_choices(files, HFModelRef("owner/second"))[1][0])
     assert any("Invalid Hugging Face link or repo id" in message for message in messages)
     assert any("Paste another Hugging Face link, or press Enter when done." in message for message in messages)
+
+
+def test_download_writes_resume_plan_before_first_file_and_prints_doctor_command(tmp_path: Path, monkeypatch):
+    files = ["config.json", "tokenizer.json", "preprocessor_config.json", "model.safetensors"]
+    monkeypatch.setattr("app.hf_model_downloader.list_repo_files", lambda ref: files)
+    messages: list[str] = []
+
+    def fake_download(ref, choice, destination, print_func=print):
+        raise RuntimeError("connection reset")
+
+    monkeypatch.setattr("app.hf_model_downloader.download_choice", fake_download)
+    answers = iter(["owner/asr", ""])
+
+    result = download_hf_model_interactive(tmp_path, input_func=lambda prompt: next(answers), print_func=messages.append)
+
+    destination = destination_for(tmp_path, HFModelRef("owner/asr"), build_smart_download_choices(files, HFModelRef("owner/asr"))[1][0])
+    plan_path = destination / "hf_model_layout_repair_plan.json"
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert result is None
+    assert plan["schema"] == "easy_asr_bench.model_layout_repair_plan.v1"
+    assert plan["records"][0]["repair_action"] == "download_selected_hf_package"
+    assert set(plan["records"][0]["safe_download_files"]) == set(files)
+    assert any("setup.bat --doctor --repair-model-layouts --allow-downloads" in message for message in messages)
+    assert any("Download failed" in message for message in messages)
+
+
+def test_download_uses_resolved_hub_revision_for_materialization(tmp_path: Path, monkeypatch):
+    files = ["config.json", "tokenizer.json", "preprocessor_config.json", "model.safetensors"]
+    resolved_ref = HFModelRef("owner/asr", "0123456789abcdef0123456789abcdef01234567")
+    monkeypatch.setattr("app.hf_model_downloader.inspect_repo", lambda ref: RepoInspection(resolved_ref, files, {"model.safetensors": 123}))
+    revisions: list[str | None] = []
+
+    def fake_download(ref, choice, destination, print_func=print):
+        revisions.append(ref.revision)
+        destination.mkdir(parents=True, exist_ok=True)
+        return [destination / "model.safetensors"]
+
+    monkeypatch.setattr("app.hf_model_downloader.download_choice", fake_download)
+    answers = iter(["owner/asr", ""])
+
+    result = download_hf_model_interactive(tmp_path, input_func=lambda prompt: next(answers), print_func=lambda text: None)
+
+    plan = json.loads((result / "hf_model_layout_repair_plan.json").read_text(encoding="utf-8"))
+    assert revisions == [resolved_ref.revision]
+    assert plan["revision"] == resolved_ref.revision
 
 
 def test_interactive_download_unknown_choice_requires_confirmation(tmp_path: Path, monkeypatch):
