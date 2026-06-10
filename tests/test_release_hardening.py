@@ -1,3 +1,4 @@
+import builtins
 import hashlib
 import json
 import re
@@ -350,6 +351,46 @@ def test_release_verifier_falls_back_to_gh_for_draft_release():
 
 def test_physical_files_validate_repo_bytes():
     validate_root(ROOT)
+
+
+def test_physical_validator_does_not_require_pyyaml_for_standalone_setup(tmp_path, monkeypatch):
+    app_root = tmp_path / "app_root"
+    for rel in [
+        "setup.bat",
+        "Run.bat",
+        "Drop_Audio_Or_Folders_Here.bat",
+        "installer/install.ps1",
+        "app/main.py",
+        "app/model_scanner.py",
+        "app/results_writer.py",
+        "app/scoring.py",
+        "app/hf_model_downloader.py",
+        "scripts/validate_physical_files.py",
+        "scripts/verify_github_release.py",
+        "schemas/results.v1.schema.json",
+        "schemas/chunk_plan.v1.schema.json",
+        "schemas/run_error.v1.schema.json",
+        "schemas/llm_reference.v1.schema.json",
+        ".github/workflows/release-gate.yml",
+        ".github/workflows/publish-release.yml",
+        "requirements/core.txt",
+        "config.json",
+    ]:
+        source = ROOT / rel
+        target = app_root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(source.read_bytes())
+
+    real_import = builtins.__import__
+
+    def import_without_yaml(name, *args, **kwargs):
+        if name == "yaml":
+            raise ModuleNotFoundError("No module named 'yaml'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_yaml)
+
+    validate_root(app_root)
 
 
 def test_physical_validator_ignores_suffixed_pytest_tmp_dirs(tmp_path):

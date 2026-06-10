@@ -151,10 +151,10 @@ def _validate_formats(root: Path) -> None:
             compile(source, str(path), "exec")
     try:
         import yaml
-    except ModuleNotFoundError as exc:
-        raise AssertionError("PyYAML is required to validate workflow YAML") from exc
+    except ModuleNotFoundError:
+        yaml = None
     workflow_dir = root / ".github" / "workflows"
-    if workflow_dir.exists():
+    if workflow_dir.exists() and yaml is not None:
         for path in workflow_dir.glob("*.yml"):
             yaml.safe_load(path.read_text(encoding="utf-8"))
 
