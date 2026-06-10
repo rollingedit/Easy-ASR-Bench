@@ -71,6 +71,22 @@ Release checksums protect the setup/bootstrap assets that Easy ASR Bench publish
 
 Setup writes logs to `Logs/setup.log`.
 
+## SmartScreen, Defender, And Antivirus Notes
+
+Easy ASR Bench release launchers are unsigned `.bat` and PowerShell files. Windows SmartScreen, Defender, corporate endpoint tools, or browser download protection may warn because the files are scripts from the internet and are not code-signed. That warning is a trust decision, not proof that the release is malicious or safe.
+
+Setup uses these network sources only for the actions you choose:
+
+- GitHub release assets for `setup.bat`, `install.ps1`, manifests, checksums, and the app ZIP.
+- python.org for the clean-Windows Python fallback when Python is not already available and `winget` is unavailable.
+- Microsoft Visual C++ Redistributable download URLs or `winget` for the required native runtime.
+- PyPI and configured Python package indexes for core and optional model runtime packages.
+- Hugging Face only when you choose a model download or run a validation row that explicitly allows downloads.
+
+Published setup assets are verified by SHA-256 checksums before installation. User media and local model files stay on the machine; Easy ASR Bench does not upload them. Reports are written under `Output`, logs under `Logs`, temporary audio under `Temp`, and downloaded/staged model/runtime files under `Models` or `Cache`.
+
+If security software quarantines a release file, do not disable protection globally. Keep the warning details, verify the release checksums from GitHub, restore or allow only the specific Easy ASR Bench file if your policy permits it, and attach the warning plus `setup.bat --doctor --json` output when opening a bug report. On managed devices, ask the device administrator to review the exact release asset and hash.
+
 Default uninstall removes app/runtime files but preserves user data folders and `config.json`. A standalone downloaded `setup.bat --uninstall` can use the installed uninstaller when the installer script is not beside `setup.bat`. Destructive user-data removal requires the explicit PowerShell installer flags `-RemoveUserData -ConfirmRemoveUserData "DELETE EASY ASR BENCH USER DATA"`.
 
 Updates move preserved user folders and `config.json` into the new install instead of recursively copying large model folders. They write `Logs/install-preservation-report.json` listing preserved user folders, file counts, byte counts, and the `move_without_model_copy` method. If activation fails, rollback moves those preserved folders back with the previous install.

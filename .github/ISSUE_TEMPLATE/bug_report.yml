@@ -1,0 +1,66 @@
+name: Bug report
+description: Report a reproducible Easy ASR Bench problem.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Include logs and environment details so the issue can be reproduced. Remove private media/model paths before posting if needed.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: List the exact commands or launcher clicks.
+      placeholder: |
+        1. Run ...
+        2. Select ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Doctor output
+      description: Attach or paste the output from `Run.bat --doctor --json` or `setup.bat --doctor --json`.
+      render: json
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Example: Windows 11 23H2, Windows 10 22H2, Windows Sandbox, or VM provider.
+    validations:
+      required: true
+  - type: dropdown
+    id: install_mode
+    attributes:
+      label: Install mode
+      options:
+        - Release ZIP or setup.bat
+        - Local source checkout
+        - Windows Sandbox or VM validation
+    validations:
+      required: true
+  - type: input
+    id: model_runtime
+    attributes:
+      label: Model and runtime type
+      description: Example: faster-whisper CPU, ONNX DirectML, ONNX OpenVINO, GGUF ASR+mmproj, Hugging Face Safetensors.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and reports
+      description: Attach the latest run/setup/crash log, relevant `results.json`, or report folder details. Redact private filenames if needed.
+    validations:
+      required: true

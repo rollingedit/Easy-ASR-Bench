@@ -263,5 +263,11 @@ Easy ASR Bench does not execute arbitrary Python files from model folders. Safet
 - **GGUF dependency missing:** install the `llama_cpp` dependency group when prompted, or choose the manual ChatGPT/Claude workflow.
 - **GGUF model lives in another app folder:** choose the paste-path option in the LLM reference menu. The path is saved in `config.json` and scanned again on the next run.
 - **Whisper model not detected:** check `docs/whisper_models.md`.
+- **Unexpected app error:** check the printed `Logs/crash_*.log`, run `Run.bat --doctor --json`, and open a GitHub bug report with the issue template.
+- **SmartScreen, Defender, or antivirus warning:** see `docs/what_setup_installs.md`. The release uses unsigned batch/PowerShell launchers, verifies published setup assets by checksum, and keeps your media/model files local unless you choose a download.
 - **Setup details:** see `docs/what_setup_installs.md`.
 - **Release verification:** see `docs/release_verification.md`.
+
+## Support
+
+For bugs, use the GitHub bug report template and include `Run.bat --doctor --json`, the latest run/setup/crash log, Windows version, install mode, and model/runtime type. Do not upload private media or model files unless you intentionally choose to share them.
