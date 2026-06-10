@@ -21,9 +21,9 @@ Input/*
 *.partial.txt
 dist/
 release_notes/
+_local/
 .pytest_cache/
 .pytest_tmp/
 release-smoke-v*.json
 release-verification-v*.txt
 release-verification-manifest-v*.json
-
