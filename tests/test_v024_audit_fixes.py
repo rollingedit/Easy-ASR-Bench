@@ -63,9 +63,9 @@ def test_installer_preservation_does_not_use_literalpath_wildcard():
     assert 'Join-Path $source "*"' not in text
     preservation_block = text.split("function Move-PreservedUserData", 1)[1].split("function Restore-MovedUserData", 1)[0]
     assert "Copy-Item -LiteralPath $child.FullName" not in preservation_block
-    assert "Move-Item -LiteralPath $source -Destination $dest" in preservation_block
+    assert "Move-PreservedDirectory $source $dest" in preservation_block
     assert 'method = "move_without_model_copy"' in preservation_block
     assert 'status = "moved"' in preservation_block
-    assert "Restore-MovedUserData $New $Backup" in text
+    assert "Restore-MovedUserData $Preserve $Backup" in text
     assert "[switch]$RemoveUserData" in text
     assert "User data was preserved" in text
