@@ -11,6 +11,28 @@ from pathlib import Path
 from qa.runtime_matrix.common import ROOT, write_row
 
 PREBOOTSTRAP_PROBE_ENV = "EASY_ASR_BENCH_PREBOOTSTRAP_PROBE"
+WINDOWS_11_BUILD_FLOOR = 22000
+
+
+def _windows_build_number(version: str) -> int | None:
+    for part in reversed(str(version).split(".")):
+        if part.isdigit():
+            return int(part)
+    return None
+
+
+def _is_windows_11(platform_info: dict) -> bool:
+    if platform_info.get("system") != "Windows":
+        return False
+    build = _windows_build_number(str(platform_info.get("version", "")))
+    return str(platform_info.get("release")) == "11" or (build is not None and build >= WINDOWS_11_BUILD_FLOOR)
+
+
+def _is_windows_10(platform_info: dict) -> bool:
+    if platform_info.get("system") != "Windows":
+        return False
+    build = _windows_build_number(str(platform_info.get("version", "")))
+    return str(platform_info.get("release")) == "10" and build is not None and build < WINDOWS_11_BUILD_FLOOR
 
 
 def _python_probe() -> dict:
@@ -115,7 +137,7 @@ def _win11_clean_no_python(row_id: str, evidence_dir: Path) -> dict:
         failures.append("setup.bat missing clean-bootstrap markers")
     if details["setup_dry_run_local"]["exit_code"] != 0:
         failures.append("setup.bat dry-run local failed")
-    is_win11 = details["platform"]["system"] == "Windows" and details["platform"]["release"] == "11"
+    is_win11 = _is_windows_11(details["platform"])
     python_visible = bool(details["python_probe"]["python_visible_on_path"])
     prebootstrap = details["prebootstrap_probe"]
     prebootstrap_proves_no_python = bool(
@@ -161,7 +183,7 @@ def _win10_existing_python(row_id: str, evidence_dir: Path) -> dict:
         failures.append("setup.bat missing bootstrap markers")
     if details["setup_dry_run_local"]["exit_code"] != 0:
         failures.append("setup.bat dry-run local failed")
-    is_win10 = details["platform"]["system"] == "Windows" and details["platform"]["release"] == "10"
+    is_win10 = _is_windows_10(details["platform"])
     python_visible = bool(details["python_probe"]["python_visible_on_path"])
     if failures:
         return write_row(
@@ -184,7 +206,10 @@ def _win10_existing_python(row_id: str, evidence_dir: Path) -> dict:
         "blocked",
         evidence_dir,
         summary="Windows 10 existing-Python setup proof requires a VM state this machine does not currently match.",
-        block_reason=f"current environment is Windows {details['platform']['release']} with python_visible_on_path={python_visible}",
+        block_reason=(
+            f"current environment is Windows release={details['platform']['release']} "
+            f"version={details['platform']['version']} with python_visible_on_path={python_visible}"
+        ),
         external_requirement="Windows 10 VM with Python 3.10-3.14 already visible, then run python qa\\runtime_matrix\\run_row.py --row win10_existing_python_setup",
         details={**details, "failures": failures},
     )

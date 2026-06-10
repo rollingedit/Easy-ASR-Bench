@@ -528,6 +528,37 @@ def test_win11_clean_setup_accepts_prebootstrap_no_python_probe(tmp_path, monkey
     assert row["details"]["prebootstrap_probe"]["python_visible_on_path"] is False
 
 
+def test_win10_existing_python_requires_windows10_build(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import setup_environment
+
+    monkeypatch.setattr(setup_environment.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(setup_environment.platform, "release", lambda: "10")
+    monkeypatch.setattr(setup_environment.platform, "version", lambda: "10.0.19045")
+    monkeypatch.setattr(setup_environment.platform, "machine", lambda: "AMD64")
+    monkeypatch.setattr(setup_environment, "_python_probe", lambda: {"python_visible_on_path": True})
+    monkeypatch.setattr(setup_environment, "_dry_run_local", lambda _evidence_dir: {"exit_code": 0, "stdout_tail": "", "stderr_tail": ""})
+
+    row = setup_environment.run("win10_existing_python_setup", tmp_path / "win10", False, False)
+
+    assert row["status"] == "pass"
+
+
+def test_win10_existing_python_blocks_on_windows11_build_even_if_release_reports_10(tmp_path, monkeypatch):
+    from qa.runtime_matrix.rows import setup_environment
+
+    monkeypatch.setattr(setup_environment.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(setup_environment.platform, "release", lambda: "10")
+    monkeypatch.setattr(setup_environment.platform, "version", lambda: "10.0.22631")
+    monkeypatch.setattr(setup_environment.platform, "machine", lambda: "AMD64")
+    monkeypatch.setattr(setup_environment, "_python_probe", lambda: {"python_visible_on_path": True})
+    monkeypatch.setattr(setup_environment, "_dry_run_local", lambda _evidence_dir: {"exit_code": 0, "stdout_tail": "", "stderr_tail": ""})
+
+    row = setup_environment.run("win10_existing_python_setup", tmp_path / "not_win10", False, False)
+
+    assert row["status"] == "blocked"
+    assert "version=10.0.22631" in row["block_reason"]
+
+
 def test_first_run_smoke_json_row_emits_repair_and_action_evidence(tmp_path):
     from qa.runtime_matrix.rows import setup_environment
 

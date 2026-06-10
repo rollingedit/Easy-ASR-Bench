@@ -177,6 +177,41 @@ def test_merge_release_evidence_prefers_external_pass_but_keeps_local_blocked_va
     assert any(variant.get("block_reason") == "missing NVIDIA CUDA-capable GPU" for variant in row["merged_evidence_variants"])
 
 
+def test_merge_release_evidence_prefers_newest_duplicate_at_same_status(tmp_path: Path):
+    old_dir = tmp_path / "evidence" / "old" / "win10_existing_python_setup"
+    new_dir = tmp_path / "evidence" / "new" / "win10_existing_python_setup"
+    old_dir.mkdir(parents=True)
+    new_dir.mkdir(parents=True)
+    old_row = {
+        "id": "win10_existing_python_setup",
+        "status": "blocked",
+        "created_utc": "2026-06-09T00:00:00+00:00",
+        "block_reason": "old reason",
+        "external_requirement": "Windows 10 VM",
+    }
+    new_row = {
+        "id": "win10_existing_python_setup",
+        "status": "blocked",
+        "created_utc": "2026-06-10T00:00:00+00:00",
+        "block_reason": "new reason",
+        "external_requirement": "Windows 10 VM",
+    }
+    (old_dir / "row.json").write_text(json.dumps(old_row), encoding="utf-8")
+    (new_dir / "row.json").write_text(json.dumps(new_row), encoding="utf-8")
+
+    merged = merge_manual_rows(
+        {
+            "schema": "easy_asr_bench.release_smoke.v2",
+            "manual_rows": [{"id": "win10_existing_python_setup", "status": "not_run"}],
+        },
+        evidence_rows(tmp_path / "evidence"),
+    )
+
+    row = merged["manual_rows"][0]
+    assert row["block_reason"] == "new reason"
+    assert {variant["block_reason"] for variant in row["merged_evidence_variants"]} == {"old reason", "new reason"}
+
+
 def test_merge_release_evidence_reads_powershell_utf8_bom(tmp_path: Path):
     evidence = tmp_path / "evidence" / "row1"
     evidence.mkdir(parents=True)

@@ -23,6 +23,10 @@ def _status_rank(row: dict) -> int:
     return {"pass": 4, "fail": 3, "blocked": 2, "not_run": 1}.get(str(row.get("status", "unknown")), 0)
 
 
+def _row_sort_key(row: dict) -> tuple[int, str]:
+    return (_status_rank(row), str(row.get("created_utc") or ""))
+
+
 def _row_with_source(row: dict, row_path: Path) -> dict:
     output = dict(row)
     output["evidence_path"] = str(row_path)
@@ -32,7 +36,7 @@ def _row_with_source(row: dict, row_path: Path) -> dict:
 def _merge_duplicate_row(existing: dict, incoming: dict) -> dict:
     variants = list(existing.get("merged_evidence_variants") or [existing])
     variants.extend(incoming.get("merged_evidence_variants") or [incoming])
-    best = max(variants, key=_status_rank)
+    best = max(variants, key=_row_sort_key)
     output = dict(best)
     output["merged_evidence_variants"] = variants
     return output
