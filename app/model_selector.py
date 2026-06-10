@@ -4,12 +4,16 @@ import re
 from pathlib import Path
 
 from .adapters.base import ModelCandidate
+from .config import save_config
 from .console_style import key, prompt_label
 from .hf_model_downloader import download_hf_model_interactive
 from .interactive_menu import MenuAction, choose_many, choose_one
 from .llm_reference import merge_reference_llms, print_external_llm_guide, save_custom_reference_path, scan_custom_reference_llms
 from .model_scanner import scan_models
 from .model_status import candidate_reason, model_status_label
+
+
+LAST_RUN_SELECTION_SCHEMA = "easy_asr_bench.last_run_selection.v1"
 
 
 def parse_selection(raw: str, max_index: int) -> list[int]:
@@ -70,6 +74,53 @@ def recommended_candidates(candidates: list[ModelCandidate]) -> list[int]:
         )
         selected.append(ranked[0][0])
     return sorted(selected[:4])
+
+
+def resolve_last_run_selection(
+    candidates: list[ModelCandidate],
+    unsupported: list[ModelCandidate],
+    config: dict | None,
+) -> tuple[list[ModelCandidate], ModelCandidate | None, list[str]]:
+    if config is None:
+        return [], None, ["config unavailable"]
+    state = config.get("last_run_selection")
+    if not isinstance(state, dict) or state.get("schema") != LAST_RUN_SELECTION_SCHEMA:
+        return [], None, ["no saved last-run selection"]
+    asr_candidates = [candidate for candidate in candidates if candidate.category == "asr"]
+    saved_reference_llms = scan_custom_reference_llms(config)
+    reference_llms = merge_reference_llms([candidate for candidate in unsupported if candidate.category == "reference_llm"], saved_reference_llms)
+    by_id = {candidate.candidate_id: candidate for candidate in asr_candidates}
+    reference_by_id = {candidate.candidate_id: candidate for candidate in reference_llms}
+    saved_ids = [str(item) for item in state.get("candidate_ids", []) if item]
+    if not saved_ids:
+        return [], None, ["saved last-run selection has no ASR model ids"]
+    missing_ids = [candidate_id for candidate_id in saved_ids if candidate_id not in by_id]
+    if missing_ids:
+        return [], None, ["saved ASR model id not found: " + ", ".join(missing_ids)]
+    reference_llm = None
+    reference_id = str(state.get("reference_llm_candidate_id") or "")
+    if reference_id:
+        reference_llm = reference_by_id.get(reference_id)
+        if reference_llm is None:
+            return [], None, [f"saved reference LLM id not found: {reference_id}"]
+    return [by_id[candidate_id] for candidate_id in saved_ids], reference_llm, []
+
+
+def save_last_run_selection(
+    config: dict | None,
+    config_path: Path | None,
+    selected: list[ModelCandidate],
+    reference_llm: ModelCandidate | None,
+) -> None:
+    if config is None or config_path is None or not selected:
+        return
+    config["last_run_selection"] = {
+        "schema": LAST_RUN_SELECTION_SCHEMA,
+        "candidate_ids": [candidate.candidate_id for candidate in selected],
+        "precision_buckets": sorted({candidate.quantization_label for candidate in selected}),
+        "reference_llm_candidate_id": reference_llm.candidate_id if reference_llm else "",
+    }
+    save_config(config_path, config)
 
 
 def choose_candidates(
@@ -160,18 +211,28 @@ def _choose_candidates_once(
             probe_text = f", {key('P')} to probe a complete unknown ASR folder" if probe_candidates else ""
             print(f"No runnable models yet. Choose {key('D')} to download from Hugging Face{probe_text}, or press {key('Enter')} to stop.")
     print()
+    saved_selected, saved_reference_llm, saved_errors = resolve_last_run_selection(candidates, unsupported + reference_llms, config)
+    if saved_selected:
+        print(
+            "Saved last-run selection: "
+            + ", ".join(candidate.display_name for candidate in saved_selected)
+            + (f" + reference LLM {saved_reference_llm.display_name}" if saved_reference_llm else "")
+        )
     if len(candidates) > 9:
         probe_text = f" Use {key('P')} to probe complete unknown ASR folders." if probe_candidates else ""
-        print(f"Choose models with spaces, commas, or ranges: {key('1 2 10')}, {key('1,2,10')}, {key('1-4')}. Compact digits are disabled for 10+ models. Use {key('D')} to download from Hugging Face.{probe_text}")
+        last_text = f" Press {key('Enter')} to reuse last run." if saved_selected else ""
+        print(f"Choose models with spaces, commas, or ranges: {key('1 2 10')}, {key('1,2,10')}, {key('1-4')}. Compact digits are disabled for 10+ models.{last_text} Use {key('D')} to download from Hugging Face.{probe_text}")
     else:
         probe_text = f", {key('P')} to probe complete unknown ASR folders" if probe_candidates else ""
-        print(f"Choose models: numbers like {key('1 2 4')}, {key('1,2,4')}, {key('1-4')}, {key('1234')}, {key('A')} for all, {key('R')} for recommended, {key('D')} to download from Hugging Face{probe_text}.")
+        last_text = f", blank {key('Enter')} for last run" if saved_selected else ""
+        print(f"Choose models: numbers like {key('1 2 4')}, {key('1,2,4')}, {key('1-4')}, {key('1234')}, {key('A')} for all, {key('R')} for recommended{last_text}, {key('D')} to download from Hugging Face{probe_text}.")
     menu_result = choose_many(
         "Choose ASR models",
         [f"{candidate.display_name} | {candidate.backend} | {candidate.precision} | {candidate.quantization_label}" for candidate in candidates],
         actions=[
             MenuAction("A", "select all"),
             MenuAction("R", "recommended"),
+            *([MenuAction("L", "last run")] if saved_selected else []),
             *([MenuAction("P", "probe complete unknown ASR folder")] if probe_candidates else []),
             *([MenuAction("D", "download from Hugging Face")] if models_root is not None else []),
         ],
@@ -183,19 +244,25 @@ def _choose_candidates_once(
         indexes = list(range(1, len(candidates) + 1))
         selected = choose_precision_buckets([candidates[index - 1] for index in indexes])
         reference_llm = choose_reference_llm(reference_llms, config, config_path)
+        save_last_run_selection(config, config_path, selected, reference_llm)
         return selected, reference_llm, False
     elif menu_result == "r":
         indexes = recommended_candidates(candidates)
         selected = choose_precision_buckets([candidates[index - 1] for index in indexes])
         reference_llm = choose_reference_llm(reference_llms, config, config_path)
+        save_last_run_selection(config, config_path, selected, reference_llm)
         return selected, reference_llm, False
+    elif menu_result == "l" and saved_selected:
+        return saved_selected, saved_reference_llm, False
     elif menu_result == "p" and probe_candidates:
         selected = choose_probe_candidates(probe_candidates)
         reference_llm = choose_reference_llm(reference_llms, config, config_path)
+        save_last_run_selection(config, config_path, selected, reference_llm)
         return selected, reference_llm, False
     elif isinstance(menu_result, list):
         selected = choose_precision_buckets([candidates[index] for index in menu_result])
         reference_llm = choose_reference_llm(reference_llms, config, config_path)
+        save_last_run_selection(config, config_path, selected, reference_llm)
         return selected, reference_llm, False
     while True:
         raw = input(prompt_label("Models> ")).strip()
@@ -209,6 +276,8 @@ def _choose_candidates_once(
             return selected, reference_llm, False
         if raw.lower() in {"r", "recommended"}:
             indexes = recommended_candidates(candidates)
+        elif not raw and saved_selected:
+            return saved_selected, saved_reference_llm, False
         else:
             indexes = parse_selection(raw, len(candidates))
         if indexes:
@@ -216,6 +285,7 @@ def _choose_candidates_once(
         print("No valid runnable models selected.")
     selected = choose_precision_buckets([candidates[index - 1] for index in indexes])
     reference_llm = choose_reference_llm(reference_llms, config, config_path)
+    save_last_run_selection(config, config_path, selected, reference_llm)
     return selected, reference_llm, False
 
 

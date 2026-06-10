@@ -80,6 +80,8 @@ Normal users only need one file: `setup.bat`.
    - `I`: open the `Input` folder
 4. If no ASR model is installed, choose the recommended CPU baseline or paste a Hugging Face ASR model link in the first-run wizard.
 5. Put audio/video files in `Input`, paste paths when prompted, or drag files onto `Drop_Audio_Or_Folders_Here.bat`.
+
+Interactive model choices are saved in `config.json` as a compact `last_run_selection`. On the next interactive run, blank Enter reuses that model set when the scanned model IDs still exist. Drag/drop runs use the saved selection unattended; if the saved IDs are stale, the app stops and asks you to choose models interactively again instead of silently changing the benchmark set.
 6. Open the report folder created under `Output`.
 
 `setup.bat` downloads and verifies the matching installer script, manifest, checksums, and app ZIP for that exact release. Do not download the ZIP or metadata files manually unless you are auditing the release.
@@ -255,6 +257,7 @@ Easy ASR Bench does not execute arbitrary Python files from model folders. Safet
 
 - **No runnable ASR models:** put a complete supported model folder in `Models`.
 - **Dependency missing:** accept the install prompt when a selected model needs an optional dependency group, or run `setup.bat --doctor` and use the printed repair command.
+- **Saved model selection is stale:** a model folder was moved, removed, or rescanned under a different ID. Run interactively once, choose the intended models again, and the saved drag/drop selection will be refreshed.
 - **Standalone `.safetensors` file:** use the complete Hugging Face model folder, not only the weights file.
 - **Generic `.onnx` file:** add `modelbench.json` with CTC decoding metadata and a vocab file. Non-CTC ONNX graphs require a dedicated adapter.
 - **GPU unavailable:** run `setup.bat --doctor`. It reports NVIDIA, AMD, Intel, Vulkan, Torch CUDA, ONNX Runtime providers, and dependency repair commands. If setup cannot make GPU work, CPU fallback is reported explicitly.

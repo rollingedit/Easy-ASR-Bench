@@ -18,7 +18,7 @@ from .console_style import key, prompt_label
 from .hf_model_downloader import download_hf_model_interactive
 from .interactive_menu import MenuAction, choose_one
 from .model_scanner import scan_models
-from .model_selector import choose_candidates
+from .model_selector import choose_candidates, resolve_last_run_selection
 from .model_status import candidate_reason, model_status_label
 from .utils import expand_inputs, parse_windows_path_list, sanitize_windows_drag_drop_path, wait_for_stable_file
 
@@ -1023,7 +1023,21 @@ def _main(args: argparse.Namespace) -> None:
         print("Core runtime ready. Optional model runtimes install only when selected.")
         selected, reference_llm = choose_candidates(runnable, unsupported, config, Path(args.config), models_root)
     else:
-        selected = [candidate for candidate in runnable if candidate.category == "asr"]
+        if args.paths:
+            saved_selected, saved_reference_llm, saved_errors = resolve_last_run_selection(runnable, unsupported, config)
+            if saved_selected:
+                selected = saved_selected
+                reference_llm = saved_reference_llm
+                print("Using saved last-run model selection: " + ", ".join(candidate.display_name for candidate in selected))
+            elif isinstance(config.get("last_run_selection"), dict):
+                print("Saved last-run model selection is stale: " + "; ".join(saved_errors))
+                print("Run interactively once to choose models again, or remove last_run_selection from config.json.")
+                return
+            else:
+                print("No saved last-run model selection found; using all runnable ASR models. Run interactively once to save a repeatable selection.")
+                selected = [candidate for candidate in runnable if candidate.category == "asr"]
+        else:
+            selected = [candidate for candidate in runnable if candidate.category == "asr"]
     if not selected:
         print("No runnable ASR models selected.")
         return
