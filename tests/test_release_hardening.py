@@ -121,6 +121,16 @@ def test_installer_verify_release_checks_uploaded_bootstrap_assets():
     assert "Copy-ReleaseAsset" in installer
 
 
+def test_installer_hashing_has_get_file_hash_fallback():
+    installer = (ROOT / "installer" / "install.ps1").read_text(encoding="utf-8")
+
+    assert "function Get-Sha256Hex" in installer
+    assert "Get-Command Get-FileHash" in installer
+    assert "[System.Security.Cryptography.SHA256]::Create()" in installer
+    assert "Get-Sha256Hex $Path" in installer
+    assert "Get-Sha256Hex $Zip" in installer
+
+
 def test_setup_exposes_staged_asset_dir_for_prepublish_verification():
     setup = (ROOT / "setup.bat").read_text(encoding="utf-8")
 

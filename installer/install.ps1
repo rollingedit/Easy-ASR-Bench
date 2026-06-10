@@ -90,11 +90,31 @@ function Invoke-PythonFile($Python, $ScriptPath) {
   }
 }
 
+function Get-Sha256Hex($Path) {
+  if (Get-Command Get-FileHash -ErrorAction SilentlyContinue) {
+    return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
+  }
+  $stream = [System.IO.File]::OpenRead($Path)
+  try {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+      $bytes = $sha.ComputeHash($stream)
+    }
+    finally {
+      $sha.Dispose()
+    }
+  }
+  finally {
+    $stream.Dispose()
+  }
+  return ([System.BitConverter]::ToString($bytes) -replace "-", "").ToLowerInvariant()
+}
+
 function Assert-Checksum($Path, $Expected, $Name) {
   if (-not $Expected) {
     throw "Missing expected SHA256 for $Name"
   }
-  $actual = "sha256:" + (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
+  $actual = "sha256:" + (Get-Sha256Hex $Path)
   if ($actual -ne $Expected) {
     throw "Checksum mismatch for $Name. Expected $Expected, got $actual"
   }
@@ -489,7 +509,7 @@ $expected = (Get-Content -Raw -LiteralPath $Checksums | ConvertFrom-Json).files.
 Invoke-Step "Downloading app ZIP $zipName" {
   Invoke-Download "$ReleaseBase/$zipName" $Zip
 }
-$actual = "sha256:" + (Get-FileHash -Algorithm SHA256 -LiteralPath $Zip).Hash.ToLowerInvariant()
+$actual = "sha256:" + (Get-Sha256Hex $Zip)
 if ($actual -ne $expected) {
   throw "Checksum mismatch for $zipName. Expected $expected, got $actual"
 }
