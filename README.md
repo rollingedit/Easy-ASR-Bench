@@ -213,6 +213,8 @@ Output/
 
 The batch dashboard is the main multi-file report. It shows several files side by side, pages through large file sets, filters by path/status, summarizes every model per file with speed/RAM/VRAM/errors, saves pasted corrected references in the browser, can export/import edited references as JSON, and links to each file's `compare.html` for detailed transcript review.
 
+Batch runs also write `Logs/batch_resume_manifest.json`. If the same input file, selected model IDs, reference LLM choice, and relevant runtime/transcription settings still match, reruns skip completed files and reuse the existing report folder. If a batch is interrupted after at least one file completes, Easy ASR Bench writes a partial `final_results.html` overview for the completed rows.
+
 ## Windows Launchers
 
 - `setup.bat`: install or repair the app

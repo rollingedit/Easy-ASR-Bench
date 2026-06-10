@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .adapters import BUILTIN_ADAPTERS
 from .adapters.base import ModelCandidate, ModelRunResult
+from .batch_resume import BatchResumeManifest, batch_resume_path, batch_signature
 from .config import load_config
 from .console_style import key, prompt_label
 from .hf_model_downloader import download_hf_model_interactive
@@ -1045,6 +1046,8 @@ def _main(args: argparse.Namespace) -> None:
     if not selected:
         print("Cannot run selected models until their dependency groups are installed.")
         return
+    resume_manifest = BatchResumeManifest(batch_resume_path(config))
+    resume_signature = batch_signature(config, selected, reference_llm)
     batch_rows: list[dict] = []
     while True:
         if args.watch:
@@ -1063,10 +1066,16 @@ def _main(args: argparse.Namespace) -> None:
                 )
                 for file_index, file_path in enumerate(files, 1):
                     progress = (file_index, len(files)) if args.once else None
-                    output = process_file_with_candidates(file_path, selected, config, unsupported, reference_llm, file_progress=progress)
+                    resumed_output = resume_manifest.completed_output_for(file_path, selected, resume_signature)
+                    if resumed_output:
+                        print(f"Skipping already completed file from batch resume manifest: {file_path}")
+                        output = Path(resumed_output)
+                    else:
+                        output = process_file_with_candidates(file_path, selected, config, unsupported, reference_llm, file_progress=progress)
                     status = output_status(output)
+                    resume_manifest.record_file(file_path, selected, resume_signature, output, status)
                     state.mark(file_path.resolve(), status, str(output or ""))
-                    batch_rows.append({"source_path": str(file_path.resolve()), "status": status, "output_path": str(output or "")})
+                    batch_rows.append({"source_path": str(file_path.resolve()), "status": "resumed" if resumed_output else status, "output_path": str(output or "")})
                 if args.once and len(batch_rows) > 1:
                     write_batch_summary(config, batch_rows)
                 if args.once:
@@ -1076,15 +1085,26 @@ def _main(args: argparse.Namespace) -> None:
         if not files:
             return
         state = queue_state(config)
-        for file_index, file_path in enumerate(files, 1):
-            from .queue_manager import QueueItem
-            from .utils import file_key
+        try:
+            for file_index, file_path in enumerate(files, 1):
+                from .queue_manager import QueueItem
+                from .utils import file_key
 
-            state.upsert(QueueItem(str(file_path.resolve()), "", file_key(file_path)))
-            output = process_file_with_candidates(file_path, selected, config, unsupported, reference_llm, file_progress=(file_index, len(files)))
-            status = output_status(output)
-            state.mark(file_path.resolve(), status, str(output or ""))
-            batch_rows.append({"source_path": str(file_path.resolve()), "status": status, "output_path": str(output or "")})
+                state.upsert(QueueItem(str(file_path.resolve()), "", file_key(file_path)))
+                resumed_output = resume_manifest.completed_output_for(file_path, selected, resume_signature)
+                if resumed_output:
+                    print(f"Skipping already completed file from batch resume manifest: {file_path}")
+                    output = Path(resumed_output)
+                else:
+                    output = process_file_with_candidates(file_path, selected, config, unsupported, reference_llm, file_progress=(file_index, len(files)))
+                status = output_status(output)
+                resume_manifest.record_file(file_path, selected, resume_signature, output, status)
+                state.mark(file_path.resolve(), status, str(output or ""))
+                batch_rows.append({"source_path": str(file_path.resolve()), "status": "resumed" if resumed_output else status, "output_path": str(output or "")})
+        except (KeyboardInterrupt, Exception):
+            if batch_rows:
+                write_batch_summary(config, batch_rows)
+            raise
         if len(files) > 1:
             write_batch_summary(config, batch_rows[-len(files) :])
         if not args.interactive:
