@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import shutil
 import subprocess
+import stat
 from pathlib import Path
 
 
@@ -82,12 +84,20 @@ def _run(command: list[str], cwd: Path, *, input_bytes: bytes | None = None) -> 
     return subprocess.run(command, cwd=cwd, input=input_bytes, capture_output=True, check=True)
 
 
+def _remove_tree(path: Path) -> None:
+    def on_error(function, name, _exc_info):
+        os.chmod(name, stat.S_IWRITE)
+        function(name)
+
+    shutil.rmtree(path, onerror=on_error)
+
+
 def rewrite_to_candidate_repo(source_ref: str, target_dir: Path, source_root: Path = ROOT, *, force: bool = False) -> None:
     target_dir = target_dir.resolve()
     if target_dir.exists() and any(target_dir.iterdir()):
         if not force:
             raise SystemExit(f"Target directory is not empty; pass --force to replace it: {target_dir}")
-        shutil.rmtree(target_dir)
+        _remove_tree(target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
     _run(["git", "init"], target_dir)
     exported = _run(["git", "fast-export", "--signed-tags=strip", "--tag-of-filtered-object=rewrite", source_ref], source_root).stdout
