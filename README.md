@@ -7,7 +7,8 @@ Drop models into `Models`, drop media into `Input` or onto the launcher, choose 
 - `results.txt`: readable transcript and benchmark report
 - `results.json`: canonical machine-readable run data
 - `benchmark.csv`: spreadsheet-friendly performance rows
-- `compare.html`: offline visual comparison page with LLM-corrected reference scoring
+- `final_results.html`: batch dashboard for multi-file runs, corrected-reference editing, model ranking, and transcript comparison
+- `compare.html`: per-file offline detail report linked from batch dashboards and single-file runs
 
 ## What It Does
 
@@ -175,7 +176,7 @@ Workflow:
 2. Open `results.txt` or `results_llm_prompt_part_001.txt`.
 3. Give the LLM-corrected reference instruction block to a local GGUF LLM or an external LLM.
 4. The LLM returns JSON with schema `easy_asr_bench.llm_reference.v1`.
-5. Open `compare.html`.
+5. Open `Open_Latest_Report.bat`, or open `final_results.html` for batch runs and `compare.html` for single-file detail reports.
 6. Paste that JSON into the reference box.
 7. Click **Validate Reference and Score Models**.
 
@@ -207,7 +208,7 @@ Output/
       batch-records.json
 ```
 
-The batch dashboard shows several files side by side, pages through large file sets, filters by path/status, summarizes every model per file with speed/RAM/VRAM/errors, and links to the full `compare.html` for detailed transcript review.
+The batch dashboard is the main multi-file report. It shows several files side by side, pages through large file sets, filters by path/status, summarizes every model per file with speed/RAM/VRAM/errors, saves pasted corrected references in the browser, can export/import edited references as JSON, and links to each file's `compare.html` for detailed transcript review.
 
 ## Windows Launchers
 
@@ -217,7 +218,7 @@ The batch dashboard shows several files side by side, pages through large file s
 - `setup.bat --doctor`: run environment checks
 - `Run.bat`: scan models, choose models, process inputs
 - `Drop_Audio_Or_Folders_Here.bat`: drag files/folders directly onto the app
-- `Open_Latest_Report.bat`: open the newest `compare.html` report
+- `Open_Latest_Report.bat`: open the newest batch `final_results.html` report, falling back to per-file `compare.html` reports
 - `Open_Models_Folder.bat`: open the model drop folder
 - `Open_Input_Folder.bat`: open the input folder
 - `Open_Output_Folder.bat`: open the report folder
@@ -254,7 +255,7 @@ Easy ASR Bench does not execute arbitrary Python files from model folders. Safet
 - **Standalone `.safetensors` file:** use the complete Hugging Face model folder, not only the weights file.
 - **Generic `.onnx` file:** add `modelbench.json` with CTC decoding metadata and a vocab file. Non-CTC ONNX graphs require a dedicated adapter.
 - **GPU unavailable:** run `setup.bat --doctor`. It reports NVIDIA, AMD, Intel, Vulkan, Torch CUDA, ONNX Runtime providers, and dependency repair commands. If setup cannot make GPU work, CPU fallback is reported explicitly.
-- **Cannot find `compare.html`:** run a benchmark first, then open `Open_Latest_Report.bat` or go to the newest folder under `Output`.
+- **Cannot find a report:** run a benchmark first, then open `Open_Latest_Report.bat` or go to the newest folder under `Output`.
 - **Media conversion failed:** check that the file opens normally and that there is enough disk space in `Temp`.
 - **GGUF dependency missing:** install the `llama_cpp` dependency group when prompted, or choose the manual ChatGPT/Claude workflow.
 - **GGUF model lives in another app folder:** choose the paste-path option in the LLM reference menu. The path is saved in `config.json` and scanned again on the next run.

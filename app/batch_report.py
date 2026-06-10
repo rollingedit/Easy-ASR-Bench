@@ -447,6 +447,7 @@ pre {{ white-space:pre-wrap; word-break:break-word; background:#f7f8fa; border:1
     <aside class="file-panel"><input id="filter" type="search" placeholder="Find a file or model" oninput="selectedIndex=0;renderBatch()"><div id="fileList" class="file-list"></div></aside>
     <section id="selectedFile"></section>
   </div>
+  <section class="card"><h2>Edited references</h2><p class="muted">Pasted corrected references are saved in this browser for this report. Export them if you need a portable backup or want to move them to another browser.</p><div class="reference-actions"><button class="secondary-button" onclick="exportEditedReferences()">Export edits</button><label class="secondary-button" for="referenceImport">Import edits</label><input id="referenceImport" type="file" accept="application/json,.json" onchange="importEditedReferences(this.files)" hidden><span id="referencePersistenceStatus" class="reference-status"></span></div></section>
   <details class="advanced"><summary>Raw batch data</summary><pre id="raw"></pre></details>
 </main>
 <script type="application/json" id="batch-json">{embedded}</script>
@@ -454,6 +455,7 @@ pre {{ white-space:pre-wrap; word-break:break-word; background:#f7f8fa; border:1
 <script>
 const payload = JSON.parse(document.getElementById('batch-json').textContent);
 const records = JSON.parse(document.getElementById('batch-records').textContent);
+const reportStorageKey = `easy-asr-bench:batch-edits:${{payload.created_local || ''}}:${{records.map(record => record.output_path || record.source_path || record.name || '').join('|')}}`;
 let selectedIndex = 0;
 const customReferences = {{}};
 const customReferenceSources = {{}};
@@ -465,6 +467,80 @@ let compareRightKey = '';
 let modelPage = 0;
 let referenceUpdateTimer = 0;
 const modelsPerPage = 3;
+function setReferencePersistenceStatus(text) {{
+  const status = document.getElementById('referencePersistenceStatus');
+  if (status) status.textContent = text;
+}}
+function editedReferencePayload() {{
+  return {{
+    schema: 'easy_asr_bench.batch_reference_edits.v1',
+    created_local: new Date().toISOString(),
+    report_storage_key: reportStorageKey,
+    references: customReferences,
+    sources: customReferenceSources,
+    edited: editedReferences,
+  }};
+}}
+function saveEditedReferences() {{
+  try {{
+    localStorage.setItem(reportStorageKey, JSON.stringify(editedReferencePayload()));
+    setReferencePersistenceStatus('Edits saved in this browser');
+  }} catch (error) {{
+    setReferencePersistenceStatus('Browser storage failed; export edits to keep them');
+  }}
+}}
+function applyEditedReferencePayload(saved) {{
+  if (!saved || saved.schema !== 'easy_asr_bench.batch_reference_edits.v1') return false;
+  for (const key of Object.keys(customReferences)) delete customReferences[key];
+  for (const key of Object.keys(customReferenceSources)) delete customReferenceSources[key];
+  for (const key of Object.keys(editedReferences)) delete editedReferences[key];
+  Object.assign(customReferences, saved.references || {{}});
+  Object.assign(customReferenceSources, saved.sources || {{}});
+  Object.assign(editedReferences, saved.edited || {{}});
+  return true;
+}}
+function loadEditedReferences() {{
+  try {{
+    const raw = localStorage.getItem(reportStorageKey);
+    if (raw && applyEditedReferencePayload(JSON.parse(raw))) {{
+      setReferencePersistenceStatus('Restored saved edits for this report');
+    }}
+  }} catch (error) {{
+    setReferencePersistenceStatus('Saved edits could not be loaded');
+  }}
+}}
+function exportEditedReferences() {{
+  const blob = new Blob([JSON.stringify(editedReferencePayload(), null, 2)], {{ type: 'application/json' }});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'easy-asr-bench-reference-edits.json';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  setReferencePersistenceStatus('Edited references exported');
+}}
+function importEditedReferences(files) {{
+  const file = files && files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {{
+    try {{
+      const saved = JSON.parse(String(reader.result || ''));
+      if (!applyEditedReferencePayload(saved)) {{
+        setReferencePersistenceStatus('Import file was not an Easy ASR Bench edits file');
+        return;
+      }}
+      saveEditedReferences();
+      renderBatch();
+      setReferencePersistenceStatus('Imported edited references');
+    }} catch (error) {{
+      setReferencePersistenceStatus('Import failed; file was not valid JSON');
+    }}
+  }};
+  reader.readAsText(file);
+}}
 function escapeHtml(text) {{
   return String(text ?? '').replace(/[&<>]/g, ch => ({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[ch]));
 }}
@@ -792,6 +868,7 @@ function markReferenceEdited() {{
   customReferences[currentReferenceKey] = editor ? editor.value : '';
   editedReferences[currentReferenceKey] = true;
   customReferenceSources[currentReferenceKey] = '';
+  saveEditedReferences();
   const label = document.getElementById('referenceSourceLabel');
   if (label) label.textContent = '';
   const status = document.getElementById('referenceEditStatus');
@@ -855,6 +932,7 @@ function resetCurrentReference() {{
   delete customReferences[currentReferenceKey];
   delete customReferenceSources[currentReferenceKey];
   delete editedReferences[currentReferenceKey];
+  saveEditedReferences();
   renderBatch();
 }}
 function renderBatch() {{
@@ -864,6 +942,7 @@ function renderBatch() {{
   document.getElementById('fileList').innerHTML = filtered.map((record, index) => `<button class="file-button ${{index === selectedIndex ? 'active' : ''}}" onclick="selectedIndex=${{index}};selectedModelKey='all';compareLeftKey='';compareRightKey='';modelPage=0;renderBatch()"><span class="status ${{statusClass(record.status)}}">${{escapeHtml(record.status)}}</span><strong>${{escapeHtml(record.name || 'Unnamed file')}}</strong><span class="muted">${{fmtSeconds(record.summary?.duration_seconds)}}</span></button>`).join('') || '<p class="muted">No files match this search.</p>';
   document.getElementById('selectedFile').innerHTML = renderSelected(filtered[selectedIndex]);
 }}
+loadEditedReferences();
 renderBatch();
 document.getElementById('raw').textContent = JSON.stringify(payload, null, 2);
 </script>

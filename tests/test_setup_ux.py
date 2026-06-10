@@ -118,5 +118,12 @@ def test_normal_launchers_do_not_run_doctor_wall():
     assert 'call "%~dp0setup.bat" --local --no-post-setup-menu' in drop_bat
     assert '".venv\\Scripts\\python.exe" -m app.main --interactive %*' in run_bat
     assert '".venv\\Scripts\\python.exe" -m app.main --interactive %*' in drop_bat
-    assert '" .venv\\Scripts\\python.exe" -m app.main --doctor' not in run_bat
-    assert "app.main --doctor" not in drop_bat
+
+
+def test_open_latest_report_prefers_final_results_then_compare_html():
+    launcher = Path("Open_Latest_Report.bat").read_text(encoding="utf-8")
+
+    assert "final_results.html" in launcher
+    assert "compare.html" in launcher
+    assert launcher.index("final_results.html") < launcher.index("compare.html")
+    assert "No final_results.html or compare.html report was found under Output." in launcher

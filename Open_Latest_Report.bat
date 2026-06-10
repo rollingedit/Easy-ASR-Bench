@@ -11,13 +11,17 @@ if not exist "%OUTPUT_DIR%" (
 
 set "LATEST="
 for /f "delims=" %%D in ('dir /b /ad /o-d "%OUTPUT_DIR%" 2^>nul') do (
+  if exist "%OUTPUT_DIR%\%%D\final_results.html" (
+    set "LATEST=%OUTPUT_DIR%\%%D\final_results.html"
+    goto open_report
+  )
   if exist "%OUTPUT_DIR%\%%D\compare.html" (
     set "LATEST=%OUTPUT_DIR%\%%D\compare.html"
     goto open_report
   )
 )
 
-echo No compare.html report was found under Output.
+echo No final_results.html or compare.html report was found under Output.
 echo Run a benchmark first, then use this launcher again.
 pause
 exit /b 1

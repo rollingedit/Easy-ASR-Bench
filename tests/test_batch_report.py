@@ -112,6 +112,15 @@ def test_batch_report_renders_file_picker_transcripts_reference_and_plain_units(
     assert "referenceEditStatus" in html
     assert "Edits update results automatically" in html
     assert "Results updated from pasted text" in html
+    assert "reportStorageKey" in html
+    assert "localStorage.setItem(reportStorageKey" in html
+    assert "loadEditedReferences" in html
+    assert "easy_asr_bench.batch_reference_edits.v1" in html
+    assert "exportEditedReferences" in html
+    assert "importEditedReferences" in html
+    assert "easy-asr-bench-reference-edits.json" in html
+    assert "Edits saved in this browser" in html
+    assert "Restored saved edits for this report" in html
     assert "reference-actions" in html
     assert "resetCurrentReference" in html
     assert "addEventListener('keydown'" not in html
@@ -220,6 +229,8 @@ def test_readme_documents_current_batch_output_layout():
     assert "final_results.html" in readme
     assert "_data/" in readme
     assert "batch-records.json" in readme
+    assert "Open_Latest_Report.bat`: open the newest batch `final_results.html`" in readme
+    assert "saves pasted corrected references in the browser" in readme
     assert "  batch__20260606_143012/\n    index.html\n    batch.json" not in readme
 
 
