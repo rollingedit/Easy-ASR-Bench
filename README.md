@@ -224,6 +224,8 @@ The batch dashboard is the main multi-file report. It shows several files side b
 - `Open_Output_Folder.bat`: open the report folder
 - `Edit_Config.bat`: edit configuration
 
+Installed releases also create Start Menu shortcuts under `Easy ASR Bench` for running the app, dropping audio or folders, opening the latest report, opening the output folder, editing config, repair, and uninstall. Uninstall removes those shortcuts while preserving user data by default.
+
 ## Dependencies And GPU Support
 
 Setup installs the core runtime first. Model-specific packages are installed only when a selected model needs them. Before installing an optional dependency group, the app shows the package names, requirement files, package indexes, install location, network destinations, PATH changes, size class, and fallback behavior. Press Enter once to install the disclosed group, or type `s` to skip only the affected models.

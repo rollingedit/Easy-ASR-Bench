@@ -325,6 +325,50 @@ function Restore-MovedUserData($From, $To) {
   }
 }
 
+function Get-ShortcutFolder {
+  return Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Easy ASR Bench"
+}
+
+function New-AppShortcut($Folder, $Name, $Target, $Arguments = "", $Description = "") {
+  if (-not (Test-Path -LiteralPath $Target)) {
+    Write-SetupLog "Skipping shortcut $Name because target is missing: $Target"
+    return
+  }
+  New-Item -ItemType Directory -Force -Path $Folder | Out-Null
+  $shell = New-Object -ComObject WScript.Shell
+  $shortcut = $shell.CreateShortcut((Join-Path $Folder "$Name.lnk"))
+  $shortcut.TargetPath = $Target
+  if ($Arguments) {
+    $shortcut.Arguments = $Arguments
+  }
+  $shortcut.WorkingDirectory = $InstallDir
+  if ($Description) {
+    $shortcut.Description = $Description
+  }
+  $shortcut.IconLocation = "$Target,0"
+  $shortcut.Save()
+  Write-SetupLog "Shortcut created: $Name"
+}
+
+function Install-Shortcuts {
+  $folder = Get-ShortcutFolder
+  New-AppShortcut $folder "Run Easy ASR Bench" (Join-Path $InstallDir "Run.bat") "" "Run Easy ASR Bench"
+  New-AppShortcut $folder "Drop Audio Or Folders" (Join-Path $InstallDir "Drop_Audio_Or_Folders_Here.bat") "" "Run Easy ASR Bench with dropped audio or folders"
+  New-AppShortcut $folder "Open Latest Report" (Join-Path $InstallDir "Open_Latest_Report.bat") "" "Open the latest Easy ASR Bench report"
+  New-AppShortcut $folder "Open Output Folder" (Join-Path $InstallDir "Open_Output_Folder.bat") "" "Open Easy ASR Bench output reports"
+  New-AppShortcut $folder "Edit Config" (Join-Path $InstallDir "Edit_Config.bat") "" "Edit Easy ASR Bench configuration"
+  New-AppShortcut $folder "Repair Easy ASR Bench" (Join-Path $InstallDir "setup.bat") "--repair" "Repair Easy ASR Bench"
+  New-AppShortcut $folder "Uninstall Easy ASR Bench" (Join-Path $InstallDir "setup.bat") "--uninstall" "Uninstall Easy ASR Bench while preserving user data"
+}
+
+function Remove-Shortcuts {
+  $folder = Get-ShortcutFolder
+  if (Test-Path -LiteralPath $folder) {
+    Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction SilentlyContinue
+    Write-SetupLog "Removed Start Menu shortcuts"
+  }
+}
+
 if ($Doctor) {
   $python = Join-Path $InstallDir ".venv\Scripts\python.exe"
   if ((Test-Path (Join-Path $InstallDir "app\doctor.py")) -and (Test-Path $python)) {
@@ -346,6 +390,7 @@ if ($Uninstall) {
     }
     exit 0
   }
+  Remove-Shortcuts
   if ($RemoveUserData) {
     if ($ConfirmRemoveUserData -ne "DELETE EASY ASR BENCH USER DATA") {
       Write-SetupLog "Destructive uninstall refused. Re-run with -ConfirmRemoveUserData 'DELETE EASY ASR BENCH USER DATA' to delete Models, Input, Output, Logs, Cache, Temp, and config.json."
@@ -516,6 +561,7 @@ finally {
 }
 
 Write-SetupLog "Setup complete"
+Install-Shortcuts
 if (Test-Path $Backup) {
   Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
 }
