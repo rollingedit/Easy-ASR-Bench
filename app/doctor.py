@@ -9,6 +9,7 @@ from pathlib import Path
 from .config import load_config
 from .dependency_manager import acceleration_install_decision, cuda_diagnostics, dependency_status
 from .hf_model_downloader import execute_persisted_missing_file_repair_plan
+from .path_diagnostics import build_path_diagnostics
 from .repair_plan import build_repair_plan, execute_repair_plan
 from .version import RELEASE_CHANNEL, RELEASE_COMMIT, TAG
 
@@ -43,6 +44,7 @@ def build_doctor_report(config_path: Path) -> dict:
         Path(folder).mkdir(parents=True, exist_ok=True)
     status = dependency_status(config)
     cuda = cuda_diagnostics()
+    path_diagnostics = build_path_diagnostics(config, project_root=Path.cwd())
     return {
         "schema": "easy_asr_bench.doctor.v1",
         "version": TAG,
@@ -52,6 +54,7 @@ def build_doctor_report(config_path: Path) -> dict:
         "config_channel": config.get("app", {}).get("version_channel"),
         "dependency_status": status,
         "cuda_provider_checks": cuda,
+        "path_diagnostics": path_diagnostics,
         "folders": {key: str(value) for key, value in folders.items()},
         "repair_plan": build_repair_plan(config, status=status),
     }
@@ -277,6 +280,12 @@ def run_doctor(
         print(f"  llama-mtmd-cli repair: {mtmd_status['repair_command']}")
     for message in cuda["messages"]:
         print(f"  note: {message}")
+    path_diagnostics = report.get("path_diagnostics", {})
+    if path_diagnostics.get("warnings"):
+        print()
+        print("Path warnings:")
+        for warning in path_diagnostics["warnings"]:
+            print(f"  {warning['kind']}: {warning['message']} ({warning['path']})")
     print()
     print("Folders checked:")
     for key, folder in report["folders"].items():

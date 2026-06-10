@@ -12,6 +12,7 @@ from pathlib import Path
 
 from app.doctor import run_model_layout_repair_sweep
 from app import hf_model_downloader
+from app.path_diagnostics import build_path_diagnostics
 from qa.runtime_matrix.common import ROOT, write_row
 
 
@@ -141,6 +142,32 @@ def _install_path_with_spaces(row_id: str, evidence_dir: Path) -> dict:
         evidence_dir,
         summary="Installer dry-run accepts an install path containing spaces without modifying files." if not failures else "Install path with spaces validation failed.",
         details={"install_dir": str(install_dir), "command": result, "failures": failures},
+    )
+
+
+def _install_path_risk_warnings(row_id: str, evidence_dir: Path) -> dict:
+    config = {"folders": {"models": "Models", "temp": "Temp"}}
+    env = {
+        "USERPROFILE": str(evidence_dir / "Users" / "José"),
+        "OneDrive": str(evidence_dir / "OneDrive"),
+    }
+    report = build_path_diagnostics(config, project_root=evidence_dir / "OneDrive" / "Easy ASR Bench", env=env)
+    report_path = evidence_dir / "path_diagnostics.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8", newline="\n")
+    codes = {warning["code"] for warning in report["warnings"]}
+    failures = []
+    if "non_ascii_path" not in codes:
+        failures.append("non-ASCII user/profile path warning missing")
+    if "onedrive_or_redirected_path" not in codes:
+        failures.append("OneDrive/redirected path warning missing")
+    return write_row(
+        row_id,
+        "pass" if not failures else "fail",
+        evidence_dir,
+        summary="Doctor path diagnostics warn on non-ASCII and OneDrive/redirected install or profile paths." if not failures else "Path-risk warning contract failed.",
+        details={"path_diagnostics": report, "failures": failures},
+        artifacts=[report_path],
     )
 
 
@@ -1248,6 +1275,8 @@ def _destructive_uninstall_requires_phrase(row_id: str, evidence_dir: Path) -> d
 def run(row_id: str, evidence_dir: Path, _install_deps: bool, _allow_downloads: bool) -> dict:
     if row_id == "install_path_with_spaces":
         return _install_path_with_spaces(row_id, evidence_dir)
+    if row_id == "install_path_risk_warnings":
+        return _install_path_risk_warnings(row_id, evidence_dir)
     if row_id == "setup_dry_run_verify_release":
         return _verify_release(row_id, evidence_dir)
     if row_id == "setup_dry_run_json":

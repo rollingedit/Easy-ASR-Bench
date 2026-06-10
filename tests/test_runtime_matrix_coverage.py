@@ -576,6 +576,7 @@ def test_first_run_smoke_json_row_emits_repair_and_action_evidence(tmp_path):
 
 def test_runtime_matrix_maps_safe_installer_validation_rows():
     assert ROWS["install_path_with_spaces"].module == "qa.runtime_matrix.rows.installer_validation"
+    assert ROWS["install_path_risk_warnings"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["setup_dry_run_verify_release"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["setup_dry_run_json"].module == "qa.runtime_matrix.rows.installer_validation"
     assert ROWS["setup_doctor_strict"].module == "qa.runtime_matrix.rows.installer_validation"
@@ -602,6 +603,16 @@ def test_install_path_with_spaces_row_runs_non_destructive_dry_run(tmp_path):
 
     assert row["status"] == "pass"
     assert "Install Path With Spaces" in row["details"]["install_dir"]
+
+
+def test_install_path_risk_warnings_row_records_warning_contract(tmp_path):
+    from qa.runtime_matrix.rows import installer_validation
+
+    row = installer_validation.run("install_path_risk_warnings", tmp_path, False, False)
+
+    assert row["status"] == "pass"
+    assert row["details"]["failures"] == []
+    assert {warning["code"] for warning in row["details"]["path_diagnostics"]["warnings"]} >= {"non_ascii_path", "onedrive_or_redirected_path"}
 
 
 def test_tampered_installer_row_fails_before_execution(tmp_path):

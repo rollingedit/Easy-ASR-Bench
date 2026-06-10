@@ -13,6 +13,7 @@
     "llama_mtmd_dependency_repair_contract": "not_run",
     "directml_provider_conflict_repair": "not_run",
     "install_path_with_spaces": "not_run",
+    "install_path_risk_warnings": "not_run",
     "setup_verify_release_bad_checksum": "not_run",
     "setup_double_click_equivalent": "not_run",
     "setup_dry_run_verify_release": "not_run",

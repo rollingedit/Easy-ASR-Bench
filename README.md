@@ -261,6 +261,7 @@ Easy ASR Bench does not execute arbitrary Python files from model folders. Safet
 - **Cannot find a report:** run a benchmark first, then open `Open_Latest_Report.bat` or go to the newest folder under `Output`.
 - **Media conversion failed:** check that the file opens normally and that there is enough disk space in `Temp`.
 - **Install or model download says disk space is low:** free space on the install/model drive first. Advanced users can explicitly override low-space dependency installs with `dependency_install.allow_low_disk_space_install`, but model downloads still ask for typed confirmation before continuing.
+- **Doctor warns about install or profile paths:** non-ASCII, OneDrive, or redirected-profile paths can make some native Windows runtimes and large model caches less reliable. A short ASCII local path outside sync folders is the lowest-risk install location.
 - **GGUF dependency missing:** install the `llama_cpp` dependency group when prompted, or choose the manual ChatGPT/Claude workflow.
 - **GGUF model lives in another app folder:** choose the paste-path option in the LLM reference menu. The path is saved in `config.json` and scanned again on the next run.
 - **Whisper model not detected:** check `docs/whisper_models.md`.
