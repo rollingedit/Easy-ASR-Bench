@@ -78,7 +78,7 @@ Normal users only need one file: `setup.bat`.
    - `P`: paste a Hugging Face model link
    - `M`: open the `Models` folder
    - `I`: open the `Input` folder
-4. If no ASR model is installed, choose the recommended CPU baseline or paste a Hugging Face ASR model link in the first-run wizard.
+4. If no ASR model is installed, choose the recommended CPU baseline or paste a Hugging Face ASR model link in the first-run wizard. The recommended baseline is a small English-only one-model sanity check, not a model-ranking comparison pack.
 5. Put audio/video files in `Input`, paste paths when prompted, or drag files onto `Drop_Audio_Or_Folders_Here.bat`.
 
 Interactive model choices are saved in `config.json` as a compact `last_run_selection`. On the next interactive run, blank Enter reuses that model set when the scanned model IDs still exist. Drag/drop runs use the saved selection unattended; if the saved IDs are stale, the app stops and asks you to choose models interactively again instead of silently changing the benchmark set.

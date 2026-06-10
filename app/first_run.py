@@ -12,6 +12,13 @@ from .repair_plan import build_repair_plan
 from .version import RELEASE_CHANNEL, RELEASE_COMMIT, TAG
 
 
+RECOMMENDED_BASELINE_NOTES = [
+    "One-model sanity baseline, not a ranking comparison pack.",
+    "tiny.en is English-only; use a multilingual model for non-English audio.",
+    "Small CPU-first download; the Hugging Face downloader still applies size and disk-space checks.",
+]
+
+
 def run_first_run_wizard(config: dict, *, input_func=input, print_func=print, initial_action: str | None = None) -> bool:
     models_root = Path(config["folders"]["models"])
     input_root = Path(config["folders"]["input"])
@@ -65,6 +72,8 @@ def run_first_run_wizard(config: dict, *, input_func=input, print_func=print, in
     print_func("  Downloads: Systran/faster-whisper-tiny.en")
     print_func("  Installs when selected: faster-whisper / CTranslate2 runtime")
     print_func("  Runs on CPU by default; CUDA is optional and only used if available.")
+    for note in RECOMMENDED_BASELINE_NOTES:
+        print_func(f"  Note: {note}")
     print_func()
     action = _choose_action(
         "Choose one",
@@ -121,6 +130,14 @@ def build_first_run_smoke_report(config: dict) -> dict:
         "real_smoke_command": "setup.bat --doctor --validate-real-smoke",
         "available_actions": ["run_now", "download_recommended_baseline", "paste_hugging_face_link", "open_models_folder", "open_input_folder", "quit"],
         "recommended_next_action": "run_now" if runnable_asr else "download_recommended_baseline",
+        "recommended_baseline": {
+            "repo_id": "Systran/faster-whisper-tiny.en",
+            "model_count": 1,
+            "language_scope": "English-only",
+            "comparison_scope": "sanity_baseline_not_ranking_pack",
+            "size_gated": True,
+            "notes": RECOMMENDED_BASELINE_NOTES,
+        },
         "dead_end": False,
     }
 

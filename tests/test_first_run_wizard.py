@@ -57,6 +57,9 @@ def test_first_run_baseline_discloses_dependency_group(monkeypatch, tmp_path: Pa
     output = capsys.readouterr().out
     assert "faster-whisper / CTranslate2 runtime" in output
     assert "Runs on CPU by default" in output
+    assert "One-model sanity baseline" in output
+    assert "English-only" in output
+    assert "disk-space checks" in output
 
 
 def test_first_run_existing_model_runs_now(monkeypatch, tmp_path: Path):
@@ -99,6 +102,11 @@ def test_first_run_smoke_report_is_noninteractive_and_actionable(monkeypatch, tm
     assert report["network_used"] is False
     assert report["dead_end"] is False
     assert report["recommended_next_action"] == "download_recommended_baseline"
+    assert report["recommended_baseline"]["repo_id"] == "Systran/faster-whisper-tiny.en"
+    assert report["recommended_baseline"]["model_count"] == 1
+    assert report["recommended_baseline"]["language_scope"] == "English-only"
+    assert report["recommended_baseline"]["comparison_scope"] == "sanity_baseline_not_ranking_pack"
+    assert report["recommended_baseline"]["size_gated"] is True
     assert "paste_hugging_face_link" in report["available_actions"]
     assert report["repair_plan_schema"] == "easy_asr_bench.repair_plan.v1"
     assert report["repair_plan_summary"]["needs_repair"] == 1
