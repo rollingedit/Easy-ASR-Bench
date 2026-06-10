@@ -25,5 +25,6 @@ _local/
 .pytest_cache/
 .pytest_tmp/
 release-smoke-v*.json
+!qa/release-smoke-v*.json
 release-verification-v*.txt
 release-verification-manifest-v*.json

@@ -187,6 +187,8 @@ Invalid references are reported as invalid instead of silently producing mislead
 
 Runnable ASR package families include:
 
+### Runnable ASR Models
+
 - known multi-file ONNX ASR layouts, including AR and NAR exports;
 - Hugging Face Whisper and Transformers ASR folders using Safetensors;
 - complete sharded Hugging Face Safetensors folders;
@@ -194,6 +196,10 @@ Runnable ASR package families include:
 - whisper.cpp GGML `.bin` models;
 - Generic ONNX CTC manifest v1 folders with `modelbench.json`;
 - Audio/ASR GGUF packages with matching `mmproj` projectors when the packaged llama.cpp MTMD path is available.
+
+### Blocked By Default
+
+OpenAI Whisper `.pt` checkpoint files are detected, but blocked by default unless the checkpoint checksum is allowlisted or trusted-file loading is explicitly enabled. They are not part of the default runnable model list because `.pt` loading is pickle-backed.
 
 Reference/correction LLM support is GGUF-focused. Hugging Face text-generation Safetensors folders are recognized as needing a GGUF export for this app's local reference workflow.
 
@@ -245,7 +251,7 @@ Output/
       batch-records.json
 ```
 
-The dashboard filters and pages through files, summarizes every model per file, keeps corrected-reference edits in the browser, supports reference export/import, and links to detailed per-file reports.
+The dashboard filters and pages through files, summarizes every model per file, saves pasted corrected references in the browser, supports reference export/import, and links to detailed per-file reports.
 
 Batch runs also write `Logs/batch_resume_manifest.json`. If the same file, selected models, reference choice, and runtime settings still match, reruns skip completed files. Missing, corrupt, empty, or failed reports do not count as complete.
 
@@ -310,5 +316,5 @@ Easy ASR Bench is conservative about external model artifacts:
 - **Model download says disk space or path length is risky:** use a short local install/model path and free space on the target drive.
 - **Doctor warns about install/profile paths:** short ASCII local paths outside synced folders are the lowest-risk Windows setup.
 - **GGUF dependency missing:** install the `llama_cpp` dependency group when prompted or use the manual external LLM workflow.
-- **Unexpected app error:** check `Logs/crash_*.log`, run `Run.bat --doctor --json`, and open a GitHub issue with the requested diagnostics.
+- **Unexpected app error:** check `Logs/crash_*.log`, run `Run.bat --doctor --json`, and open a GitHub issue with the GitHub bug report template and requested diagnostics.
 - **SmartScreen, Defender, or antivirus warning:** see [docs/what_setup_installs.md](docs/what_setup_installs.md). The release uses unsigned batch/PowerShell launchers, verifies setup assets by checksum, and keeps media/model files local unless you choose a download.
