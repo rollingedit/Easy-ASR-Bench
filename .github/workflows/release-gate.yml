@@ -36,6 +36,9 @@ jobs:
       - name: Validate physical source files
         run: python scripts/validate_physical_files.py --repo .
 
+      - name: Validate public hygiene
+        run: python scripts/validate_public_hygiene.py --tracked
+
       - name: Validate raw GitHub source files
         if: github.event_name != 'pull_request'
         run: python scripts/validate_raw_github_files.py --repo rollingedit/Easy-ASR-Bench --commit ${{ github.sha }}
@@ -94,6 +97,7 @@ jobs:
             $smokeArgs += @("--require-all-pass", "--require-log-hashes", "--require-environment-summary")
           }
           python @smokeArgs
+          python scripts/validate_public_hygiene.py --path (Join-Path "release-asset" "release-smoke-$tag.json")
           $transcript = Get-Content -Raw (Join-Path "release-asset" "release-verification-$tag.txt")
           if (-not $transcript.Contains("Easy ASR Bench release verification transcript") -or -not $transcript.Contains("downloaded_assets:")) {
             throw "Published release verification transcript is missing required proof fields."

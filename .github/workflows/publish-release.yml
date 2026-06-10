@@ -47,6 +47,11 @@ jobs:
       - name: Validate physical source files
         run: python scripts/validate_physical_files.py --repo .
 
+      - name: Validate public tree and history hygiene
+        run: |
+          python scripts/validate_public_hygiene.py --tracked
+          python scripts/validate_public_hygiene.py --history-ref HEAD
+
       - name: Build release ZIP
         run: python scripts/build_release_zip.py --version ${{ inputs.tag }} --update-metadata
 
@@ -88,6 +93,7 @@ jobs:
             $args += @("--require-all-pass", "--require-log-hashes", "--require-environment-summary")
           }
           python @args
+          python scripts/validate_public_hygiene.py --path release-smoke-${{ inputs.tag }}.json
 
       - name: Write release notes
         run: python scripts/write_release_notes.py ${{ inputs.tag }} --output release_notes/${{ inputs.tag }}.md --smoke release-smoke-${{ inputs.tag }}.json

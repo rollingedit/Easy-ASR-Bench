@@ -156,6 +156,9 @@ def test_release_smoke_writer_and_verifier_require_smoke_asset():
     assert "Release smoke asset is missing" in verifier
     assert "asset_hashes_verified" in verifier
     assert "--write-transcript" in verifier
+    assert "validate_public_hygiene.py --tracked" in publish
+    assert "validate_public_hygiene.py --history-ref HEAD" in publish
+    assert "validate_public_hygiene.py --path release-smoke-${{ inputs.tag }}.json" in publish
 
 
 def test_public_hygiene_validator_catches_private_machine_details(tmp_path):
@@ -242,6 +245,8 @@ def test_publish_workflow_refuses_public_asset_mutation_before_clobber():
     assert "tests/test_app_main_doctor_strict_flag.py" in release_gate
     assert "release-asset/setup.bat" in release_gate
     assert 'cmd /d /c "`"$lonely\\setup.bat`" --dry-run --verify-release"' in release_gate
+    assert "validate_public_hygiene.py --tracked" in release_gate
+    assert 'validate_public_hygiene.py --path (Join-Path "release-asset" "release-smoke-$tag.json")' in release_gate
 
 
 def test_release_verifier_peels_annotated_tags():
