@@ -9,7 +9,12 @@ def test_setup_offers_run_now_after_public_install():
     assert "[P] Paste a Hugging Face model link to download" in setup
     assert "[M] Open Models folder" in setup
     assert "[I] Open Input folder" in setup
-    assert 'choice /C RPMIQ /N /M "Choose R, P, M, I, or Q: "' in setup
+    assert "[O] Open Output folder" in setup
+    assert "Installed app:" in setup
+    assert "Launchers and folders:" in setup
+    assert "This window will stay open until you choose Q." in setup
+    assert 'choice /C RPMIOQ /N /M "Choose R, P, M, I, O, or Q: "' in setup
+    assert "goto post_setup_menu_loop" in setup
     assert "Run.bat" in setup
     assert "--first-run" in setup
     assert "--download-model-first" in setup

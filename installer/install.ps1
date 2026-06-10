@@ -357,6 +357,24 @@ function Restore-MovedUserData($From, $To) {
   }
 }
 
+function Get-InstallLockGuidance($Path) {
+  return @(
+    "Could not replace the existing Easy ASR Bench install folder: $Path",
+    "Close every Easy ASR Bench window, command prompt, report browser tab, and Explorer window opened inside that folder, then run setup.bat again.",
+    "If you were trying to repair an existing install, run setup.bat --repair after closing those windows.",
+    "No new install was activated before this failure."
+  ) -join "`n"
+}
+
+function Move-ExistingInstallToBackup($From, $To) {
+  try {
+    Move-Item -LiteralPath $From -Destination $To -Force -ErrorAction Stop
+  }
+  catch {
+    throw (Get-InstallLockGuidance $From)
+  }
+}
+
 function Get-ShortcutFolder {
   return Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Easy ASR Bench"
 }
@@ -543,7 +561,7 @@ Invoke-Step "Installing app atomically with user-data preservation" {
   try {
     if (Test-Path $InstallDir) {
       Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
-      Move-Item -LiteralPath $InstallDir -Destination $Backup -Force
+      Move-ExistingInstallToBackup $InstallDir $Backup
       New-Item -ItemType Directory -Force -Path $Preserve | Out-Null
       Move-PreservedUserData $Backup $Preserve
     }

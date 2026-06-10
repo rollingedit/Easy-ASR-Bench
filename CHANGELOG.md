@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Improved first-run setup UX. The post-install menu now shows the exact installed app, launcher, input, models, output, and Start Menu paths, keeps the setup window open after opening folders or launching actions, and adds an Output-folder shortcut option.
+- Replaced raw install-folder swap failures with actionable guidance when rerunning setup over a locked existing install. The installer now tells users to close Easy ASR Bench windows, terminals, report browser tabs, or Explorer windows inside the install folder before rerunning setup or repair.
 - Relaxed GitHub release smoke verification so a committed smoke artifact is not required to self-reference the release commit that contains it. The release tag target, uploaded asset hashes, smoke schema, smoke tag, failed-check rejection, and explicit manual-row requirements remain strict.
 - Made standalone physical ZIP validation tolerant of missing `PyYAML` so `setup.bat --dry-run --verify-release` can run on clean Python installations before project dependencies are installed. Full release-file validation in CI still parses workflow YAML through the stricter release validator.
 - Hardened installer release-asset checksum verification with a .NET SHA256 fallback for environments where the `Get-FileHash` cmdlet is unavailable, while keeping the same strict checksum comparisons.

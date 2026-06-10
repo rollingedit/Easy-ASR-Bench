@@ -59,3 +59,13 @@ def test_installer_preserved_directory_move_merges_existing_destinations():
     assert "Get-ChildItem -LiteralPath $From -Force" in helper
     assert "Move-Item -LiteralPath $child.FullName -Destination $destChild" in helper
     assert "Remove-Item -LiteralPath $From -Recurse -Force" in helper
+
+
+def test_installer_gives_actionable_guidance_when_install_folder_is_locked():
+    text = Path("installer/install.ps1").read_text(encoding="utf-8")
+
+    assert "function Get-InstallLockGuidance" in text
+    assert "Close every Easy ASR Bench window" in text
+    assert "setup.bat --repair" in text
+    assert "No new install was activated before this failure." in text
+    assert "Move-ExistingInstallToBackup $InstallDir $Backup" in text

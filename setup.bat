@@ -8,7 +8,7 @@ set INSTALL_DIR=%LOCALAPPDATA%\Easy-ASR-Bench
 set INSTALLER_PS1=%~dp0installer\install.ps1
 set TEMP_INSTALLER_PS1=%TEMP%\Easy-ASR-Bench-install-%APP_VERSION%.ps1
 set INSTALLER_URL=https://github.com/rollingedit/Easy-ASR-Bench/releases/download/%APP_VERSION%/install.ps1
-set INSTALLER_SHA256=sha256:6e0cfb08a92a64378b539da0d2a89271bdb931d67057dc004a9fd31bab3d1279
+set INSTALLER_SHA256=sha256:2ff3311ecc2fbff9441a61bf138c1c26e5e4ae0d8c7e324106c83d99256f67d0
 set VERIFY_RELEASE=0
 set ASSET_DIR=
 set NEXT_IS_ASSET_DIR=0
@@ -92,34 +92,8 @@ if errorlevel 1 (
 )
 
 echo.
-echo Setup complete.
-echo.
-echo Next step:
-echo   [R] Run Easy ASR Bench now
-echo   [P] Paste a Hugging Face model link to download
-echo   [M] Open Models folder
-echo   [I] Open Input folder
-echo   [Q] Quit
-choice /C RPMIQ /N /M "Choose R, P, M, I, or Q: "
-if errorlevel 5 exit /b 0
-if errorlevel 4 (
-  if not exist "%INSTALL_DIR%\Input" mkdir "%INSTALL_DIR%\Input"
-  explorer "%INSTALL_DIR%\Input"
-  exit /b 0
-)
-if errorlevel 3 (
-  if not exist "%INSTALL_DIR%\Models" mkdir "%INSTALL_DIR%\Models"
-  explorer "%INSTALL_DIR%\Models"
-  exit /b 0
-)
-if errorlevel 2 (
-  start "Easy ASR Bench" cmd /k ""%INSTALL_DIR%\Run.bat" --first-run --download-model-first"
-  exit /b 0
-)
-if exist "%INSTALL_DIR%\Run.bat" (
-  start "Easy ASR Bench" cmd /k ""%INSTALL_DIR%\Run.bat" --first-run"
-)
-exit /b 0
+call :post_setup_menu "%INSTALL_DIR%"
+exit /b !ERRORLEVEL!
 
 :dry_run
 echo %APP_NAME% setup dry run
@@ -327,32 +301,69 @@ if errorlevel 1 (
 if "%NO_POST_SETUP_MENU%"=="1" exit /b 0
 
 echo.
+call :post_setup_menu "%CD%"
+exit /b !ERRORLEVEL!
+
+:post_setup_menu
+set "MENU_ROOT=%~1"
+if "%MENU_ROOT%"=="" set "MENU_ROOT=%CD%"
+:post_setup_menu_loop
 echo Setup complete.
 echo.
-echo Next step:
+echo Installed app:
+echo   %MENU_ROOT%
+echo.
+echo Launchers and folders:
+echo   Run app:          %MENU_ROOT%\Run.bat
+echo   Drop media:       %MENU_ROOT%\Drop_Audio_Or_Folders_Here.bat
+echo   Models folder:    %MENU_ROOT%\Models
+echo   Input folder:     %MENU_ROOT%\Input
+echo   Output reports:   %MENU_ROOT%\Output
+echo   Start Menu:       %APPDATA%\Microsoft\Windows\Start Menu\Programs\Easy ASR Bench
+echo.
+echo Choose an action. This window will stay open until you choose Q.
 echo   [R] Run Easy ASR Bench now
 echo   [P] Paste a Hugging Face model link to download
 echo   [M] Open Models folder
 echo   [I] Open Input folder
+echo   [O] Open Output folder
 echo   [Q] Quit
-choice /C RPMIQ /N /M "Choose R, P, M, I, or Q: "
-if errorlevel 5 exit /b 0
+choice /C RPMIOQ /N /M "Choose R, P, M, I, O, or Q: "
+if errorlevel 6 exit /b 0
+if errorlevel 5 (
+  if not exist "%MENU_ROOT%\Output" mkdir "%MENU_ROOT%\Output"
+  explorer "%MENU_ROOT%\Output"
+  echo.
+  goto post_setup_menu_loop
+)
 if errorlevel 4 (
-  if not exist "%CD%\Input" mkdir "%CD%\Input"
-  explorer "%CD%\Input"
-  exit /b 0
+  if not exist "%MENU_ROOT%\Input" mkdir "%MENU_ROOT%\Input"
+  explorer "%MENU_ROOT%\Input"
+  echo.
+  goto post_setup_menu_loop
 )
 if errorlevel 3 (
-  if not exist "%CD%\Models" mkdir "%CD%\Models"
-  explorer "%CD%\Models"
-  exit /b 0
+  if not exist "%MENU_ROOT%\Models" mkdir "%MENU_ROOT%\Models"
+  explorer "%MENU_ROOT%\Models"
+  echo.
+  goto post_setup_menu_loop
 )
 if errorlevel 2 (
-  call "%~dp0Run.bat" --first-run --download-model-first
-  exit /b 0
+  if exist "%MENU_ROOT%\Run.bat" (
+    call "%MENU_ROOT%\Run.bat" --first-run --download-model-first
+  ) else (
+    echo Run.bat was not found under %MENU_ROOT%.
+  )
+  echo.
+  goto post_setup_menu_loop
 )
-call "%~dp0Run.bat" --first-run
-exit /b 0
+if exist "%MENU_ROOT%\Run.bat" (
+  call "%MENU_ROOT%\Run.bat" --first-run
+) else (
+  echo Run.bat was not found under %MENU_ROOT%.
+)
+echo.
+goto post_setup_menu_loop
 
 :verify_sha
 set VERIFY_FILE=%~1
