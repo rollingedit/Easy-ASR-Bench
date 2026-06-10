@@ -139,6 +139,14 @@ python scripts\validate_public_hygiene.py --tracked --path release-smoke-v0.4.0.
 
 The gate is intentionally conservative: release artifacts should keep runtime/provider facts but avoid exact local machine identifiers, local-only transfer references, unrelated workspace paths, and transient Sandbox account-password diagnostics.
 
+Before any public push or release, also scan the reachable branch history after any local rewrite cleanup:
+
+```powershell
+python scripts\validate_public_hygiene.py --history-ref main
+```
+
+Run the history scan on the exact ref intended for publication. If backup/original refs are still present during a rewrite, scan the publish ref directly rather than `--all`.
+
 The `report_atomic_write_failure_cleanup` row forces simulated replace failures in report text and CSV atomic-write paths and verifies failed `.partial` files are removed while the previous complete artifact remains intact. This guards against partial report artifacts after disk, permission, antivirus, or interrupted-write failures.
 
 The `watched_folder_partial_write_queue_contract` row is a non-destructive queue/watch contract for drag-drop and watched-folder input. It verifies the queue waits through a partial write before recording the fast size/mtime key, repeated watch polls do not duplicate queue state for the same source file, and completed fast keys are skipped without rehashing large already-processed files.

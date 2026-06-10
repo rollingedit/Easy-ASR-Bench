@@ -1,13 +1,14 @@
 import hashlib
 import json
 import re
+import subprocess
 import zipfile
 from unittest.mock import patch
 from pathlib import Path
 
 import scripts.verify_github_release as verify_github_release
 from scripts.check_release_version_coherence import validate as validate_version_coherence
-from scripts.validate_public_hygiene import scan_paths
+from scripts.validate_public_hygiene import scan_history, scan_paths
 from scripts.validate_raw_github_files import byte_diagnostics, compare_raw_to_zip, format_diagnostics, validate_bytes
 from scripts.validate_physical_files import validate_root
 
@@ -172,6 +173,26 @@ def test_public_hygiene_validator_catches_private_machine_details(tmp_path):
     findings = scan_paths([sensitive])
 
     assert len(findings) == 3
+
+
+def test_public_hygiene_validator_scans_reachable_history_without_echoing_match(tmp_path):
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=tmp_path, check=True)
+    note = tmp_path / "note.txt"
+    exact_gpu = "NVIDIA GeForce RTX " + "40" + "90"
+    note.write_text(exact_gpu + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", "note.txt"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "add sensitive note"], cwd=tmp_path, check=True, capture_output=True)
+    note.write_text("generic validation host\n", encoding="utf-8")
+    subprocess.run(["git", "add", "note.txt"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "clean note"], cwd=tmp_path, check=True, capture_output=True)
+
+    findings = scan_history(["HEAD"], root=tmp_path)
+
+    assert len(findings) >= 1
+    assert any("exact GPU model" in finding for finding in findings)
+    assert all(exact_gpu not in finding for finding in findings)
 
 
 def test_publish_workflow_refuses_public_asset_mutation_before_clobber():
