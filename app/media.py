@@ -93,7 +93,15 @@ def ffprobe_exe() -> str:
     return str(candidate if candidate.exists() else "ffprobe")
 
 
-def probe_audio_stream(input_path: Path) -> MediaProbeResult:
+def media_timeouts(config: dict | None = None) -> dict[str, float]:
+    media = (config or {}).get("media", {}) if isinstance(config, dict) else {}
+    return {
+        "probe": float(media.get("probe_timeout_seconds", 30)),
+        "conversion": float(media.get("conversion_timeout_seconds", 3600)),
+    }
+
+
+def probe_audio_stream(input_path: Path, timeout_seconds: float = 30) -> MediaProbeResult:
     command = [
         ffprobe_exe(),
         "-v",
@@ -107,9 +115,19 @@ def probe_audio_stream(input_path: Path) -> MediaProbeResult:
         str(input_path),
     ]
     try:
-        completed = subprocess.run(command, capture_output=True, text=True)
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=timeout_seconds)
+    except subprocess.TimeoutExpired as exc:
+        return MediaProbeResult(
+            ok=False,
+            has_audio=True,
+            ffprobe_available=True,
+            probe_method="ffprobe",
+            error=f"ffprobe timed out after {timeout_seconds:g} seconds while inspecting {input_path}",
+            raw_stdout=str(exc.stdout or ""),
+            raw_stderr=str(exc.stderr or ""),
+        )
     except OSError as exc:
-        fallback = probe_audio_stream_with_ffmpeg(input_path)
+        fallback = probe_audio_stream_with_ffmpeg(input_path, timeout_seconds)
         if fallback.ok:
             return fallback
         return MediaProbeResult(
@@ -130,10 +148,20 @@ def probe_audio_stream(input_path: Path) -> MediaProbeResult:
     return MediaProbeResult(True, bool(completed.stdout.strip()), True, "ffprobe", None, completed.stdout, completed.stderr)
 
 
-def probe_audio_stream_with_ffmpeg(input_path: Path) -> MediaProbeResult:
+def probe_audio_stream_with_ffmpeg(input_path: Path, timeout_seconds: float = 30) -> MediaProbeResult:
     command = [ffmpeg_exe(), "-hide_banner", "-i", str(input_path), "-f", "null", "-"]
     try:
-        completed = subprocess.run(command, capture_output=True, text=True)
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=timeout_seconds)
+    except subprocess.TimeoutExpired as exc:
+        return MediaProbeResult(
+            False,
+            True,
+            False,
+            "ffmpeg",
+            f"ffmpeg stream probe timed out after {timeout_seconds:g} seconds while inspecting {input_path}",
+            str(exc.stdout or ""),
+            str(exc.stderr or ""),
+        )
     except OSError as exc:
         return MediaProbeResult(False, True, False, "ffmpeg", f"ffmpeg was not available: {exc}")
     combined = "\n".join(part for part in [completed.stdout, completed.stderr] if part)
@@ -160,10 +188,11 @@ def has_audio_stream(input_path: Path) -> bool:
     return probe_audio_stream(input_path).has_audio
 
 
-def normalize_to_wav(input_path: Path, temp_dir: Path) -> Path:
+def normalize_to_wav(input_path: Path, temp_dir: Path, config: dict | None = None) -> Path:
+    timeouts = media_timeouts(config)
     temp_dir.mkdir(parents=True, exist_ok=True)
     if input_path.suffix.lower() in {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".mpeg", ".mpg"}:
-        probe = probe_audio_stream(input_path)
+        probe = probe_audio_stream(input_path, timeouts["probe"])
         if probe.ok and not probe.has_audio:
             raise RuntimeError(f"No audio stream found in video: {input_path}")
         if not probe.ok:
@@ -184,7 +213,14 @@ def normalize_to_wav(input_path: Path, temp_dir: Path) -> Path:
         "s16",
         str(output),
     ]
-    completed = subprocess.run(command, capture_output=True, text=True)
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=timeouts["conversion"])
+    except subprocess.TimeoutExpired as exc:
+        stderr = str(exc.stderr or "").strip()
+        if len(stderr) > 1200:
+            stderr = stderr[-1200:]
+        detail = f": {stderr}" if stderr else ""
+        raise RuntimeError(f"FFmpeg conversion timed out after {timeouts['conversion']:g} seconds for {input_path}{detail}") from exc
     if completed.returncode != 0:
         stderr = completed.stderr.strip()
         if len(stderr) > 1200:
@@ -437,7 +473,7 @@ def plan_wav_chunks(wav_path: Path, config: dict, sr: int = 16000) -> list[Audio
 
 
 def prepare_audio(input_path: Path, temp_dir: Path, config: dict) -> tuple[Path, AudioSamples, list[AudioChunk]]:
-    wav_path = normalize_to_wav(input_path, temp_dir)
+    wav_path = normalize_to_wav(input_path, temp_dir, config)
     with sf.SoundFile(wav_path) as handle:
         sample_count = int(handle.frames)
         sr = int(handle.samplerate)

@@ -75,6 +75,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "file_stability_wait_seconds": 5,
         "extensions": MEDIA_EXTENSIONS,
     },
+    "media": {
+        "probe_timeout_seconds": 30,
+        "conversion_timeout_seconds": 3600,
+    },
     "transcription": {
         "task": "transcribe",
         "ar_prompt": "transcribe the speech with proper punctuation and capitalization.",

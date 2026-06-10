@@ -36,7 +36,7 @@ def test_prepare_audio_plans_chunks_without_full_wav_load(tmp_path, monkeypatch)
         ]
     )
     wav_path = write_wav(tmp_path / "normalized.wav", samples, sr)
-    monkeypatch.setattr(media, "normalize_to_wav", lambda input_path, temp_dir: wav_path)
+    monkeypatch.setattr(media, "normalize_to_wav", lambda input_path, temp_dir, config=None: wav_path)
     monkeypatch.setattr(
         media,
         "load_wav_float32",

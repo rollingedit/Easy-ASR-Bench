@@ -7,6 +7,7 @@
 - Changed audio preparation to plan chunks from the normalized WAV with bounded reads instead of loading the full WAV into memory. Chunks now keep source offsets and materialize sample arrays lazily only when an adapter transcribes that chunk.
 - Fixed resume/status handling and chunk-failure reporting. Missing, empty, corrupt, or failed `results.json` files now fail closed instead of being treated as complete, batch resume verifies recorded reports before skipping, and adapter chunk failures now produce structured `chunk_failed` errors with empty transcript text instead of inserting error markers into transcripts.
 - Completed the automatic local GGUF reference scoring path. Valid generated reference JSON is now parsed, validated against source/chunk metadata, scored immediately, and published as `scored_report.json` plus `compare_scored.html`; invalid generated references are surfaced on the local reference attempt instead of silently recording raw text only.
+- Added configurable media subprocess timeouts. FFprobe/FFmpeg probing and conversion now use bounded timeouts, and timeout failures become normal media-preparation errors that can be captured in failed-file reports.
 
 ## v0.4.0 candidate
 
