@@ -127,3 +127,11 @@ def test_open_latest_report_prefers_final_results_then_compare_html():
     assert "compare.html" in launcher
     assert launcher.index("final_results.html") < launcher.index("compare.html")
     assert "No final_results.html or compare.html report was found under Output." in launcher
+
+
+def test_single_file_runs_write_final_results_wrapper():
+    writer = Path("app/results_writer.py").read_text(encoding="utf-8")
+
+    assert "final_results.html" in writer
+    assert "render_single_file_final_results" in writer
+    assert "compare.html" in writer

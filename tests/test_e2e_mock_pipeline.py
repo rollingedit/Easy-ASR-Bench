@@ -116,7 +116,7 @@ def test_mock_e2e_pipeline_writes_reports_when_one_model_fails(tmp_path, monkeyp
     )
 
     assert report_dir is not None
-    for name in ["results.json", "results.txt", "benchmark.csv", "compare.html", "results_llm_prompt_part_001.txt"]:
+    for name in ["results.json", "results.txt", "benchmark.csv", "compare.html", "final_results.html", "results_llm_prompt_part_001.txt"]:
         assert (report_dir / name).exists()
     results = json.loads((report_dir / "results.json").read_text(encoding="utf-8"))
     assert [run["model"]["candidate_id"] for run in results["runs"]] == ["good-model", "bad-model"]
@@ -132,6 +132,9 @@ def test_mock_e2e_pipeline_writes_reports_when_one_model_fails(tmp_path, monkeyp
     assert bad["errors"][0]["traceback"]
     assert "Likely causes" in (report_dir / "results.txt").read_text(encoding="utf-8")
     assert "Model Errors" in (report_dir / "compare.html").read_text(encoding="utf-8")
+    single_file_index = (report_dir / "final_results.html").read_text(encoding="utf-8")
+    assert 'href="compare.html"' in single_file_index
+    assert "This single-file run uses the detailed comparison report" in single_file_index
     assert not wav_path.exists()
     output = capsys.readouterr().out
     assert "[File 1/1] Processing input.wav" in output
@@ -201,7 +204,7 @@ def test_mock_e2e_pipeline_writes_failed_file_report_when_media_preparation_fail
     )
 
     assert report_dir is not None
-    for name in ["results.json", "results.txt", "benchmark.csv", "compare.html"]:
+    for name in ["results.json", "results.txt", "benchmark.csv", "compare.html", "final_results.html"]:
         assert (report_dir / name).exists()
     results = json.loads((report_dir / "results.json").read_text(encoding="utf-8"))
     assert results["runs"] == []
@@ -213,4 +216,5 @@ def test_mock_e2e_pipeline_writes_failed_file_report_when_media_preparation_fail
     html = (report_dir / "compare.html").read_text(encoding="utf-8")
     assert "Run Status" in html
     assert "No source files were modified" in html
+    assert "Failed before model run" in (report_dir / "final_results.html").read_text(encoding="utf-8")
     assert "Wrote failure report" in capsys.readouterr().out

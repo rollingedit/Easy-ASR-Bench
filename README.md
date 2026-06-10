@@ -7,8 +7,8 @@ Drop models into `Models`, drop media into `Input` or onto the launcher, choose 
 - `results.txt`: readable transcript and benchmark report
 - `results.json`: canonical machine-readable run data
 - `benchmark.csv`: spreadsheet-friendly performance rows
-- `final_results.html`: batch dashboard for multi-file runs, corrected-reference editing, model ranking, and transcript comparison
-- `compare.html`: per-file offline detail report linked from batch dashboards and single-file runs
+- `final_results.html`: main HTML entry point; batch runs open the dashboard, and single-file runs open a lightweight wrapper that links to the detail report
+- `compare.html`: per-file offline detail report linked from dashboards and single-file wrappers
 
 ## What It Does
 
@@ -176,7 +176,7 @@ Workflow:
 2. Open `results.txt` or `results_llm_prompt_part_001.txt`.
 3. Give the LLM-corrected reference instruction block to a local GGUF LLM or an external LLM.
 4. The LLM returns JSON with schema `easy_asr_bench.llm_reference.v1`.
-5. Open `Open_Latest_Report.bat`, or open `final_results.html` for batch runs and `compare.html` for single-file detail reports.
+5. Open `Open_Latest_Report.bat` or `final_results.html`; single-file folders link from there to `compare.html`.
 6. Paste that JSON into the reference box.
 7. Click **Validate Reference and Score Models**.
 
@@ -194,10 +194,11 @@ Output/
     results.txt
     results.json
     benchmark.csv
+    final_results.html
     compare.html
 ```
 
-When a run processes multiple audio/video files, Easy ASR Bench also writes a batch dashboard:
+For a single-file run, `final_results.html` is a lightweight entry page that links to the detailed `compare.html` report. When a run processes multiple audio/video files, Easy ASR Bench also writes a batch dashboard:
 
 ```text
 Output/
@@ -218,7 +219,7 @@ The batch dashboard is the main multi-file report. It shows several files side b
 - `setup.bat --doctor`: run environment checks
 - `Run.bat`: scan models, choose models, process inputs
 - `Drop_Audio_Or_Folders_Here.bat`: drag files/folders directly onto the app
-- `Open_Latest_Report.bat`: open the newest batch `final_results.html` report, falling back to per-file `compare.html` reports
+- `Open_Latest_Report.bat`: open the newest `final_results.html` report, falling back to per-file `compare.html` reports
 - `Open_Models_Folder.bat`: open the model drop folder
 - `Open_Input_Folder.bat`: open the input folder
 - `Open_Output_Folder.bat`: open the report folder

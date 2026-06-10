@@ -229,7 +229,7 @@ def test_readme_documents_current_batch_output_layout():
     assert "final_results.html" in readme
     assert "_data/" in readme
     assert "batch-records.json" in readme
-    assert "Open_Latest_Report.bat`: open the newest batch `final_results.html`" in readme
+    assert "Open_Latest_Report.bat`: open the newest `final_results.html`" in readme
     assert "saves pasted corrected references in the browser" in readme
     assert "  batch__20260606_143012/\n    index.html\n    batch.json" not in readme
 

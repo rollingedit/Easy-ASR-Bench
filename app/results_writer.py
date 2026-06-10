@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import html
 import importlib.metadata
 import json
 import os
@@ -390,14 +391,52 @@ def write_all_reports(results: dict, output_root: Path) -> Path:
     json_path = output_dir / "results.json"
     txt_path = output_dir / "results.txt"
     html_path = output_dir / "compare.html"
+    final_path = output_dir / "final_results.html"
     csv_path = output_dir / "benchmark.csv"
 
     _atomic_write_text(json_path, json.dumps(results, ensure_ascii=False, indent=2))
     _atomic_write_text(txt_path, render_text_report(results))
     _atomic_write_text(html_path, build_html_report(results))
+    _atomic_write_text(final_path, render_single_file_final_results(results))
     write_benchmark_csv(csv_path, results)
     write_prompt_packs(output_dir, results)
     return output_dir
+
+
+def render_single_file_final_results(results: dict) -> str:
+    source = results.get("source", {})
+    source_name = html.escape(str(source.get("name") or "Single file report"))
+    status = "Failed before model run" if results.get("errors") and not results.get("runs") else "Run completed"
+    run_count = len(results.get("runs", []))
+    return (
+        "<!doctype html>\n"
+        '<html lang="en">\n'
+        "<head>\n"
+        '  <meta charset="utf-8">\n'
+        "  <title>Easy ASR Bench - Final Results</title>\n"
+        "  <style>\n"
+        "    body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#f6f7f9;color:#172033;font-size:14px;}\n"
+        "    main{max-width:820px;margin:48px auto;padding:0 20px;}\n"
+        "    h1{font-size:24px;margin:0 0 8px;letter-spacing:0;}\n"
+        "    p{line-height:1.5;color:#445066;}\n"
+        "    .panel{background:#fff;border:1px solid #d9dee8;border-radius:8px;padding:20px;}\n"
+        "    a.button{display:inline-block;margin-top:12px;padding:10px 14px;background:#174ea6;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;}\n"
+        "    dl{display:grid;grid-template-columns:140px 1fr;gap:8px 14px;margin:16px 0 0;}\n"
+        "    dt{color:#607089;}dd{margin:0;overflow-wrap:anywhere;}\n"
+        "  </style>\n"
+        "</head>\n"
+        "<body><main><section class=\"panel\">\n"
+        f"  <h1>{source_name}</h1>\n"
+        "  <p>This single-file run uses the detailed comparison report as its result view.</p>\n"
+        "  <dl>\n"
+        f"    <dt>Status</dt><dd>{html.escape(status)}</dd>\n"
+        f"    <dt>Models run</dt><dd>{run_count}</dd>\n"
+        f"    <dt>Created</dt><dd>{html.escape(str(results.get('created_local') or ''))}</dd>\n"
+        "  </dl>\n"
+        "  <a class=\"button\" href=\"compare.html\">Open detailed comparison</a>\n"
+        "</section></main></body>\n"
+        "</html>\n"
+    )
 
 
 def render_text_report(results: dict) -> str:

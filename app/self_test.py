@@ -70,7 +70,7 @@ def check_results_writer() -> None:
         )
         results = build_results(source, 1.0, [Chunk()], [result], [], 0.1)
         output_dir = write_all_reports(results, root / "Output")
-        for name in ["results.txt", "results.json", "benchmark.csv", "compare.html"]:
+        for name in ["results.txt", "results.json", "benchmark.csv", "compare.html", "final_results.html"]:
             if not (output_dir / name).exists():
                 raise AssertionError(f"Missing report output {name}")
         text = (output_dir / "results.txt").read_text(encoding="utf-8")
