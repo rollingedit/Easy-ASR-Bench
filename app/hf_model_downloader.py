@@ -541,6 +541,48 @@ def destination_for(models_root: Path, ref: HFModelRef, choice: DownloadChoice |
     return models_root / _bounded_destination_name(name, _destination_name_budget(models_root, choice))
 
 
+def projected_download_path_length(destination: Path, choice: DownloadChoice) -> dict:
+    root = destination if destination.is_absolute() else Path.cwd() / destination
+    paths = [root / local_relative_name(choice, filename) for filename in choice.files]
+    if not paths:
+        paths = [root]
+    longest = max(paths, key=lambda path: len(str(path)))
+    length = len(str(longest))
+    return {
+        "ok": length <= MAX_WINDOWS_DOWNLOAD_PATH_CHARS,
+        "max_length": length,
+        "budget": MAX_WINDOWS_DOWNLOAD_PATH_CHARS,
+        "longest_path": str(longest),
+        "destination": str(root),
+    }
+
+
+def _confirm_download_path_lengths(destination: Path, choice: DownloadChoice, input_func=input, print_func=print) -> bool:
+    check = projected_download_path_length(destination, choice)
+    if check["ok"]:
+        if int(check["max_length"]) >= MAX_WINDOWS_DOWNLOAD_PATH_CHARS - 20:
+            print_func(
+                "Path length check: projected longest model path is close to the Windows safety budget "
+                f"({check['max_length']}/{check['budget']} characters). A short local Models folder is safer."
+            )
+        return True
+    print_func("")
+    print_func(
+        "Windows path length warning: the selected package would create a path longer than the conservative "
+        f"{check['budget']}-character safety budget."
+    )
+    print_func(f"Longest projected path length: {check['max_length']}")
+    print_func(f"Destination: {check['destination']}")
+    print_func("Use a shorter Models folder such as C:\\EasyASR\\Models, or move this app to a shorter local path outside synced folders.")
+    answer_raw = _read_input(input_func, f"Type {key(TYPED_DOWNLOAD_CONFIRMATION)} to continue anyway, or press Enter to cancel: ", print_func)
+    if answer_raw is None:
+        return False
+    if answer_raw.strip() != TYPED_DOWNLOAD_CONFIRMATION:
+        print_func("Download cancelled.")
+        return False
+    return True
+
+
 def _download_file(repo_id: str, revision: str | None, filename: str, destination: Path, relative_name: str | None = None) -> Path:
     from huggingface_hub import hf_hub_download
 
@@ -1379,6 +1421,8 @@ def download_hf_model_from_ref(models_root: Path, raw: str, input_func=input, pr
             print_func("Download cancelled.")
             return None
     destination = destination_for(models_root, ref, selected)
+    if not _confirm_download_path_lengths(destination, selected, input_func=input_func, print_func=print_func):
+        return None
     if not _confirm_download_disk_space(destination, selected.total_bytes, input_func=input_func, print_func=print_func):
         return None
     plan_path = _write_initial_download_repair_plan(ref, selected, files, destination)

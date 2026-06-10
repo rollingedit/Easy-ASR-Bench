@@ -14,6 +14,8 @@ from app.hf_model_downloader import (
     download_hf_model_interactive,
     download_choice,
     execute_missing_file_repair_plan,
+    projected_download_path_length,
+    _confirm_download_path_lengths,
     local_relative_name,
     offer_missing_file_repair,
     parent_refs,
@@ -515,6 +517,66 @@ def test_destination_for_shrinks_further_under_deep_roots(tmp_path: Path):
     longest_target = destination / "Qwen3-ASR-0.6B.mmproj-Q8_0.gguf"
 
     assert len(str(longest_target if longest_target.is_absolute() else Path.cwd() / longest_target)) <= 240
+
+
+def test_path_length_preflight_passes_short_destination(tmp_path: Path):
+    choice = DownloadChoice(
+        label="Small",
+        kind="folder",
+        primary_files=("config.json",),
+        files=("config.json", "tokenizer.json"),
+        task_hint="unknown",
+    )
+    destination = tmp_path / "Models" / "short"
+
+    check = projected_download_path_length(destination, choice)
+
+    assert check["ok"] is True
+    assert check["max_length"] <= check["budget"]
+
+
+def test_path_length_preflight_rejects_deep_destination_without_override(tmp_path: Path):
+    choice = DownloadChoice(
+        label="Deep",
+        kind="folder",
+        primary_files=("config.json",),
+        files=("nested/" * 20 + "model.safetensors",),
+        task_hint="unknown",
+    )
+    destination = tmp_path / ("deep_segment_" * 12)
+    messages: list[str] = []
+
+    ok = _confirm_download_path_lengths(destination, choice, input_func=lambda prompt: "", print_func=messages.append)
+
+    assert ok is False
+    assert any("Windows path length warning" in message for message in messages)
+    assert any("shorter Models folder" in message for message in messages)
+
+
+def test_path_length_preflight_allows_typed_override(tmp_path: Path):
+    choice = DownloadChoice(
+        label="Deep",
+        kind="folder",
+        primary_files=("config.json",),
+        files=("nested/" * 20 + "model.safetensors",),
+        task_hint="unknown",
+    )
+    destination = tmp_path / ("deep_segment_" * 12)
+
+    assert _confirm_download_path_lengths(destination, choice, input_func=lambda prompt: "DOWNLOAD", print_func=lambda text: None) is True
+
+
+def test_path_length_preflight_short_root_mitigation_is_safe():
+    choice = DownloadChoice(
+        label="Deep",
+        kind="folder",
+        primary_files=("config.json",),
+        files=("nested/" * 6 + "model.safetensors",),
+        task_hint="unknown",
+    )
+    destination = Path("C:/EasyASR/Models/model")
+
+    assert projected_download_path_length(destination, choice)["ok"] is True
 
 
 def test_interactive_download_requires_confirmation_for_large_choice(tmp_path: Path, monkeypatch):
