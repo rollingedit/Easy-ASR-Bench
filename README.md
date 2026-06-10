@@ -8,6 +8,18 @@ Public ASR leaderboards are useful, but they are not your files: fast speech, ac
 
 Easy ASR Bench is for the practical moment when a new model drops and you want to know whether it is actually better for your work. Paste the Hugging Face link, let the app download the right package pieces, run it on your own test files, and compare the result against the models you already trust.
 
+The point is that it should feel boringly direct:
+
+```text
+No Python project setup.
+No hunting for sidecar files.
+No guessing which optional runtime package to install.
+No silent CPU/GPU fallback.
+No batch ruined because one model failed.
+```
+
+You give it a model and media. It gets the environment ready enough to run, transcribes what it can, repairs what it safely can, keeps going when one branch fails, and writes a report that says what actually happened.
+
 The normal user flow is intentionally small:
 
 ```text
@@ -20,7 +32,7 @@ Open final_results.html
 
 Use one model when you just want a transcript. Use several models when you want to compare quality, speed, RAM, GPU memory, provider behavior, and failures side by side.
 
-Easy ASR Bench owns the messy middle: setup, model detection, Hugging Face package selection, missing-file repair prompts, dependency planning, CPU/GPU provider probing, runtime repair, fallback reporting, batch continuation, and the final report.
+Easy ASR Bench owns the ugly middle: setup, model detection, Hugging Face package selection, missing-file repair prompts, dependency planning, CPU/GPU provider probing, runtime repair, fallback reporting, batch continuation, and the final report.
 
 <details>
 <summary><strong>Contents</strong></summary>
