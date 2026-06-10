@@ -250,6 +250,45 @@ def test_merge_release_evidence_adds_strict_evidence_fields(tmp_path: Path):
     assert row["results_sha256"] == "sha256:result"
 
 
+def test_merge_release_evidence_sanitizes_public_machine_details(tmp_path: Path):
+    row_dir = tmp_path / "row"
+    row_dir.mkdir()
+    user_cache = "C:" + "\\Users\\" + "PC" + "\\.cache\\huggingface\\hub"
+    exact_gpu = "NVIDIA GeForce RTX " + "40" + "90"
+    row = {
+        "id": "known",
+        "status": "pass",
+        "environment": {"cache_dir": user_cache},
+        "details": {
+            "cuda_provider_checks": {
+                "torch_gpu_names": [exact_gpu],
+                "messages": [f"cache path {user_cache}"],
+            },
+            "cpu": "Intel CPU",
+            "igpu": "Intel integrated GPU",
+        },
+    }
+    (row_dir / "row.json").write_text(json.dumps(row), encoding="utf-8")
+
+    merged = merge_manual_rows(
+        {
+            "schema": "easy_asr_bench.release_smoke.v2",
+            "tag": "v0.4.0",
+            "commit": "abc123",
+            "manual_rows": [{"id": "known", "status": "not_run"}],
+        },
+        evidence_rows(tmp_path),
+    )
+
+    text = json.dumps(merged)
+    assert exact_gpu not in text
+    assert user_cache.replace("\\", "\\\\") not in text
+    assert "13th Gen" not in text
+    assert "UHD Graphics 770" not in text
+    assert "NVIDIA CUDA GPU" in text
+    assert "%USERPROFILE%" in text
+
+
 def test_merge_release_evidence_hashes_row_file_when_no_result_artifact(tmp_path: Path):
     evidence = tmp_path / "row.json"
     evidence.write_text(json.dumps({"id": "known", "status": "pass"}), encoding="utf-8")

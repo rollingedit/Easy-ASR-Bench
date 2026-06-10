@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 
 
@@ -55,6 +56,26 @@ def _environment_summary(row: dict, smoke: dict) -> dict:
     return dict(runner) if isinstance(runner, dict) else {}
 
 
+def _sanitize_string(value: str) -> str:
+    sanitized = re.sub(r"C:[\\/]+Users[\\/]+[^\\/\"\s]+", "%USERPROFILE%", value, flags=re.IGNORECASE)
+    sanitized = re.sub(r"NVIDIA GeForce RTX\s+\d+(?:\s+\w+)?", "NVIDIA CUDA GPU", sanitized, flags=re.IGNORECASE)
+    sanitized = re.sub(r"NVIDIA RTX\s+\d+(?:\s+\w+)?", "NVIDIA CUDA GPU", sanitized, flags=re.IGNORECASE)
+    sanitized = re.sub(r"Intel\(R\)\s+UHD Graphics\s+\d+", "Intel integrated GPU", sanitized, flags=re.IGNORECASE)
+    sanitized = re.sub(r"\b\d{1,2}th Gen Intel\(R\)\s+Core\(TM\)\s+i\d+-\d+\w*\b", "Intel CPU", sanitized, flags=re.IGNORECASE)
+    sanitized = re.sub(r"\bRTX\s+\d+(?:\s+\w+)?", "CUDA dGPU", sanitized, flags=re.IGNORECASE)
+    return sanitized
+
+
+def sanitize_public_evidence(value: object) -> object:
+    if isinstance(value, dict):
+        return {str(key): sanitize_public_evidence(child) for key, child in value.items()}
+    if isinstance(value, list):
+        return [sanitize_public_evidence(child) for child in value]
+    if isinstance(value, str):
+        return _sanitize_string(value)
+    return value
+
+
 def _enrich_release_evidence(row: dict, smoke: dict) -> dict:
     output = dict(row)
     tag = str(smoke.get("tag") or "")
@@ -78,7 +99,7 @@ def _enrich_release_evidence(row: dict, smoke: dict) -> dict:
                 results_hash = sha256(path)
     if results_hash:
         output.setdefault("results_sha256", results_hash)
-    return output
+    return sanitize_public_evidence(output)
 
 
 def evidence_rows(evidence_dir: Path, *, ignore_malformed: bool = False) -> dict[str, dict]:
