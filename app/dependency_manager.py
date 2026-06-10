@@ -19,6 +19,7 @@ from pathlib import Path
 from .dependency_specs import CORE_IMPORTS
 from .dependency_specs import parse_requirement_packages
 from .ctranslate2_probe import ctranslate2_cuda_available
+from .disk_space import format_bytes, require_disk_space
 
 
 VC_REDIST_PACKAGE_ID = "Microsoft.VCRedist.2015+.x64"
@@ -232,6 +233,25 @@ ONNX_PROVIDER_COMPATIBILITY = {
         "config_key": "onnxruntime_openvino_compatibility_versions",
         "versions": ("1.24.1", "1.24.0", "1.23.0", "1.22.0", "1.21.1", "1.20.1", "1.19.2", "1.18.1", "1.17.3"),
     },
+}
+
+DEPENDENCY_INSTALL_SPACE_ESTIMATES = {
+    ("core", None): 600 * 1024 * 1024,
+    ("media_tools", None): 600 * 1024 * 1024,
+    ("onnx", None): 1500 * 1024 * 1024,
+    ("onnx", "cuda"): 2500 * 1024 * 1024,
+    ("onnx", "directml"): 1500 * 1024 * 1024,
+    ("onnx", "openvino"): 2500 * 1024 * 1024,
+    ("transformers_cpu", None): 6000 * 1024 * 1024,
+    ("transformers_cpu", "cuda"): 12000 * 1024 * 1024,
+    ("openai_whisper", None): 5000 * 1024 * 1024,
+    ("openai_whisper", "cuda"): 12000 * 1024 * 1024,
+    ("faster_whisper", None): 1500 * 1024 * 1024,
+    ("faster_whisper", "cuda"): 3500 * 1024 * 1024,
+    ("llama_cpp", None): 1500 * 1024 * 1024,
+    ("llama_cpp", "cpu"): 1500 * 1024 * 1024,
+    ("llama_cpp", "cuda"): 3000 * 1024 * 1024,
+    ("llama_cpp", "vulkan"): 3000 * 1024 * 1024,
 }
 
 
@@ -1153,6 +1173,29 @@ def _repair_onnx_provider_compatibility(group: str, decision: dict, config: dict
     }
 
 
+def _dependency_install_space_estimate(group: str, decision: dict) -> int | None:
+    accelerator = decision.get("accelerator") if decision.get("use_accelerator") else None
+    if group == "llama_cpp" and decision.get("cpu_wheel_fallback"):
+        accelerator = "cpu"
+    return DEPENDENCY_INSTALL_SPACE_ESTIMATES.get((group, accelerator)) or DEPENDENCY_INSTALL_SPACE_ESTIMATES.get((group, None))
+
+
+def _check_dependency_install_disk_space(group: str, project_root: Path, config: dict, decision: dict) -> dict:
+    estimate = _dependency_install_space_estimate(group, decision)
+    allow_low_space = bool(config.get("dependency_install", {}).get("allow_low_disk_space_install", False))
+    check = require_disk_space(project_root, estimate, label=f"{group} dependency install", allow_low_space=allow_low_space)
+    return {
+        "path": str(check.path),
+        "required_bytes": check.required_bytes,
+        "required": format_bytes(check.required_bytes),
+        "free_bytes": check.free_bytes,
+        "free": format_bytes(check.free_bytes),
+        "ok": check.ok,
+        "reason": check.reason,
+        "override": allow_low_space and not check.ok,
+    }
+
+
 def install_group_for_config(group: str, project_root: Path, config: dict, log_path: Path | None = None) -> dict:
     if group == "llama_mtmd":
         log_handle = None
@@ -1249,11 +1292,20 @@ def install_group_for_config(group: str, project_root: Path, config: dict, log_p
             "cpu_wheel_fallback": True,
             "reason": f"{decision.get('reason', '')} Using the official prebuilt CPU wheel index instead of a local source build.".strip(),
         }
+    disk_space_check = _check_dependency_install_disk_space(group, project_root, config, decision)
+    decision = {**decision, "disk_space_check": disk_space_check}
     log_handle = None
     if log_path is not None:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_handle = log_path.open("a", encoding="utf-8", newline="\n")
         log_handle.write(f"Installing dependency group {group}\n")
+        log_handle.write(
+            "Disk space check: "
+            f"required={disk_space_check['required']} free={disk_space_check['free']} "
+            f"path={disk_space_check['path']} reason={disk_space_check['reason']}"
+            + (" override=true" if disk_space_check["override"] else "")
+            + "\n"
+        )
         if pip_args:
             log_handle.write(f"pip args: {' '.join(pip_args)}\n")
         else:

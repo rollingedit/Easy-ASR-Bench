@@ -90,7 +90,7 @@ In the interactive model menu, choose `D` to paste a Hugging Face model link or 
 
 It downloads the selected runnable package plus required metadata files such as config, tokenizer, processor, ONNX sidecars, Safetensors shard indexes, shard files for the chosen index, or matching GGUF `mmproj` files. It does not download every weight variant in the repo by default.
 
-For large or unknown layouts, Easy ASR Bench shows the file count and asks before downloading. Unknown folders can be downloaded for inspection, but they are not treated as runnable unless the scanner recognizes them after download.
+For large or unknown layouts, Easy ASR Bench shows the file count and asks before downloading. When Hugging Face reports file sizes, it also checks free disk space for both the Hub cache and the Models-folder copy before downloading. Unknown folders can be downloaded for inspection, but they are not treated as runnable unless the scanner recognizes them after download.
 
 After a download, the app rescans the package. If it still looks incomplete and exact missing-file matches exist in the Hugging Face repo, it lists those files and asks before downloading them. Existing local files are skipped when the same package is downloaded again.
 
@@ -260,6 +260,7 @@ Easy ASR Bench does not execute arbitrary Python files from model folders. Safet
 - **GPU unavailable:** run `setup.bat --doctor`. It reports NVIDIA, AMD, Intel, Vulkan, Torch CUDA, ONNX Runtime providers, and dependency repair commands. If setup cannot make GPU work, CPU fallback is reported explicitly.
 - **Cannot find a report:** run a benchmark first, then open `Open_Latest_Report.bat` or go to the newest folder under `Output`.
 - **Media conversion failed:** check that the file opens normally and that there is enough disk space in `Temp`.
+- **Install or model download says disk space is low:** free space on the install/model drive first. Advanced users can explicitly override low-space dependency installs with `dependency_install.allow_low_disk_space_install`, but model downloads still ask for typed confirmation before continuing.
 - **GGUF dependency missing:** install the `llama_cpp` dependency group when prompted, or choose the manual ChatGPT/Claude workflow.
 - **GGUF model lives in another app folder:** choose the paste-path option in the LLM reference menu. The path is saved in `config.json` and scanned again on the next run.
 - **Whisper model not detected:** check `docs/whisper_models.md`.

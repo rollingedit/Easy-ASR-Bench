@@ -27,7 +27,8 @@
     "auto_install_missing_runtime_dependencies": true,
     "prefer_cpu_safe_defaults": false,
     "allow_cuda_install": true,
-    "allow_accelerator_install": true
+    "allow_accelerator_install": true,
+    "allow_low_disk_space_install": false
   },
   "model_scan": {
     "recursive": true

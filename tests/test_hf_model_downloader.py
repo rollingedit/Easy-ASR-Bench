@@ -19,6 +19,7 @@ from app.hf_model_downloader import (
     parent_refs,
     parse_hf_model_ref,
 )
+from app.disk_space import DiskSpaceCheck
 
 
 def test_parse_hf_model_ref_from_repo_url_with_subfolder():
@@ -574,6 +575,78 @@ def test_interactive_download_accepts_typed_download_for_large_choice(tmp_path: 
 
     assert result is not None
     assert called["downloaded"] is True
+
+
+def test_interactive_download_cancels_on_low_disk_space(tmp_path: Path, monkeypatch):
+    files = ["config.json", "model.bin", "tokenizer.json", "vocabulary.txt"]
+    sizes = {filename: 1024 for filename in files}
+    monkeypatch.setattr("app.hf_model_downloader.inspect_repo", lambda ref: RepoInspection(ref, files, sizes))
+    monkeypatch.setattr(
+        "app.hf_model_downloader.check_disk_space",
+        lambda path, required: DiskSpaceCheck(Path(path), required, 512, False, "low_space"),
+    )
+    called = {"downloaded": False}
+
+    def fake_download(ref, choice, destination, print_func=print):
+        called["downloaded"] = True
+        return []
+
+    monkeypatch.setattr("app.hf_model_downloader.download_choice", fake_download)
+    answers = iter(["owner/model", "", ""])
+    messages: list[str] = []
+
+    result = download_hf_model_interactive(tmp_path, input_func=lambda prompt: next(answers), print_func=messages.append)
+
+    assert result is None
+    assert called["downloaded"] is False
+    assert any("Low disk space" in message for message in messages)
+
+
+def test_interactive_download_allows_typed_low_disk_space_override(tmp_path: Path, monkeypatch):
+    files = ["config.json", "model.bin", "tokenizer.json", "vocabulary.txt"]
+    sizes = {filename: 1024 for filename in files}
+    monkeypatch.setattr("app.hf_model_downloader.inspect_repo", lambda ref: RepoInspection(ref, files, sizes))
+    monkeypatch.setattr(
+        "app.hf_model_downloader.check_disk_space",
+        lambda path, required: DiskSpaceCheck(Path(path), required, 512, False, "low_space"),
+    )
+    called = {"downloaded": False}
+
+    def fake_download(ref, choice, destination, print_func=print):
+        called["downloaded"] = True
+        return []
+
+    monkeypatch.setattr("app.hf_model_downloader.download_choice", fake_download)
+    answers = iter(["owner/model", "DOWNLOAD", ""])
+
+    result = download_hf_model_interactive(tmp_path, input_func=lambda prompt: next(answers), print_func=lambda text: None)
+
+    assert result is not None
+    assert called["downloaded"] is True
+
+
+def test_interactive_download_unknown_size_warns_but_can_continue(tmp_path: Path, monkeypatch):
+    files = ["config.json", "model.bin", "tokenizer.json", "vocabulary.txt"]
+    monkeypatch.setattr("app.hf_model_downloader.inspect_repo", lambda ref: RepoInspection(ref, files, {}))
+    monkeypatch.setattr(
+        "app.hf_model_downloader.check_disk_space",
+        lambda path, required: DiskSpaceCheck(Path(path), required, 10 * 1024 * 1024, True, "size_unknown"),
+    )
+    called = {"downloaded": False}
+
+    def fake_download(ref, choice, destination, print_func=print):
+        called["downloaded"] = True
+        return []
+
+    monkeypatch.setattr("app.hf_model_downloader.download_choice", fake_download)
+    answers = iter(["owner/model", "DOWNLOAD", ""])
+    messages: list[str] = []
+
+    result = download_hf_model_interactive(tmp_path, input_func=lambda prompt: next(answers), print_func=messages.append)
+
+    assert result is not None
+    assert called["downloaded"] is True
+    assert any("size metadata is unknown" in message for message in messages)
 
 
 def test_interactive_download_inspection_failure_returns_to_user_without_crash(tmp_path: Path, monkeypatch):

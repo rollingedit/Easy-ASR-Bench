@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 from app.config import DEFAULT_CONFIG
@@ -2589,6 +2590,75 @@ def test_llama_cpp_cpu_fallback_uses_prebuilt_wheel_index(tmp_path, monkeypatch)
             LLAMA_CPP_PACKAGE_SPEC,
         ]
     ]
+
+
+def test_dependency_install_records_enough_disk_space(tmp_path, monkeypatch):
+    (tmp_path / "requirements").mkdir()
+    (tmp_path / "requirements" / "onnx.txt").write_text("onnxruntime\n", encoding="utf-8")
+    calls = []
+
+    monkeypatch.setattr("app.dependency_manager.nvidia_gpu_detected", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.intel_gpu_or_npu_detected", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.windows_gpu_detected", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.subprocess.check_call", lambda command, env=None: calls.append(command))
+
+    decision = install_group_for_config("onnx", tmp_path, {"runtime": {"provider": "cpu"}, "dependency_install": {}})
+
+    assert decision["disk_space_check"]["ok"] is True
+    assert decision["disk_space_check"]["required_bytes"] >= 1024 * 1024 * 1024
+    assert calls[-1][-2:] == ["-r", str(tmp_path / "requirements" / "onnx.txt")]
+
+
+def test_dependency_install_blocks_when_disk_space_is_low(tmp_path, monkeypatch):
+    (tmp_path / "requirements").mkdir()
+    (tmp_path / "requirements" / "onnx.txt").write_text("onnxruntime\n", encoding="utf-8")
+    calls = []
+
+    monkeypatch.setattr("app.dependency_manager.nvidia_gpu_detected", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.intel_gpu_or_npu_detected", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.windows_gpu_detected", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.subprocess.check_call", lambda command, env=None: calls.append(command))
+
+    def fake_require(path, required_bytes, *, label, allow_low_space=False):
+        raise RuntimeError("Not enough free disk space for onnx dependency install")
+
+    monkeypatch.setattr("app.dependency_manager.require_disk_space", fake_require)
+
+    try:
+        install_group_for_config("onnx", tmp_path, {"runtime": {"provider": "cpu"}, "dependency_install": {}})
+    except RuntimeError as exc:
+        assert "Not enough free disk space" in str(exc)
+    else:
+        raise AssertionError("expected low disk space to block dependency install")
+    assert calls == []
+
+
+def test_dependency_install_low_disk_space_override_is_recorded(tmp_path, monkeypatch):
+    (tmp_path / "requirements").mkdir()
+    (tmp_path / "requirements" / "onnx.txt").write_text("onnxruntime\n", encoding="utf-8")
+    calls = []
+    seen = {}
+
+    monkeypatch.setattr("app.dependency_manager.nvidia_gpu_detected", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.intel_gpu_or_npu_detected", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.windows_gpu_detected", lambda: False)
+    monkeypatch.setattr("app.dependency_manager.subprocess.check_call", lambda command, env=None: calls.append(command))
+
+    def fake_require(path, required_bytes, *, label, allow_low_space=False):
+        seen["allow_low_space"] = allow_low_space
+        return SimpleNamespace(path=Path(path), required_bytes=required_bytes, free_bytes=512, ok=False, reason="low_space")
+
+    monkeypatch.setattr("app.dependency_manager.require_disk_space", fake_require)
+
+    decision = install_group_for_config(
+        "onnx",
+        tmp_path,
+        {"runtime": {"provider": "cpu"}, "dependency_install": {"allow_low_disk_space_install": True}},
+    )
+
+    assert seen["allow_low_space"] is True
+    assert decision["disk_space_check"]["override"] is True
+    assert calls[-1][-2:] == ["-r", str(tmp_path / "requirements" / "onnx.txt")]
 
 
 def test_directml_install_removes_conflicting_plain_onnxruntime(tmp_path, monkeypatch):

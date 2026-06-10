@@ -57,6 +57,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "prefer_cpu_safe_defaults": True,
         "allow_cuda_install": False,
         "allow_accelerator_install": False,
+        "allow_low_disk_space_install": False,
     },
     "model_scan": {
         "recursive": True,

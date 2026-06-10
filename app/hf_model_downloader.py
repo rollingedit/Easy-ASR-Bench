@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from .console_style import key, prompt_label
+from .disk_space import cache_plus_destination_bytes, check_disk_space
 
 
 METADATA_NAMES = {
@@ -1283,6 +1284,37 @@ def _read_input(input_func, prompt: str, print_func=print) -> str | None:
         return None
 
 
+def _confirm_download_disk_space(destination: Path, payload_bytes: int | None, input_func=input, print_func=print) -> bool:
+    required_bytes = cache_plus_destination_bytes(payload_bytes)
+    check = check_disk_space(destination, required_bytes)
+    if check.required_bytes is None:
+        print_func(f"Disk space check: download size metadata is unknown; destination drive has {_format_bytes(check.free_bytes)} free.")
+        return True
+    if check.free_bytes is None:
+        print_func(f"Disk space check: need about {_format_bytes(check.required_bytes)} for download cache plus Models copy; free space could not be read.")
+        return True
+    if check.ok:
+        print_func(
+            "Disk space check: "
+            f"{_format_bytes(check.free_bytes)} free for about {_format_bytes(check.required_bytes)} "
+            "of download cache plus Models copy."
+        )
+        return True
+    print_func(
+        "Low disk space: "
+        f"need about {_format_bytes(check.required_bytes)} for download cache plus Models copy, "
+        f"but only {_format_bytes(check.free_bytes)} is free on {check.path}."
+    )
+    answer_raw = _read_input(input_func, f"Type {key(TYPED_DOWNLOAD_CONFIRMATION)} to continue anyway, or press Enter to cancel: ", print_func)
+    if answer_raw is None:
+        return False
+    if answer_raw.strip() != TYPED_DOWNLOAD_CONFIRMATION:
+        print_func("Download cancelled.")
+        return False
+    print_func("Continuing despite low disk space at user request.")
+    return True
+
+
 def download_hf_model_from_ref(models_root: Path, raw: str, input_func=input, print_func=print) -> Path | None:
     try:
         ref = parse_hf_model_ref(raw)
@@ -1347,6 +1379,8 @@ def download_hf_model_from_ref(models_root: Path, raw: str, input_func=input, pr
             print_func("Download cancelled.")
             return None
     destination = destination_for(models_root, ref, selected)
+    if not _confirm_download_disk_space(destination, selected.total_bytes, input_func=input_func, print_func=print_func):
+        return None
     plan_path = _write_initial_download_repair_plan(ref, selected, files, destination)
     print_func(f"Wrote download repair plan to {plan_path}")
     print_func("Repair/resume command: " + _doctor_model_layout_repair_command())
