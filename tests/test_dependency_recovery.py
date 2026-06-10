@@ -1740,7 +1740,7 @@ def test_auto_vulkan_does_not_make_cpu_llama_cpp_unavailable(monkeypatch):
     assert "llama-cpp-python GPU offload build" in missing_explicit
 
 
-def test_explicit_vulkan_provider_requires_sdk(monkeypatch):
+def test_explicit_vulkan_provider_requires_runtime_before_prebuilt_wheel(monkeypatch):
     monkeypatch.setattr("app.dependency_manager.vulkan_detected", lambda: False)
     monkeypatch.setattr("app.dependency_manager.vulkan_sdk_detected", lambda: False)
 
@@ -1800,6 +1800,8 @@ def test_repair_command_uses_windows_env_syntax_for_vulkan_source_build(monkeypa
     assert "PowerShell:" in command
     assert "$env:CMAKE_ARGS" in command
     assert "cmd.exe:" in command
+    assert "requirements/llama_cpp_vulkan_source_build.txt" in command
+    assert "requirements/llama_cpp_vulkan.txt" not in command
     assert 'set "CMAKE_ARGS=' in command
     assert "CMAKE_ARGS=-DGGML_VULKAN=on " not in command
 

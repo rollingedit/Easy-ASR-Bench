@@ -60,8 +60,17 @@ def test_llama_cpp_verified_cuda_uses_cuda():
     assert plan.backend_verified is True
 
 
-def test_llama_cpp_vulkan_runtime_without_sdk_uses_cpu():
+def test_llama_cpp_vulkan_runtime_without_sdk_selects_prebuilt_route_without_offload():
     plan = resolve_runtime_plan("llama_cpp", {"provider": "vulkan"}, HardwareInfo(vulkan_runtime=True, vulkan_sdk=False))
 
-    assert plan.actual_provider == "cpu"
-    assert "Vulkan" in plan.reason
+    assert plan.actual_provider == "vulkan"
+    assert plan.backend_verified is False
+    assert "prebuilt" in plan.reason
+    assert "n_gpu_layers=0" in (plan.fallback_reason or "")
+
+
+def test_llama_cpp_vulkan_runtime_with_verified_backend_uses_offload_without_sdk():
+    plan = resolve_runtime_plan("llama_cpp", {"provider": "vulkan"}, HardwareInfo(vulkan_runtime=True, vulkan_sdk=False, llama_cpp_gpu_offload=True))
+
+    assert plan.actual_provider == "vulkan"
+    assert plan.backend_verified is True

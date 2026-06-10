@@ -138,8 +138,20 @@ def resolve_runtime_plan(model_family: str, runtime_config: dict, hardware: Hard
                 "Using n_gpu_layers=0 to avoid a broken GPU offload path.",
             )
         if requested == "vulkan" or requested == "auto" and prefer_gpu and hardware.vulkan_runtime:
-            if hardware.vulkan_sdk and hardware.llama_cpp_gpu_offload:
+            if hardware.llama_cpp_gpu_offload:
                 return ResolvedRuntimePlan(model_family, requested, "vulkan", "vulkan", None, True, fallback_allowed, "llama.cpp Vulkan backend is verified.")
+            if hardware.vulkan_runtime:
+                return ResolvedRuntimePlan(
+                    model_family,
+                    requested,
+                    "vulkan",
+                    "vulkan",
+                    None,
+                    False,
+                    fallback_allowed,
+                    "Vulkan runtime is visible; the prebuilt llama-cpp-python Vulkan wheel path is selected, but GPU offload is not verified yet.",
+                    "Using n_gpu_layers=0 until a Vulkan-capable llama.cpp backend is installed and verified.",
+                )
             return ResolvedRuntimePlan(
                 model_family,
                 requested,
@@ -148,7 +160,7 @@ def resolve_runtime_plan(model_family: str, runtime_config: dict, hardware: Hard
                 None,
                 False,
                 fallback_allowed,
-                "Vulkan runtime is visible, but Vulkan SDK/backend verification is missing.",
+                "Vulkan was requested, but no Vulkan runtime was detected.",
                 "Using CPU until a Vulkan-capable llama.cpp backend is installed.",
             )
         return ResolvedRuntimePlan(model_family, requested, "cpu", "cpu", None, True, fallback_allowed, "CPU runtime selected.")

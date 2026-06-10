@@ -1397,8 +1397,8 @@ def resolve_llama_cpp_wheel(config: dict, accelerator: str) -> LlamaCppWheelDeci
                 extra_index_url="",
                 reason="Vulkan source build explicitly enabled and Vulkan SDK/build tools were detected.",
                 supported=True,
-                repair_commands=_requirement_repair_commands(["requirements/llama_cpp_vulkan.txt"], env),
-                pip_args=("-r", "requirements/llama_cpp_vulkan.txt"),
+                repair_commands=_requirement_repair_commands(["requirements/llama_cpp_vulkan_source_build.txt"], env),
+                pip_args=("-r", "requirements/llama_cpp_vulkan_source_build.txt"),
                 env=env,
             )
         return LlamaCppWheelDecision(
