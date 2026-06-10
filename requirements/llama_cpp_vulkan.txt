@@ -1,1 +1,2 @@
-llama-cpp-python
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/vulkan
+llama-cpp-python==0.3.28

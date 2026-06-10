@@ -138,6 +138,7 @@ REQUIREMENT_FILES = {name: group.requirement_file for name, group in DEPENDENCY_
 
 
 LLAMA_CPP_CUDA_WHEEL_TAGS = ("cu118", "cu121", "cu122", "cu123", "cu124", "cu125", "cu130", "cu132")
+LLAMA_CPP_PACKAGE_SPEC = "llama-cpp-python==0.3.28"
 LLAMA_CPP_CUDA_WHEEL_INDEX = "https://abetlen.github.io/llama-cpp-python/whl/cu124"
 LLAMA_CPP_CUDA_WHEEL_PROBE_URL = f"{LLAMA_CPP_CUDA_WHEEL_INDEX}/llama-cpp-python/"
 LLAMA_CPP_CPU_WHEEL_INDEX = "https://abetlen.github.io/llama-cpp-python/whl/cpu"
@@ -1114,7 +1115,7 @@ def _run_dependency_command(command: list[str], env: dict[str, str] | None, log_
 
 
 def _llama_cpp_cpu_wheel_pip_args() -> list[str]:
-    return ["--upgrade", "--force-reinstall", "--extra-index-url", LLAMA_CPP_CPU_WHEEL_INDEX, "llama-cpp-python"]
+    return ["--upgrade", "--force-reinstall", "--extra-index-url", LLAMA_CPP_CPU_WHEEL_INDEX, LLAMA_CPP_PACKAGE_SPEC]
 
 
 def _repair_onnx_provider_compatibility(group: str, decision: dict, config: dict, env: dict[str, str] | None, log_handle) -> dict:
@@ -1369,7 +1370,7 @@ def resolve_llama_cpp_wheel(config: dict, accelerator: str) -> LlamaCppWheelDeci
         if tag not in LLAMA_CPP_CUDA_WHEEL_TAGS:
             tag = "cu124"
         index_url = f"https://abetlen.github.io/llama-cpp-python/whl/{tag}"
-        pip_args = ("--upgrade", "--force-reinstall", "--no-deps", "--index-url", index_url, "llama-cpp-python")
+        pip_args = ("--upgrade", "--force-reinstall", "--no-deps", "--index-url", index_url, LLAMA_CPP_PACKAGE_SPEC)
         return LlamaCppWheelDecision(
             accelerator="cuda",
             extra_index_url=index_url,
@@ -1380,7 +1381,7 @@ def resolve_llama_cpp_wheel(config: dict, accelerator: str) -> LlamaCppWheelDeci
         )
     if accelerator == "vulkan":
         index_url = LLAMA_CPP_VULKAN_WHEEL_INDEX
-        pip_args = ("--upgrade", "--force-reinstall", "--no-deps", "--index-url", index_url, "llama-cpp-python")
+        pip_args = ("--upgrade", "--force-reinstall", "--no-deps", "--index-url", index_url, LLAMA_CPP_PACKAGE_SPEC)
         if vulkan_detected():
             return LlamaCppWheelDecision(
                 accelerator="vulkan",

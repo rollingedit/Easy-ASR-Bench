@@ -34,9 +34,9 @@ Optional runtimes are installed only when selected:
 - whisper.cpp: `requirements/whisper_cpp.txt`
 - OpenAI Whisper `.pt`: `requirements/openai_whisper.txt`
 - OpenAI Whisper `.pt` with CUDA, when NVIDIA is detected: `requirements/torch_cuda_cu128.txt` followed by `requirements/openai_whisper.txt`
-- GGUF reference LLM: `requirements/llama_cpp.txt`
-- GGUF reference LLM with CUDA, when NVIDIA is detected and a compatible prebuilt wheel index is reachable: `llama-cpp-python` from the selected `cu118`, `cu121`, `cu122`, `cu123`, `cu124`, `cu125`, `cu130`, or `cu132` wheel index
-- GGUF reference LLM with Vulkan, when a Vulkan runtime is detected: `llama-cpp-python` from the Vulkan prebuilt wheel index; source builds require explicit opt-in plus SDK/build tooling
+- GGUF reference LLM: `requirements/llama_cpp.txt`, pinned to the v0.4.0 verified `llama-cpp-python` version
+- GGUF reference LLM with CUDA, when NVIDIA is detected and a compatible prebuilt wheel index is reachable: pinned `llama-cpp-python` from the selected `cu118`, `cu121`, `cu122`, `cu123`, `cu124`, `cu125`, `cu130`, or `cu132` wheel index
+- GGUF reference LLM with Vulkan, when a Vulkan runtime is detected: pinned `llama-cpp-python` from the Vulkan prebuilt wheel index; source builds require explicit opt-in plus SDK/build tooling
 
 When a selected model needs one of these groups, Easy ASR Bench prompts before installing it. If an optional install fails, the affected model is skipped, other runnable models continue, and the console prints the manual repair command.
 

@@ -1093,6 +1093,7 @@ def test_openai_whisper_cuda_fallback_row_records_runtime_plan_and_repair_comman
 
 
 def test_cuda_provider_matrix_llama_command_uses_resolved_wheel(monkeypatch):
+    from app.dependency_manager import LLAMA_CPP_PACKAGE_SPEC
     from qa.runtime_matrix.rows.cuda_provider_matrix import _explicit_cuda_requirement_commands
 
     monkeypatch.setattr("app.dependency_manager.sys.version_info", (3, 12, 10))
@@ -1102,6 +1103,7 @@ def test_cuda_provider_matrix_llama_command_uses_resolved_wheel(monkeypatch):
     commands = " ".join(_explicit_cuda_requirement_commands()["llama_cpp"])
 
     assert "llama-cpp-python/whl/cu125" in commands
+    assert LLAMA_CPP_PACKAGE_SPEC in commands
     assert "llama_cpp_cuda_cu124.txt" not in commands
 
 

@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from app.config import DEFAULT_CONFIG
-from app.dependency_manager import ACCELERATOR_OVERRIDES, CUDA_INSTALL_OVERRIDES, acceleration_install_decision, cuda_diagnostics, cuda_install_decision, dependency_status, huggingface_cache_status, install_group_for_config, llama_cpp_cuda_tag_for_driver, llama_cpp_gpu_capable, llama_mtmd_cli_status, media_tools_status, missing_modules_for_config, recovery_command, recovery_command_for_config, requirement_version_issues, resolve_llama_cpp_wheel, visual_cpp_redistributable_status
+from app.dependency_manager import ACCELERATOR_OVERRIDES, CUDA_INSTALL_OVERRIDES, LLAMA_CPP_PACKAGE_SPEC, acceleration_install_decision, cuda_diagnostics, cuda_install_decision, dependency_status, huggingface_cache_status, install_group_for_config, llama_cpp_cuda_tag_for_driver, llama_cpp_gpu_capable, llama_mtmd_cli_status, media_tools_status, missing_modules_for_config, recovery_command, recovery_command_for_config, requirement_version_issues, resolve_llama_cpp_wheel, visual_cpp_redistributable_status
 from app.doctor import run_doctor, run_model_layout_repair_sweep, run_real_smoke_validation
 from app.main import _dependency_install_batch_confirmation, _dependency_install_confirmation, ensure_dependencies, warn_runtime_dependency_fallbacks
 from app.repair_plan import backend_probe_for_group, build_repair_plan, execute_repair_plan, reusable_saved_runtime_resolution
@@ -1700,7 +1700,7 @@ def test_llama_uses_vulkan_when_available_without_nvidia(monkeypatch):
     assert decision["use_accelerator"] is True
     assert decision["accelerator"] == "vulkan"
     assert decision["extra_index_url"].endswith("/vulkan")
-    assert "llama-cpp-python" in decision["pip_args"]
+    assert LLAMA_CPP_PACKAGE_SPEC in decision["pip_args"]
     assert "--force-reinstall" in decision["pip_args"]
     assert "--index-url" in decision["pip_args"]
 
@@ -1772,7 +1772,22 @@ def test_llama_cpp_cuda_resolver_uses_selected_prebuilt_index(monkeypatch):
 
     assert decision.supported is True
     assert decision.extra_index_url.endswith("/cu125")
-    assert decision.pip_args == ("--upgrade", "--force-reinstall", "--no-deps", "--index-url", decision.extra_index_url, "llama-cpp-python")
+    assert decision.pip_args == ("--upgrade", "--force-reinstall", "--no-deps", "--index-url", decision.extra_index_url, LLAMA_CPP_PACKAGE_SPEC)
+
+
+def test_llama_cpp_requirement_files_pin_verified_package():
+    requirement_paths = [
+        Path("requirements/llama_cpp.txt"),
+        Path("requirements/llama_cpp_cuda_cu124.txt"),
+        Path("requirements/llama_cpp_vulkan.txt"),
+        Path("requirements/llama_cpp_vulkan_source_build.txt"),
+    ]
+
+    for path in requirement_paths:
+        text = path.read_text(encoding="utf-8")
+        assert LLAMA_CPP_PACKAGE_SPEC in text
+        assert "\nllama-cpp-python\n" not in f"\n{text}\n"
+    assert "abetlen.github.io/llama-cpp-python/whl/vulkan" in Path("requirements/llama_cpp_vulkan.txt").read_text(encoding="utf-8")
 
 
 def test_llama_cpp_cuda_python_313_falls_back_cpu(monkeypatch):
@@ -2538,7 +2553,7 @@ def test_llama_cuda_install_falls_back_to_cpu_when_wheel_index_unavailable(tmp_p
             "--force-reinstall",
             "--extra-index-url",
             "https://abetlen.github.io/llama-cpp-python/whl/cpu",
-            "llama-cpp-python",
+            LLAMA_CPP_PACKAGE_SPEC,
         ]
     ]
 
@@ -2571,7 +2586,7 @@ def test_llama_cpp_cpu_fallback_uses_prebuilt_wheel_index(tmp_path, monkeypatch)
             "--force-reinstall",
             "--extra-index-url",
             "https://abetlen.github.io/llama-cpp-python/whl/cpu",
-            "llama-cpp-python",
+            LLAMA_CPP_PACKAGE_SPEC,
         ]
     ]
 
