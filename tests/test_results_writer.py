@@ -93,3 +93,27 @@ def test_structured_chunk_failures_do_not_render_as_transcript_markers():
 
     assert "[ERROR: chunk failed" not in text
     assert "[ERROR: chunk failed" not in html
+
+
+def test_write_all_reports_publishes_scored_artifacts_with_base_report(tmp_path):
+    results = minimal_results()
+    scored = {
+        "schema": "easy_asr_bench.scored_report.v1",
+        "status": "scored",
+        "score_type": "llm_corrected_reference",
+        "results": results,
+        "reference": {
+            "schema": "easy_asr_bench.llm_reference.v1",
+            "source_sha256": "abc",
+            "reference_type": "llm_corrected_reference",
+            "segments": [{"chunk_id": "0001", "start_seconds": 0.0, "end_seconds": 1.0, "text": "hello", "uncertain": []}],
+            "global_notes": [],
+        },
+        "scores": {},
+    }
+
+    output = results_writer.write_all_reports(results, tmp_path, scored_report=scored)
+
+    assert (output / "results.json").exists()
+    assert json.loads((output / "scored_report.json").read_text(encoding="utf-8"))["status"] == "scored"
+    assert (output / "compare_scored.html").exists()

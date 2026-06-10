@@ -427,13 +427,15 @@ def _validate_report_directory(output_dir: Path) -> None:
         raise RuntimeError("Report directory is missing required files: " + ", ".join(missing))
 
 
-def write_all_reports(results: dict, output_root: Path) -> Path:
+def write_all_reports(results: dict, output_root: Path, scored_report: dict | None = None) -> Path:
     output_dir, staging_dir = _prepare_report_directories(results, output_root)
     json_path = staging_dir / "results.json"
     txt_path = staging_dir / "results.txt"
     html_path = staging_dir / "compare.html"
     final_path = staging_dir / "final_results.html"
     csv_path = staging_dir / "benchmark.csv"
+    scored_json_path = staging_dir / "scored_report.json"
+    scored_html_path = staging_dir / "compare_scored.html"
 
     try:
         _atomic_write_text(json_path, json.dumps(results, ensure_ascii=False, indent=2))
@@ -442,6 +444,9 @@ def write_all_reports(results: dict, output_root: Path) -> Path:
         _atomic_write_text(final_path, render_single_file_final_results(results))
         write_benchmark_csv(csv_path, results)
         write_prompt_packs(staging_dir, results)
+        if scored_report is not None:
+            _atomic_write_text(scored_json_path, json.dumps(scored_report, ensure_ascii=False, indent=2))
+            _atomic_write_text(scored_html_path, build_html_report(scored_report))
         _validate_report_directory(staging_dir)
         staging_dir.replace(output_dir)
         _validate_report_directory(output_dir)

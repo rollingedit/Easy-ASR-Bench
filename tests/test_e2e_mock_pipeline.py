@@ -60,6 +60,36 @@ class FailingAdapter(PassingAdapter):
         raise RuntimeError("model load failed")
 
 
+class ReferenceAdapter:
+    name = "fake_reference"
+
+    def generate_reference(self, candidate, runtime_config, results):
+        source_sha = results["source"]["sha256"]
+        chunk = results["chunk_plan"]["chunks"][0]
+        return {
+            "candidate_id": candidate.candidate_id,
+            "display_name": candidate.display_name,
+            "status": "generated",
+            "raw_response": json.dumps(
+                {
+                    "schema": "easy_asr_bench.llm_reference.v1",
+                    "source_sha256": source_sha,
+                    "reference_type": "llm_corrected_reference",
+                    "segments": [
+                        {
+                            "chunk_id": chunk["chunk_id"],
+                            "start_seconds": chunk["start_seconds"],
+                            "end_seconds": chunk["end_seconds"],
+                            "text": "transcript 0001",
+                            "uncertain": [],
+                        }
+                    ],
+                    "global_notes": [],
+                }
+            ),
+        }
+
+
 def candidate(candidate_id: str, adapter_name: str) -> ModelCandidate:
     return ModelCandidate(
         candidate_id=candidate_id,
@@ -74,6 +104,12 @@ def candidate(candidate_id: str, adapter_name: str) -> ModelCandidate:
         adapter_name=adapter_name,
         runnable=True,
     )
+
+
+def reference_candidate(candidate_id: str = "ref") -> ModelCandidate:
+    item = candidate(candidate_id, "fake_reference")
+    item.category = "reference_llm"
+    return item
 
 
 def test_mock_e2e_pipeline_writes_reports_when_one_model_fails(tmp_path, monkeypatch, capsys):
@@ -141,6 +177,50 @@ def test_mock_e2e_pipeline_writes_reports_when_one_model_fails(tmp_path, monkeyp
     assert "[File 1/1] [Model 1/2] Running good-model" in output
     assert "[File 1/1] [Model 1/2] Finished good-model" in output
     assert "[File 1/1] [Model 2/2] Failed bad-model" in output
+
+
+def test_mock_e2e_pipeline_scores_generated_local_reference(tmp_path, monkeypatch):
+    source = tmp_path / "input.wav"
+    source.write_bytes(b"fixture")
+    temp = tmp_path / "Temp"
+    output = tmp_path / "Output"
+    chunk = AudioChunk(0, 0.0, 1.0, np.zeros(16000, dtype=np.float32))
+    wav_path = temp / "normalized.wav"
+    wav_path.parent.mkdir()
+    wav_path.write_bytes(b"wav")
+
+    monkeypatch.setattr("app.main.wait_for_stable_file", lambda path, seconds: None)
+    monkeypatch.setattr("app.media.prepare_audio", lambda source, temp_dir, config: (wav_path, np.zeros(16000, dtype=np.float32), [chunk]))
+    monkeypatch.setattr("app.media.audio_duration_seconds", lambda samples: 1.0)
+
+    def fake_adapter_for(model):
+        if model.adapter_name == "fake_reference":
+            return ReferenceAdapter()
+        adapter = PassingAdapter()
+        adapter.candidate = model
+        return adapter
+
+    monkeypatch.setattr("app.main.adapter_for", fake_adapter_for)
+    config = {
+        "folders": {"temp": str(temp), "output": str(output)},
+        "input": {"file_stability_wait_seconds": 0},
+        "runtime": {"provider": "auto"},
+        "advanced": {"keep_temp_wavs": False},
+    }
+
+    report_dir = process_file_with_candidates(
+        source,
+        [candidate("good-model", "fake_pass")],
+        config,
+        reference_llm=reference_candidate(),
+    )
+
+    results = json.loads((report_dir / "results.json").read_text(encoding="utf-8"))
+    scored = json.loads((report_dir / "scored_report.json").read_text(encoding="utf-8"))
+    assert results["local_llm_reference_attempt"]["status"] == "scored"
+    assert scored["status"] == "scored"
+    assert scored["scores"]["good-model"]["normalized_wer"] == 0
+    assert (report_dir / "compare_scored.html").exists()
 
 
 def test_mock_e2e_pipeline_structures_chunk_errors(tmp_path, monkeypatch):

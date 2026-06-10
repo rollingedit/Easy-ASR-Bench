@@ -697,6 +697,7 @@ def process_file_with_candidates(
 ) -> Path | None:
     from .benchmark import peak_vram_sample, process_memory_mb, reset_peak_vram, timer
     from .media import audio_duration_seconds, prepare_audio
+    from .reference_import import import_llm_reference
     from .results_writer import build_failed_file_results, build_results, write_all_reports
 
     source = source.resolve()
@@ -783,6 +784,7 @@ def process_file_with_candidates(
         if reference_llm:
             unsupported_for_report.append(reference_llm)
         results = build_results(source, audio_seconds, chunks, run_results, unsupported_for_report, media_seconds)
+        scored_report = None
         if reference_llm:
             results["reference_llm"] = {
                 "candidate_id": reference_llm.candidate_id,
@@ -795,7 +797,19 @@ def process_file_with_candidates(
                 ref_adapter = adapter_for(reference_llm)
                 if hasattr(ref_adapter, "generate_reference"):
                     print(f"{progress_prefix}[Reference LLM] Generating corrected reference with {reference_llm.display_name}")
-                    results["local_llm_reference_attempt"] = ref_adapter.generate_reference(reference_llm, runtime_config_for_candidate(config), results)
+                    attempt = ref_adapter.generate_reference(reference_llm, runtime_config_for_candidate(config), results)
+                    results["local_llm_reference_attempt"] = attempt
+                    raw_response = str(attempt.get("raw_response") or "")
+                    if raw_response:
+                        scored = import_llm_reference(results, raw_response)
+                        if scored.get("status") == "scored":
+                            scored_report = scored
+                            attempt["status"] = "scored"
+                            attempt["score_type"] = scored.get("score_type", "")
+                            attempt["score_note"] = scored.get("score_note", "")
+                        else:
+                            attempt["status"] = "invalid"
+                            attempt["errors"] = list(scored.get("errors") or [])
                     print(f"{progress_prefix}[Reference LLM] Finished corrected reference attempt")
             except Exception as exc:
                 print(f"{progress_prefix}[Reference LLM] Failed corrected reference attempt: {exc}")
@@ -805,7 +819,7 @@ def process_file_with_candidates(
                     "status": "failed",
                     "error": str(exc),
                 }
-        output_path = write_all_reports(results, output_dir)
+        output_path = write_all_reports(results, output_dir, scored_report=scored_report)
         if wav_path and wav_path.exists() and not config["advanced"].get("keep_temp_wavs", False):
             wav_path.unlink()
         print(f"Wrote reports to {output_path}")
