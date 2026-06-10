@@ -243,6 +243,24 @@ function Get-TreeStats($Path) {
   return @{ file_count = $files.Count; byte_count = $bytes }
 }
 
+function Move-PreservedDirectory($From, $To) {
+  if (-not (Test-Path $From)) {
+    return
+  }
+  if (-not (Test-Path $To)) {
+    Move-Item -LiteralPath $From -Destination $To -Force -ErrorAction Stop
+    return
+  }
+  foreach ($child in Get-ChildItem -LiteralPath $From -Force -ErrorAction Stop) {
+    $destChild = Join-Path $To $child.Name
+    if (Test-Path $destChild) {
+      Remove-Item -LiteralPath $destChild -Recurse -Force -ErrorAction Stop
+    }
+    Move-Item -LiteralPath $child.FullName -Destination $destChild -Force -ErrorAction Stop
+  }
+  Remove-Item -LiteralPath $From -Recurse -Force -ErrorAction Stop
+}
+
 function Move-PreservedUserData($From, $To) {
   $report = @{
     schema = "easy_asr_bench.install_preservation_report.v1"
@@ -256,10 +274,7 @@ function Move-PreservedUserData($From, $To) {
     $source = Join-Path $From $name
     $dest = Join-Path $To $name
     if (Test-Path $source) {
-      if (Test-Path $dest) {
-        Remove-Item -LiteralPath $dest -Recurse -Force -ErrorAction Stop
-      }
-      Move-Item -LiteralPath $source -Destination $dest -Force -ErrorAction Stop
+      Move-PreservedDirectory $source $dest
       $stats = Get-TreeStats $dest
       $report.items += @{
         name = $name
@@ -309,10 +324,7 @@ function Restore-MovedUserData($From, $To) {
     $source = Join-Path $From $name
     $dest = Join-Path $To $name
     if (Test-Path $source) {
-      if (Test-Path $dest) {
-        Remove-Item -LiteralPath $dest -Recurse -Force -ErrorAction Stop
-      }
-      Move-Item -LiteralPath $source -Destination $dest -Force -ErrorAction Stop
+      Move-PreservedDirectory $source $dest
     }
   }
   $sourceConfig = Join-Path $From "config.json"
@@ -425,6 +437,7 @@ $Manifest = Join-Path $TempRoot "manifest.json"
 $Checksums = Join-Path $TempRoot "checksums.json"
 $Backup = "$InstallDir.backup"
 $New = "$InstallDir.new"
+$Preserve = "$InstallDir.preserve"
 
 $Python = Resolve-Python
 if ($Python) {
@@ -504,20 +517,25 @@ else {
 
 Invoke-Step "Installing app atomically with user-data preservation" {
   Remove-Item -LiteralPath $New -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $Preserve -Recurse -Force -ErrorAction SilentlyContinue
   New-Item -ItemType Directory -Force -Path $New | Out-Null
   Copy-Item -Path (Join-Path $Stage "*") -Destination $New -Recurse -Force
   try {
     if (Test-Path $InstallDir) {
       Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
       Move-Item -LiteralPath $InstallDir -Destination $Backup -Force
-      Move-PreservedUserData $Backup $New
+      New-Item -ItemType Directory -Force -Path $Preserve | Out-Null
+      Move-PreservedUserData $Backup $Preserve
     }
     Move-Item -LiteralPath $New -Destination $InstallDir -Force
   }
   catch {
     Write-SetupLog "Install swap failed; attempting rollback."
-    if ((Test-Path $Backup) -and (Test-Path $New)) {
-      Restore-MovedUserData $New $Backup
+    if ((Test-Path $Backup) -and (Test-Path $Preserve)) {
+      Restore-MovedUserData $Preserve $Backup
+    }
+    if ((Test-Path $InstallDir) -and (Test-Path $Backup)) {
+      Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
     }
     if ((Test-Path $Backup) -and -not (Test-Path $InstallDir)) {
       Move-Item -LiteralPath $Backup -Destination $InstallDir -Force
@@ -549,9 +567,12 @@ try {
 }
 catch {
   Write-SetupLog "Local setup failed."
-  if ((Test-Path $Backup) -and -not $Repair) {
+  if (Test-Path $Backup) {
     Write-SetupLog "Restoring previous install from backup."
     Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
+    if (Test-Path $Preserve) {
+      Restore-MovedUserData $Preserve $Backup
+    }
     Move-Item -LiteralPath $Backup -Destination $InstallDir -Force
   }
   throw
@@ -561,7 +582,14 @@ finally {
 }
 
 Write-SetupLog "Setup complete"
+if (Test-Path $Preserve) {
+  Write-SetupLog "Restoring preserved user data into validated install."
+  Move-PreservedUserData $Preserve $InstallDir
+}
 Install-Shortcuts
 if (Test-Path $Backup) {
   Remove-Item -LiteralPath $Backup -Recurse -Force -ErrorAction SilentlyContinue
+}
+if (Test-Path $Preserve) {
+  Remove-Item -LiteralPath $Preserve -Recurse -Force -ErrorAction SilentlyContinue
 }

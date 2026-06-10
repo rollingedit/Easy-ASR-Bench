@@ -31,3 +31,31 @@ def test_installer_creates_and_removes_start_menu_shortcuts():
     assert "Edit Config" in text
     assert "Repair Easy ASR Bench" in text
     assert "Uninstall Easy ASR Bench" in text
+
+
+def test_installer_stashes_preserved_user_data_until_validation_succeeds():
+    text = Path("installer/install.ps1").read_text(encoding="utf-8")
+
+    assert '$Preserve = "$InstallDir.preserve"' in text
+    assert "Move-PreservedUserData $Backup $Preserve" in text
+    assert "Move-PreservedUserData $Backup $New" not in text
+    assert "Move-PreservedUserData $Preserve $InstallDir" in text
+    assert "Restoring preserved user data into validated install." in text
+
+
+def test_installer_rolls_preserved_data_back_for_repair_failures():
+    text = Path("installer/install.ps1").read_text(encoding="utf-8")
+
+    local_setup_catch = text.split('Write-SetupLog "Local setup failed."', 1)[1].split("finally {", 1)[0]
+    assert "if (Test-Path $Backup)" in local_setup_catch
+    assert "Restore-MovedUserData $Preserve $Backup" in local_setup_catch
+    assert "-not $Repair" not in local_setup_catch
+
+
+def test_installer_preserved_directory_move_merges_existing_destinations():
+    text = Path("installer/install.ps1").read_text(encoding="utf-8")
+
+    helper = text.split("function Move-PreservedDirectory", 1)[1].split("function Move-PreservedUserData", 1)[0]
+    assert "Get-ChildItem -LiteralPath $From -Force" in helper
+    assert "Move-Item -LiteralPath $child.FullName -Destination $destChild" in helper
+    assert "Remove-Item -LiteralPath $From -Recurse -Force" in helper
