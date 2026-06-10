@@ -25,6 +25,8 @@ It runs every selected ASR model on the same normalized audio and the same chunk
 
 These are code-supported model families when the model package is complete, the matching optional dependency group is installed, and the backend can run on the selected provider. Release smoke evidence is tracked separately; a model family should only be described as verified for a specific release when the release smoke artifact marks that row as `pass`.
 
+The generated release support matrix is in [`docs/support_matrix.generated.md`](docs/support_matrix.generated.md). It is built from the release-smoke artifact, so rows that are not proven for a release stay marked `Not verified` instead of becoming implied support claims.
+
 - Known multi-file ONNX ASR layouts, including AR folders with `int8`, `fp16w`, `fp32`, `f32`, or `float32` precision folders
 - Known multi-file ONNX ASR layouts, including NAR folders with `int8`, `fp16w`, `fp32`, `f32`, or `float32` precision folders
 - Hugging Face Transformers ASR folders using `.safetensors` weights, including native FP32/float32 weights
