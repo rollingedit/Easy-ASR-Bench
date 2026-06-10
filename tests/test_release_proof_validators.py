@@ -3,6 +3,7 @@ from pathlib import Path
 
 from scripts.validate_release_smoke import validate_smoke
 from scripts.merge_release_evidence import evidence_rows, merge_manual_rows
+from scripts.collect_win10_setup_evidence import validate_win10_row
 from scripts.verify_release_transcript import verify_transcript
 from scripts.write_release_verification_manifest import build_manifest
 
@@ -65,6 +66,38 @@ def test_validate_release_smoke_requires_evidence_fields_when_strict():
 
     assert any("logs_sha256" in error for error in errors)
     assert any("environment_summary" in error for error in errors)
+
+
+def test_collect_win10_setup_evidence_accepts_real_win10_shape():
+    row = {
+        "id": "win10_existing_python_setup",
+        "status": "pass",
+        "details": {
+            "platform": {"system": "Windows", "release": "10", "version": "10.0.19045"},
+            "python_probe": {"python_visible_on_path": True},
+            "setup_static_contract": {"missing_markers": []},
+            "setup_dry_run_local": {"exit_code": 0},
+        },
+    }
+
+    assert validate_win10_row(row) == []
+
+
+def test_collect_win10_setup_evidence_rejects_windows11_build():
+    row = {
+        "id": "win10_existing_python_setup",
+        "status": "pass",
+        "details": {
+            "platform": {"system": "Windows", "release": "10", "version": "10.0.22631"},
+            "python_probe": {"python_visible_on_path": True},
+            "setup_static_contract": {"missing_markers": []},
+            "setup_dry_run_local": {"exit_code": 0},
+        },
+    }
+
+    errors = validate_win10_row(row)
+
+    assert any("Windows 11 build floor" in error for error in errors)
 
 
 def test_merge_release_evidence_replaces_matching_manual_rows(tmp_path: Path):
