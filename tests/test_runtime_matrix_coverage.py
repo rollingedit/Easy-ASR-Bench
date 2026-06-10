@@ -1,8 +1,5 @@
 import json
-import os
 from pathlib import Path
-
-import pytest
 
 from qa.runtime_matrix.registry import ROWS
 
@@ -620,14 +617,21 @@ def test_tampered_installer_row_fails_before_execution(tmp_path):
 def test_setup_verify_release_bad_checksum_row_fails_before_activation(tmp_path):
     from qa.runtime_matrix.rows import installer_validation
 
-    if os.environ.get("GITHUB_ACTIONS"):
-        pytest.skip("GitHub Actions PowerShell path transfer fails before this staged bad-checksum row reaches checksum validation; public setup verify still runs as a workflow gate.")
     row = installer_validation.run("setup_verify_release_bad_checksum", tmp_path, False, False)
 
     assert row["status"] == "pass", row["details"]
     assert row["details"]["command"]["exit_code"] != 0
+    assert row["details"]["wrapper"].endswith("run_bad_checksum_verify.cmd")
+    assert Path(row["details"]["wrapper"]).exists()
     output = (row["details"]["command"]["stderr_tail"] + row["details"]["command"]["stdout_tail"]).lower()
     assert ("checksum" in output or "sha256" in output) and "mismatch" in output
+
+
+def test_release_security_rows_are_not_skipped_on_ci():
+    text = (ROOT / "tests" / "test_runtime_matrix_coverage.py").read_text(encoding="utf-8")
+
+    assert "GITHUB" + "_ACTIONS" not in text
+    assert "pytest" + ".skip" not in text
 
 
 def test_setup_dry_run_json_row_emits_parseable_payload(tmp_path):

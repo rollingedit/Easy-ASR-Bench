@@ -4,6 +4,7 @@
 
 ## v0.4.0 candidate
 
+- Closed the still-valid v0.3.9 release-audit gaps around release QA gates: the staged bad-checksum runtime row now runs on CI without a GitHub Actions skip, Windows release QA wrappers require an explicit `vX.Y.Z` tag instead of stale defaults, and the shipped default config now starts CPU-first with accelerator package installs disabled until explicitly opted in.
 - Hardened the Windows Sandbox clean-bootstrap script with per-step JSON/stdout/stderr/exit-code sentinels, short dry-run preflight evidence, command-shape preservation across PowerShell jobs, and a real `setup.bat --local --no-post-setup-menu` bootstrap step before doctor repair. The first real clean Sandbox phase now fails fast on missing Python bootstrap support instead of hanging or falsely passing.
 - Added a clean-Windows Python bootstrap fallback for environments such as Windows Sandbox where `winget` is unavailable: `setup.bat --local` now downloads and silently installs the official Python 3.12.10 x64 installer from python.org, then verifies `py -3.12`, `python`, or the per-user install path before creating the project venv.
 - Bounded the clean-Windows Python fallback download by trying `curl.exe` with connect/overall timeouts before the PowerShell fallback, checking that the installer file is actually present and larger than 1 MB before executing it, and disabling PowerShell progress output so Sandbox bootstrap does not appear frozen during installer download.

@@ -44,8 +44,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "runtime": {
         "execution": "sequential",
-        "provider": "auto",
-        "prefer_gpu": True,
+        "provider": "cpu",
+        "prefer_gpu": False,
         "fallback_to_cpu": True,
         "unload_between_models": True,
         "continue_after_model_error": True,
@@ -54,9 +54,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "dependency_install": {
         "auto_install_missing_runtime_dependencies": True,
-        "prefer_cpu_safe_defaults": False,
-        "allow_cuda_install": True,
-        "allow_accelerator_install": True,
+        "prefer_cpu_safe_defaults": True,
+        "allow_cuda_install": False,
+        "allow_accelerator_install": False,
     },
     "model_scan": {
         "recursive": True,

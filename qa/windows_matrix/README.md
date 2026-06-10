@@ -5,7 +5,7 @@ These scripts collect evidence for release smoke rows that cannot be proven by u
 Run from an expanded public release ZIP or repo checkout on the target Windows machine:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File qa\windows_matrix\run_release_matrix.ps1 -Tag v0.3.4 -Output qa\windows_matrix\evidence
+powershell -ExecutionPolicy Bypass -File qa\windows_matrix\run_release_matrix.ps1 -Tag v0.4.0 -Output qa\windows_matrix\evidence
 ```
 
 Every row should produce:

@@ -1,6 +1,8 @@
 ﻿param(
   [string]$Repo = "rollingedit/Easy-ASR-Bench",
-  [string]$Tag = "v0.3.7",
+  [Parameter(Mandatory = $true)]
+  [ValidatePattern('^v\d+\.\d+\.\d+$')]
+  [string]$Tag,
   [string]$WorkDir = "qa\windows_matrix\public_asset_smoke",
   [string]$AssetDir = "",
   [string]$Output = "qa\windows_matrix\evidence",

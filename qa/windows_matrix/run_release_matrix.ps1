@@ -1,5 +1,7 @@
 param(
-  [string]$Tag = "v0.3.6",
+  [Parameter(Mandatory = $true)]
+  [ValidatePattern('^v\d+\.\d+\.\d+$')]
+  [string]$Tag,
   [string]$Output = "qa\windows_matrix\evidence",
   [switch]$DryRun
 )

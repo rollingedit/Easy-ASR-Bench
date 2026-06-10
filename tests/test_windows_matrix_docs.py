@@ -39,6 +39,9 @@ def test_windows_matrix_collector_writes_environment_and_hashes():
 def test_public_asset_smoke_runner_captures_installed_app_json_evidence():
     script = Path("qa/windows_matrix/run_public_asset_smoke.ps1").read_text(encoding="utf-8")
 
+    assert "[Parameter(Mandatory = $true)]" in script
+    assert "[ValidatePattern('^v\\d+\\.\\d+\\.\\d+$')]" in script
+    assert 'v0.3.7' not in script
     assert "gh release download $Tag --repo $Repo" in script
     assert "$WorkDir = (Resolve-Path -LiteralPath $WorkDir).Path" in script
     assert "$Output = (Resolve-Path -LiteralPath $Output).Path" in script
@@ -67,6 +70,14 @@ def test_public_asset_smoke_runner_captures_installed_app_json_evidence():
     assert "collect_release_evidence failed for empty_models_guided_first_run" in script
     assert "-Status \"pass\"" in script
     assert "-ReleaseCommit $ReleaseCommit" in script
+
+
+def test_release_matrix_runner_requires_explicit_release_tag():
+    script = Path("qa/windows_matrix/run_release_matrix.ps1").read_text(encoding="utf-8")
+
+    assert "[Parameter(Mandatory = $true)]" in script
+    assert "[ValidatePattern('^v\\d+\\.\\d+\\.\\d+$')]" in script
+    assert 'v0.3.6' not in script
 
 
 def test_release_verification_documents_real_tiny_model_smoke():

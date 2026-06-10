@@ -242,13 +242,28 @@ def _tamper_installer(row_id: str, evidence_dir: Path) -> dict:
 
 
 def _bad_release_checksum(row_id: str, evidence_dir: Path) -> dict:
-    staged_asset_dir = ROOT / "Temp" / "runtime_matrix_bad_release_checksum_assets"
+    staged_asset_dir = evidence_dir / "bad_checksum_assets"
     shutil.rmtree(staged_asset_dir, ignore_errors=True)
     assets = _stage_release_assets(staged_asset_dir)
     checksums = json.loads(assets["checksums"].read_text(encoding="utf-8"))
     checksums["files"][ZIP_NAME] = "sha256:" + ("0" * 64)
     assets["checksums"].write_text(json.dumps(checksums, indent=2) + "\n", encoding="utf-8", newline="\n")
-    result = _run(["cmd", "/c", "setup.bat", "--dry-run", "--verify-release", "--asset-dir", str(assets["manifest"].parent)], temp_dir=evidence_dir / "tmp")
+    wrapper = evidence_dir / "run_bad_checksum_verify.cmd"
+    wrapper.write_text(
+        "\r\n".join(
+            [
+                "@echo off",
+                "setlocal",
+                f'cd /d "{ROOT}"',
+                f'call setup.bat --dry-run --verify-release --asset-dir "{assets["manifest"].parent}"',
+                "exit /b %ERRORLEVEL%",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+        newline="",
+    )
+    result = _run(["cmd", "/d", "/c", str(wrapper)], temp_dir=evidence_dir / "tmp")
     output = result["stdout_tail"] + result["stderr_tail"]
     normalized_output = output.lower()
     failures = []
@@ -261,8 +276,8 @@ def _bad_release_checksum(row_id: str, evidence_dir: Path) -> dict:
         "pass" if not failures else "fail",
         evidence_dir,
         summary="Bad staged release checksum fails verify-release before install activation." if not failures else "Bad release checksum was not blocked correctly.",
-        details={"asset_dir": str(assets["manifest"].parent), "command": result, "failures": failures},
-        artifacts=[assets["checksums"], assets["zip"]],
+        details={"asset_dir": str(assets["manifest"].parent), "wrapper": str(wrapper), "command": result, "failures": failures},
+        artifacts=[assets["checksums"], assets["zip"], wrapper],
     )
 
 
