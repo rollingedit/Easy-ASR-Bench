@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from scripts.validate_release_smoke import validate_smoke
+from scripts.validate_v040_release_readiness import validate_readiness
 from scripts.merge_release_evidence import evidence_rows, merge_manual_rows
 from scripts.collect_win10_setup_evidence import validate_win10_row
 from scripts.verify_release_transcript import verify_transcript
@@ -98,6 +99,48 @@ def test_collect_win10_setup_evidence_rejects_windows11_build():
     errors = validate_win10_row(row)
 
     assert any("Windows 11 build floor" in error for error in errors)
+
+
+def test_v040_readiness_reports_strict_smoke_and_history_blockers(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    import subprocess
+
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+    (repo / "note.txt").write_text("NVIDIA GeForce RTX " + "40" + "90" + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", "note.txt"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "dirty history"], cwd=repo, check=True, capture_output=True)
+    (repo / "note.txt").write_text("generic validation host\n", encoding="utf-8")
+    subprocess.run(["git", "add", "note.txt"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "clean tip"], cwd=repo, check=True, capture_output=True)
+    smoke = tmp_path / "smoke.json"
+    smoke.write_text(
+        json.dumps(
+            {
+                "schema": "easy_asr_bench.release_smoke.v2",
+                "manual_rows": [
+                    {
+                        "id": "win10_existing_python_setup",
+                        "status": "blocked",
+                        "block_reason": "needs Windows 10",
+                        "external_requirement": "Windows 10 VM",
+                        "environment_summary": {"system": "Windows"},
+                        "results_sha256": "sha256:test",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    required = tmp_path / "required.json"
+    required.write_text(json.dumps({"rows": ["win10_existing_python_setup"]}), encoding="utf-8")
+
+    errors = validate_readiness(smoke=smoke, required=required, repo=repo, publish_ref="main")
+
+    assert any(error.startswith("strict smoke: win10_existing_python_setup status is blocked") for error in errors)
+    assert any(error.startswith("public history hygiene:") for error in errors)
 
 
 def test_merge_release_evidence_replaces_matching_manual_rows(tmp_path: Path):

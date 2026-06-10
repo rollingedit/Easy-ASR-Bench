@@ -164,6 +164,14 @@ python scripts\validate_public_hygiene.py --repo Temp\public_history_candidate_m
 
 The helper creates a separate Git repository from a sanitized fast-export stream. It is a review/preparation step only; replacing the public branch or force-pushing still requires the final release gates and explicit approval.
 
+For a single local readiness audit, run:
+
+```powershell
+python scripts\validate_v040_release_readiness.py --repo Temp\public_history_candidate_main_latest
+```
+
+This wrapper combines strict release-smoke validation with public tree, smoke-artifact, and reachable-history hygiene checks. It must pass before `v0.4.0` is treated as stable release-ready.
+
 The `report_atomic_write_failure_cleanup` row forces simulated replace failures in report text and CSV atomic-write paths and verifies failed `.partial` files are removed while the previous complete artifact remains intact. This guards against partial report artifacts after disk, permission, antivirus, or interrupted-write failures.
 
 The `watched_folder_partial_write_queue_contract` row is a non-destructive queue/watch contract for drag-drop and watched-folder input. It verifies the queue waits through a partial write before recording the fast size/mtime key, repeated watch polls do not duplicate queue state for the same source file, and completed fast keys are skipped without rehashing large already-processed files.
