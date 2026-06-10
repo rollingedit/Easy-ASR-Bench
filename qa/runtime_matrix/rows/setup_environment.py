@@ -96,7 +96,7 @@ def _setup_static_contract() -> dict:
     return {
         "required_markers": required_markers,
         "missing_markers": [marker for marker in required_markers if marker not in setup],
-        "has_interactive_completion_menu": all(marker in setup for marker in ["Setup complete.", "choice /C RPMIQ", "--download-model-first"]),
+        "has_interactive_completion_menu": all(marker in setup for marker in ["Setup complete.", "choice /C RPMIOQ", "--download-model-first"]),
     }
 
 
