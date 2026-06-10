@@ -17,7 +17,7 @@ Required release rows: 65/65 pass.
 | whisper.cpp GGML CPU path | Verified | `whisper_cpp_ggml_speech_smollm_grading`: pass<br>`real_public_video_whisper_cpp_ggml_smollm_grading`: pass |
 | Generic ONNX CTC CPU and manifest safety | Verified | `intel_cpu_onnx_smoke`: pass<br>`generic_onnx_manifest_cpu`: pass<br>`generic_onnx_without_manifest_rejected`: pass<br>`real_public_video_generic_onnx_ctc_smollm_grading_cpu`: pass |
 | Generic ONNX DirectML/OpenVINO provider paths | Not verified | `amd_directml_onnx_smoke`: not_run<br>`intel_directml_onnx_smoke`: pass<br>`intel_openvino_onnx_smoke`: pass<br>`same_media_multi_model_smollm_benchmark_directml`: pass |
-| NVIDIA CUDA provider stack | Not verified | `nvidia_cuda_torch_onnx_faster_whisper_llama`: not_run<br>`torch_cuda_tensor_smoke`: not_run<br>`onnxruntime_cuda_tiny_session`: not_run<br>`faster_whisper_ctranslate2_cuda_smoke`: not_run<br>`llama_cpp_cuda_smollm_smoke`: not_run |
+| NVIDIA CUDA provider stack | Verified | `nvidia_cuda_torch_onnx_faster_whisper_llama`: pass<br>`torch_cuda_tensor_smoke`: pass<br>`onnxruntime_cuda_tiny_session`: pass<br>`faster_whisper_ctranslate2_cuda_smoke`: pass<br>`llama_cpp_cuda_smollm_smoke`: pass |
 | GGUF text reference LLM | Verified | `gguf_text_llm_reference_only`: pass<br>`llama_mtmd_dependency_repair_contract`: pass |
 | GGUF ASR plus projector package | Verified | `gguf_asr_mmproj_pair`: pass<br>`mismatched_audio_asr_gguf_mmproj_rejected`: pass |
 | llama.cpp Vulkan provider path | Not verified | `vulkan_runtime_no_sdk`: not_run<br>`vulkan_runtime_with_sdk`: not_run<br>`llama_cpp_vulkan_smollm_smoke`: not_run |

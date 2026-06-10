@@ -65,6 +65,7 @@
 - Bumped the active validation/release line to `v0.4.0`, extended `scripts/bump_version.py` so future bumps update installer metadata, checksum ZIP names, Sandbox release-smoke scripts, installer runtime rows, and release verification docs, then regenerated and validated the local `Easy-ASR-Bench-v0.4.0-win.zip` package metadata.
 - Fixed a syntax error in `qa/run_real_tiny_model_smoke.py` that prevented release validators from parsing the real faster-whisper smoke runner on the v0.4 validation machine; source, physical-file, and compile gates now pass after installing the validator's `PyYAML` dependency.
 - Stabilized the v0.4.0 validation harness after the security-audit hardening pass: runtime-matrix Git evidence collection now avoids row-local monkeypatch leakage, the dependency-accepted failure-isolation row exercises the consolidated batch dependency prompt, and the full pytest suite passed with `657 passed`.
+- Refreshed the v0.4.0 release-smoke artifact for commit `a6d434c`: all 65 required release rows now pass strict validation with execution commit evidence, log/result hashes, and environment summaries. Current optional Intel DirectML/OpenVINO and NVIDIA CUDA provider rows were rerun at the same commit, and the generated public support matrix now marks the CUDA stack verified.
 
 ## v0.3.9 candidate
 
