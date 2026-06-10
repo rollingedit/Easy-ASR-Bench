@@ -147,6 +147,15 @@ python scripts\validate_public_hygiene.py --history-ref main
 
 Run the history scan on the exact ref intended for publication. If backup/original refs are still present during a rewrite, scan the publish ref directly rather than `--all`.
 
+To prepare a local candidate repository for review without mutating the current checkout, use:
+
+```powershell
+python scripts\rewrite_public_history_hygiene.py --source-ref main --target-dir Temp\public_history_candidate_main --force
+python scripts\validate_public_hygiene.py --repo Temp\public_history_candidate_main --history-ref main
+```
+
+The helper creates a separate Git repository from a sanitized fast-export stream. It is a review/preparation step only; replacing the public branch or force-pushing still requires the final release gates and explicit approval.
+
 The `report_atomic_write_failure_cleanup` row forces simulated replace failures in report text and CSV atomic-write paths and verifies failed `.partial` files are removed while the previous complete artifact remains intact. This guards against partial report artifacts after disk, permission, antivirus, or interrupted-write failures.
 
 The `watched_folder_partial_write_queue_contract` row is a non-destructive queue/watch contract for drag-drop and watched-folder input. It verifies the queue waits through a partial write before recording the fast size/mtime key, repeated watch polls do not duplicate queue state for the same source file, and completed fast keys are skipped without rehashing large already-processed files.

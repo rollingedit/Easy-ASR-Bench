@@ -11,6 +11,7 @@ from scripts.check_release_version_coherence import validate as validate_version
 from scripts.validate_public_hygiene import scan_history, scan_paths
 from scripts.validate_raw_github_files import byte_diagnostics, compare_raw_to_zip, format_diagnostics, validate_bytes
 from scripts.validate_physical_files import validate_root
+from scripts.rewrite_public_history_hygiene import rewrite_to_candidate_repo
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -193,6 +194,28 @@ def test_public_hygiene_validator_scans_reachable_history_without_echoing_match(
     assert len(findings) >= 1
     assert any("exact GPU model" in finding for finding in findings)
     assert all(exact_gpu not in finding for finding in findings)
+
+
+def test_history_rewrite_helper_creates_clean_candidate_repo(tmp_path):
+    source = tmp_path / "source"
+    candidate = tmp_path / "candidate"
+    source.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=source, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=source, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=source, check=True)
+    note = source / "note.txt"
+    note.write_text("NVIDIA GeForce RTX " + "40" + "90" + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", "note.txt"], cwd=source, check=True)
+    subprocess.run(["git", "commit", "-m", "record exact validation host"], cwd=source, check=True, capture_output=True)
+    note.write_text("generic validation host\n", encoding="utf-8")
+    subprocess.run(["git", "add", "note.txt"], cwd=source, check=True)
+    subprocess.run(["git", "commit", "-m", "clean tip"], cwd=source, check=True, capture_output=True)
+
+    assert scan_history(["main"], root=source)
+
+    rewrite_to_candidate_repo("main", candidate, source_root=source)
+
+    assert scan_history(["main"], root=candidate) == []
 
 
 def test_publish_workflow_refuses_public_asset_mutation_before_clobber():

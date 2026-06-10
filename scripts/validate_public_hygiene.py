@@ -133,6 +133,12 @@ def scan_history(refs: list[str], root: Path = ROOT, max_findings: int = 200) ->
 def main() -> int:
     parser = argparse.ArgumentParser(description="Scan public release files for local/private validation details.")
     parser.add_argument(
+        "--repo",
+        default=ROOT,
+        type=Path,
+        help="Repository root to scan. Defaults to the repository containing this script.",
+    )
+    parser.add_argument(
         "--tracked",
         action="store_true",
         help="Scan all tracked text files in the repository.",
@@ -158,13 +164,14 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    repo = args.repo.resolve()
     paths: list[Path] = []
     if args.tracked or not args.path:
-        paths.extend(tracked_files())
-    paths.extend(args.path)
+        paths.extend(tracked_files(repo))
+    paths.extend(path if path.is_absolute() else repo / path for path in args.path)
     findings = scan_paths(paths)
     if args.history_ref:
-        findings.extend(scan_history(args.history_ref, max_findings=max(1, args.max_history_findings)))
+        findings.extend(scan_history(args.history_ref, root=repo, max_findings=max(1, args.max_history_findings)))
     if findings:
         print("public hygiene validation failed:")
         for finding in findings:
