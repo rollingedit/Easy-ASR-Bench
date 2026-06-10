@@ -186,8 +186,10 @@ def verify_smoke_asset(tag: str, expected_commit: str | None, manifest: dict, lo
         raise AssertionError(f"{smoke_name} has an unexpected schema")
     if smoke.get("tag") != tag:
         raise AssertionError(f"{smoke_name} tag mismatch")
-    if expected_commit and smoke.get("commit") and not smoke["commit"].startswith(expected_commit) and not expected_commit.startswith(smoke["commit"]):
-        raise AssertionError(f"{smoke_name} commit mismatch")
+    # The release tag target is verified separately against expected_commit.
+    # A smoke JSON committed into the same release commit cannot self-reference
+    # that commit hash, so this verifier treats the smoke commit as provenance
+    # metadata and validates the strict evidence fields below instead.
     if smoke.get("asset_hashes_verified") is not True:
         raise AssertionError(f"{smoke_name} does not record verified asset hashes")
     checks = smoke.get("checks", [])

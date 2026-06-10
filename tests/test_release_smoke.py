@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 import scripts.write_release_smoke as write_release_smoke
-from scripts.verify_github_release import download_assets, sha256, verify_release, write_transcript
+from scripts.verify_github_release import download_assets, sha256, verify_release, verify_smoke_asset, write_transcript
 
 
 def test_write_release_smoke_records_automated_passes_and_manual_not_run(tmp_path, monkeypatch):
@@ -267,6 +267,31 @@ def test_write_release_verification_transcript_records_assets(tmp_path):
     assert "setup.bat sha256:aaa" in text
     assert "zip_physical_validation: pass" in text
     assert "not marked pass" in text
+
+
+def test_verify_smoke_asset_allows_committed_smoke_provenance_commit(tmp_path):
+    smoke_path = tmp_path / "release-smoke-v0.3.1.json"
+    smoke_path.write_text(
+        json.dumps(
+            {
+                "schema": "easy_asr_bench.release_smoke.v2",
+                "tag": "v0.3.1",
+                "commit": "older-evidence-commit",
+                "asset_hashes_verified": True,
+                "checks": [{"name": "release files", "status": "pass"}],
+                "manual_rows": [{"id": "win11_clean_no_python_setup", "status": "not_run"}],
+                "manual_matrix": {"win11_clean_no_python_setup": "not_run"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    verify_smoke_asset(
+        "v0.3.1",
+        expected_commit="release-commit-containing-smoke-file",
+        manifest={"schema": "easy_asr_bench.installer_manifest.v2"},
+        local_assets={"release-smoke-v0.3.1.json": smoke_path},
+    )
 
 
 def test_download_assets_prefers_authenticated_asset_api_url(tmp_path, monkeypatch):

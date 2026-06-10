@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Relaxed GitHub release smoke verification so a committed smoke artifact is not required to self-reference the release commit that contains it. The release tag target, uploaded asset hashes, smoke schema, smoke tag, failed-check rejection, and explicit manual-row requirements remain strict.
 - Overhauled `README.md` around the user-facing product thesis: local transcription first, model comparison second, the "Open ASR Leaderboard for your files and hardware" positioning, smart Hugging Face model acquisition, one-report workflow, corrected-reference scoring, doctor/repair orchestration, batch resume, safety model, and evidence-based release claims.
 - Hardened installer update and repair rollback around preserved user data. Existing `Models`, `Input`, `Output`, `Logs`, `Cache`, `Temp`, and `config.json` are now stashed separately from the staged app until local setup and installed validation succeed, and repair failures restore preserved data back into the previous install instead of leaving it in a directory that may be deleted.
 - Made per-file report output directories collision-proof and directory-atomic. Report IDs now include microsecond precision plus a short source identity hash, same-ID collisions receive a bounded counter suffix, report files are staged under a hidden partial directory, and the final report folder is published only after required artifacts exist.
