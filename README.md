@@ -6,9 +6,9 @@ It is the Open ASR Leaderboard for your audio, on your machine.
 
 Public ASR leaderboards are useful, but they are not your files: fast speech, accents, casual slang, crosstalk, bad mics, lectures, meetings, songs, fast rap, noisy clips, language switches, and whatever else you actually need transcribed. They also are not your CPU, GPU, driver stack, or patience budget.
 
-Easy ASR Bench is for the practical moment when a new model drops and you want to know whether it is actually better for your work. Paste the Hugging Face link, let the app download the right package pieces, run it on your own test files, and compare the result against the models you already trust.
+Give Easy ASR Bench a model link and media files. It handles the setup, downloads the package pieces it needs, installs only the runtime pieces required for that model, runs the transcription, and opens the results report.
 
-The point is that it should feel boringly direct:
+That is the product promise:
 
 ```text
 No Python project setup.
@@ -18,7 +18,7 @@ No silent CPU/GPU fallback.
 No batch ruined because one model failed.
 ```
 
-You give it a model and media. It gets the environment ready enough to run, transcribes what it can, repairs what it safely can, keeps going when one branch fails, and writes a report that says what actually happened.
+Paste a link. Drop files. Get transcripts. Add more models when you want a real comparison.
 
 The normal user flow is intentionally small:
 
