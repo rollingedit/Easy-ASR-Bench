@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rollingedit.github.io/Easy-ASR-Bench/schemas/llm_reference.v1.schema.json",
+  "title": "Easy ASR Bench LLM Corrected Reference v1",
+  "type": "object",
+  "required": ["schema", "source_sha256", "reference_type", "segments", "global_notes"],
+  "properties": {
+    "schema": { "const": "easy_asr_bench.llm_reference.v1" },
+    "source_sha256": { "type": "string" },
+    "reference_type": { "const": "llm_corrected_reference" },
+    "segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["chunk_id", "start_seconds", "end_seconds", "text", "uncertain"],
+        "properties": {
+          "chunk_id": { "type": "string" },
+          "start_seconds": { "type": "number" },
+          "end_seconds": { "type": "number" },
+          "text": { "type": "string" },
+          "uncertain": { "type": "array" }
+        }
+      }
+    },
+    "global_notes": { "type": "array" }
+  }
+}

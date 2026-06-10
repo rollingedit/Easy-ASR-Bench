@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rollingedit.github.io/Easy-ASR-Bench/schemas/results.v1.schema.json",
+  "title": "Easy ASR Bench Results v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "app_version",
+    "created_local",
+    "source",
+    "environment",
+    "dependency_versions",
+    "adapter_versions",
+    "chunk_plan",
+    "selected_models",
+    "runs",
+    "unsupported_models",
+    "pairwise_differences",
+    "runtime_rankings",
+    "errors"
+  ],
+  "properties": {
+    "schema": { "const": "easy_asr_bench.results.v1" },
+    "app_version": { "type": "string" },
+    "created_local": { "type": "string" },
+    "source": {
+      "type": "object",
+      "required": ["path", "name", "sha256", "duration_seconds"],
+      "properties": {
+        "path": { "type": "string" },
+        "name": { "type": "string" },
+        "sha256": { "type": "string" },
+        "duration_seconds": { "type": "number" }
+      }
+    },
+    "chunk_plan": { "$ref": "chunk_plan.v1.schema.json" },
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["model", "transcript_chunks", "metrics", "errors"],
+        "properties": {
+          "model": {
+            "type": "object",
+            "required": ["candidate_id", "display_name", "adapter_name"]
+          },
+          "transcript_chunks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["chunk_id", "start_seconds", "end_seconds", "text"]
+            }
+          },
+          "metrics": {
+            "type": "object",
+            "required": ["provider", "peak_process_memory_mb", "peak_vram_mb", "vram_measurement_source"]
+          },
+          "errors": {
+            "type": "array",
+            "items": { "$ref": "run_error.v1.schema.json" }
+          }
+        }
+      }
+    },
+    "runtime_rankings": {
+      "type": "object",
+      "required": ["schema", "rows"],
+      "properties": {
+        "schema": { "const": "easy_asr_bench.runtime_rankings.v1" },
+        "rows": { "type": "array" }
+      }
+    }
+  }
+}

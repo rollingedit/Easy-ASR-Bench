@@ -69,6 +69,8 @@ def normalize_run_error(error, candidate) -> dict | str:
         "status": "chunk_failed",
         "stage": "chunk_inference",
         "chunk_id": chunk_id,
+        "start_seconds": 0.0,
+        "end_seconds": 0.0,
         "model_id": candidate.candidate_id,
         "model_name": candidate.display_name,
         "model_path": str(candidate.path),
@@ -282,6 +284,7 @@ def build_failed_file_results(
             for candidate in unsupported_models or []
         ],
         "pairwise_differences": {},
+        "runtime_rankings": runtime_rankings({"runs": []}),
         "errors": [error],
     }
     schema_errors = validate_results_schema(results)

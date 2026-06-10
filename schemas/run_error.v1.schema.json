@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rollingedit.github.io/Easy-ASR-Bench/schemas/run_error.v1.schema.json",
+  "title": "Easy ASR Bench Run Error v1",
+  "oneOf": [
+    { "type": "string" },
+    {
+      "type": "object",
+      "required": ["status", "stage", "message"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "chunk_failed",
+            "model_failed",
+            "failed_before_model_run",
+            "dependency_failed",
+            "unsupported"
+          ]
+        },
+        "stage": { "type": "string" },
+        "message": { "type": "string" },
+        "chunk_id": { "type": "string" },
+        "start_seconds": { "type": "number" },
+        "end_seconds": { "type": "number" },
+        "model_id": { "type": "string" },
+        "model_name": { "type": "string" },
+        "adapter_name": { "type": "string" },
+        "error_type": { "type": "string" }
+      }
+    }
+  ]
+}

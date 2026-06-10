@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rollingedit.github.io/Easy-ASR-Bench/schemas/chunk_plan.v1.schema.json",
+  "title": "Easy ASR Bench Chunk Plan v1",
+  "type": "object",
+  "required": ["sample_rate", "source_audio_seconds", "chunks"],
+  "properties": {
+    "sample_rate": { "type": "integer" },
+    "source_audio_seconds": { "type": "number" },
+    "chunks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["chunk_id", "index", "start_seconds", "end_seconds"],
+        "properties": {
+          "chunk_id": { "type": "string" },
+          "index": { "type": "integer" },
+          "start_seconds": { "type": "number" },
+          "end_seconds": { "type": "number" },
+          "start_timestamp": { "type": "string" },
+          "end_timestamp": { "type": "string" },
+          "cut_reason": { "type": "string" },
+          "rms_db": { "type": ["number", "null"] }
+        }
+      }
+    }
+  }
+}
