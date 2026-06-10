@@ -17,6 +17,15 @@ def batch_resume_path(config: dict) -> Path:
     return logs / "batch_resume_manifest.json"
 
 
+def report_output_is_done(output_path: Path) -> bool:
+    results_path = output_path / "results.json"
+    try:
+        results = json.loads(results_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return not (results.get("errors") and not results.get("runs"))
+
+
 def batch_signature(config: dict, selected: list[ModelCandidate], reference_llm: ModelCandidate | None = None) -> str:
     relevant_config = {
         "runtime": config.get("runtime", {}),
@@ -56,7 +65,7 @@ class BatchResumeManifest:
             and pair.get("candidate_id") in wanted
             and pair.get("status") == "done"
             and pair.get("output_path")
-            and (Path(str(pair.get("output_path"))) / "results.json").exists()
+            and report_output_is_done(Path(str(pair.get("output_path"))))
         ]
         if {pair.get("candidate_id") for pair in matched} != wanted:
             return ""

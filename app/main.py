@@ -1139,7 +1139,7 @@ def output_status(output_path: Path | None) -> str:
     try:
         results = json.loads(results_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return "done"
+        return "failed"
     if results.get("errors") and not results.get("runs"):
         return "failed"
     return "done"

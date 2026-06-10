@@ -55,6 +55,26 @@ def test_batch_resume_manifest_invalidates_stale_input_or_config(tmp_path: Path)
     assert manifest.completed_output_for(source, selected, signature) == ""
 
 
+def test_batch_resume_manifest_does_not_resume_corrupt_or_failed_reports(tmp_path: Path):
+    source = tmp_path / "audio.wav"
+    source.write_bytes(b"audio")
+    selected = [candidate("one", tmp_path)]
+    signature = batch_signature({"runtime": {"provider": "cpu"}}, selected)
+    manifest = BatchResumeManifest(tmp_path / "Logs" / "batch_resume_manifest.json")
+
+    corrupt = tmp_path / "Output" / "corrupt"
+    corrupt.mkdir(parents=True)
+    (corrupt / "results.json").write_text("{not json", encoding="utf-8")
+    manifest.record_file(source, selected, signature, corrupt, "done")
+    assert manifest.completed_output_for(source, selected, signature) == ""
+
+    failed = tmp_path / "Output" / "failed"
+    failed.mkdir(parents=True)
+    (failed / "results.json").write_text('{"runs":[],"errors":[{"status":"failed_before_model_run"}]}', encoding="utf-8")
+    manifest.record_file(source, selected, signature, failed, "done")
+    assert manifest.completed_output_for(source, selected, signature) == ""
+
+
 def args_for(tmp_path: Path) -> Namespace:
     return Namespace(
         paths=[str(tmp_path / "a.wav"), str(tmp_path / "b.wav")],

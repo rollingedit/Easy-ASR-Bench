@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Sequence
 
-from .base import ChunkTranscript, ModelCandidate, ModelRunResult
+from .base import ChunkTranscript, ModelCandidate, ModelRunResult, chunk_failure_error
 from ..benchmark import process_memory_mb
 from ..precision_detector import normalize_precision_label
 from ..runtime_plan import resolve_runtime_plan
@@ -108,7 +108,7 @@ class FasterWhisperASRAdapter:
         return probe_faster_whisper_load(candidate.path, device, effective_compute_type)
 
     def transcribe_chunks(self, chunks: Sequence, chunk_metadata: list[dict]) -> ModelRunResult:
-        errors: list[str] = []
+        errors: list = []
         out: list[ChunkTranscript] = []
         inference_seconds = 0.0
         peak_ram = process_memory_mb()
@@ -119,9 +119,9 @@ class FasterWhisperASRAdapter:
                 text = " ".join(segment.text.strip() for segment in segments).strip()
                 raw = {"language": getattr(info, "language", None), "language_probability": getattr(info, "language_probability", None)}
             except Exception as exc:
-                text = f"[ERROR: chunk failed: {exc}]"
+                text = ""
                 raw = {"error": str(exc)}
-                errors.append(f"{metadata['chunk_id']}: {exc}")
+                errors.append(chunk_failure_error(self.candidate, metadata, exc))
             inference_seconds += time.perf_counter() - started
             peak_ram = max(peak_ram, process_memory_mb())
             out.append(ChunkTranscript(str(metadata["chunk_id"]), float(metadata["start_seconds"]), float(metadata["end_seconds"]), text, raw))

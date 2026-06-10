@@ -75,3 +75,21 @@ def test_write_all_reports_publishes_only_after_required_files_exist(tmp_path):
     assert set(results_writer.REQUIRED_REPORT_FILES) <= {path.name for path in output.iterdir() if path.is_file()}
     assert not list(tmp_path.glob(".*.partial"))
     assert json.loads((output / "results.json").read_text(encoding="utf-8"))["source"]["name"] == "sample.wav"
+
+
+def test_structured_chunk_failures_do_not_render_as_transcript_markers():
+    results = minimal_results()
+    results["runs"] = [
+        {
+            "model": {"candidate_id": "model", "display_name": "Model", "backend": "fixture", "precision": "fp32"},
+            "transcript_chunks": [{"chunk_id": "0001", "start_seconds": 0.0, "end_seconds": 1.0, "text": "", "raw": {"error": "boom"}}],
+            "metrics": {"audio_seconds_per_wall_second": 1.0, "peak_process_memory_mb": 10, "peak_vram_mb": None, "vram_measurement_source": "unavailable"},
+            "errors": [{"status": "chunk_failed", "stage": "chunk_inference", "chunk_id": "0001", "message": "boom"}],
+        }
+    ]
+
+    text = results_writer.render_text_report(results)
+    html = results_writer.build_html_report(results)
+
+    assert "[ERROR: chunk failed" not in text
+    assert "[ERROR: chunk failed" not in html

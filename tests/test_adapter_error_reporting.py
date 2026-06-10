@@ -43,8 +43,10 @@ def test_granite_ar_chunk_errors_are_reported():
 
     result = adapter.transcribe_chunks(chunks, metadata)
 
-    assert result.errors == ["chunk-0: chunk boom"]
-    assert "chunk boom" in result.transcript_chunks[0].text
+    assert result.errors[0]["status"] == "chunk_failed"
+    assert result.errors[0]["chunk_id"] == "chunk-0"
+    assert result.errors[0]["message"] == "chunk boom"
+    assert result.transcript_chunks[0].text == ""
 
 
 def test_granite_nar_chunk_errors_are_reported():
@@ -55,5 +57,7 @@ def test_granite_nar_chunk_errors_are_reported():
 
     result = adapter.transcribe_chunks(chunks, metadata)
 
-    assert result.errors == ["chunk-0: chunk boom"]
-    assert "chunk boom" in result.transcript_chunks[0].text
+    assert result.errors[0]["status"] == "chunk_failed"
+    assert result.errors[0]["chunk_id"] == "chunk-0"
+    assert result.errors[0]["message"] == "chunk boom"
+    assert result.transcript_chunks[0].text == ""

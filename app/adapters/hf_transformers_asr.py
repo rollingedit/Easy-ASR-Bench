@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from typing import Sequence
 
-from .base import ChunkTranscript, ModelCandidate, ModelRunResult
+from .base import ChunkTranscript, ModelCandidate, ModelRunResult, chunk_failure_error
 from ..benchmark import process_memory_mb
 from ..precision_detector import detect_safetensors_folder_precision, indexed_safetensor_missing_files
 from ..runtime_plan import resolve_runtime_plan
@@ -163,7 +163,7 @@ class HFTransformersASRAdapter:
         if self.pipe is None or self.candidate is None:
             raise RuntimeError("Adapter is not loaded")
         transcript_chunks: list[ChunkTranscript] = []
-        errors: list[str] = []
+        errors: list = []
         inference_seconds = 0.0
         peak_ram = process_memory_mb()
         for chunk, metadata in zip(chunks, chunk_metadata):
@@ -172,8 +172,8 @@ class HFTransformersASRAdapter:
                 result = self.pipe({"array": chunk.samples, "sampling_rate": 16000})
                 text = result.get("text", "") if isinstance(result, dict) else str(result)
             except Exception as exc:
-                text = f"[ERROR: chunk failed: {exc}]"
-                errors.append(f"{metadata['chunk_id']}: {exc}")
+                text = ""
+                errors.append(chunk_failure_error(self.candidate, metadata, exc))
             inference_seconds += time.perf_counter() - started
             peak_ram = max(peak_ram, process_memory_mb())
             transcript_chunks.append(

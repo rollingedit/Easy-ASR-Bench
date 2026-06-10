@@ -44,6 +44,21 @@ class ModelRunResult:
     errors: list[str | dict[str, Any]] = field(default_factory=list)
 
 
+def chunk_failure_error(candidate: ModelCandidate | None, metadata: dict, exc: Exception) -> dict[str, Any]:
+    return {
+        "status": "chunk_failed",
+        "stage": "chunk_inference",
+        "chunk_id": str(metadata.get("chunk_id", "")),
+        "start_seconds": float(metadata.get("start_seconds", 0.0)),
+        "end_seconds": float(metadata.get("end_seconds", 0.0)),
+        "model_id": candidate.candidate_id if candidate else "",
+        "model_name": candidate.display_name if candidate else "",
+        "adapter_name": candidate.adapter_name if candidate else "",
+        "error_type": exc.__class__.__name__,
+        "message": str(exc) or exc.__class__.__name__,
+    }
+
+
 class ASRAdapter(Protocol):
     name: str
 

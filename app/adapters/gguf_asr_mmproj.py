@@ -12,7 +12,7 @@ from typing import Sequence
 
 import soundfile as sf
 
-from .base import ChunkTranscript, ModelCandidate, ModelRunResult
+from .base import ChunkTranscript, ModelCandidate, ModelRunResult, chunk_failure_error
 from ..benchmark import process_memory_mb
 from ..precision_detector import detect_from_path
 from ..runtime_plan import resolve_runtime_plan
@@ -100,7 +100,7 @@ class GGUFASRMMProjAdapter:
         if self.candidate is None or self.model is None:
             raise RuntimeError("Adapter is not loaded")
         out: list[ChunkTranscript] = []
-        errors: list[str] = []
+        errors: list = []
         inference_seconds = 0.0
         peak_ram = process_memory_mb()
         with tempfile.TemporaryDirectory(prefix="easy-asr-gguf-") as temp:
@@ -112,8 +112,8 @@ class GGUFASRMMProjAdapter:
                     sf.write(audio_path, chunk.samples, 16000)
                     text = self._transcribe_audio(audio_path)
                 except Exception as exc:
-                    text = f"[ERROR: chunk failed: {exc}]"
-                    errors.append(f"{metadata['chunk_id']}: {exc}")
+                    text = ""
+                    errors.append(chunk_failure_error(self.candidate, metadata, exc))
                 inference_seconds += time.perf_counter() - started
                 peak_ram = max(peak_ram, process_memory_mb())
                 out.append(ChunkTranscript(str(metadata["chunk_id"]), float(metadata["start_seconds"]), float(metadata["end_seconds"]), text.strip()))

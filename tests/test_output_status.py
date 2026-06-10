@@ -23,3 +23,26 @@ def test_output_status_marks_model_error_report_done(tmp_path):
     )
 
     assert output_status(report) == "done"
+
+
+def test_output_status_marks_missing_results_failed(tmp_path):
+    report = tmp_path / "report"
+    report.mkdir()
+
+    assert output_status(report) == "failed"
+
+
+def test_output_status_marks_empty_results_failed(tmp_path):
+    report = tmp_path / "report"
+    report.mkdir()
+    (report / "results.json").write_text("", encoding="utf-8")
+
+    assert output_status(report) == "failed"
+
+
+def test_output_status_marks_corrupt_results_failed(tmp_path):
+    report = tmp_path / "report"
+    report.mkdir()
+    (report / "results.json").write_text("{not json", encoding="utf-8")
+
+    assert output_status(report) == "failed"

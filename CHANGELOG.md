@@ -5,6 +5,7 @@
 - Hardened installer update and repair rollback around preserved user data. Existing `Models`, `Input`, `Output`, `Logs`, `Cache`, `Temp`, and `config.json` are now stashed separately from the staged app until local setup and installed validation succeed, and repair failures restore preserved data back into the previous install instead of leaving it in a directory that may be deleted.
 - Made per-file report output directories collision-proof and directory-atomic. Report IDs now include microsecond precision plus a short source identity hash, same-ID collisions receive a bounded counter suffix, report files are staged under a hidden partial directory, and the final report folder is published only after required artifacts exist.
 - Changed audio preparation to plan chunks from the normalized WAV with bounded reads instead of loading the full WAV into memory. Chunks now keep source offsets and materialize sample arrays lazily only when an adapter transcribes that chunk.
+- Fixed resume/status handling and chunk-failure reporting. Missing, empty, corrupt, or failed `results.json` files now fail closed instead of being treated as complete, batch resume verifies recorded reports before skipping, and adapter chunk failures now produce structured `chunk_failed` errors with empty transcript text instead of inserting error markers into transcripts.
 
 ## v0.4.0 candidate
 

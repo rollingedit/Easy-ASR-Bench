@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from typing import Sequence
 
-from .base import ChunkTranscript, ModelCandidate, ModelRunResult
+from .base import ChunkTranscript, ModelCandidate, ModelRunResult, chunk_failure_error
 from ..benchmark import process_memory_mb
 from ..precision_detector import normalize_precision_label
 
@@ -102,7 +102,7 @@ class GenericOnnxManifestAdapter:
         blank = int(decoding.get("blank_token_id", 0))
         vocab = load_vocab(self.candidate.path, decoding)
         transcript_chunks: list[ChunkTranscript] = []
-        errors: list[str] = []
+        errors: list = []
         inference_seconds = 0.0
         peak_ram = process_memory_mb()
         for chunk, metadata in zip(chunks, chunk_metadata):
@@ -115,8 +115,8 @@ class GenericOnnxManifestAdapter:
                 ids = greedy_ctc_ids(logits, blank)
                 text = decode_ids(ids, vocab)
             except Exception as exc:
-                text = f"[ERROR: chunk failed: {exc}]"
-                errors.append(f"{metadata['chunk_id']}: {exc}")
+                text = ""
+                errors.append(chunk_failure_error(self.candidate, metadata, exc))
             inference_seconds += time.perf_counter() - started
             peak_ram = max(peak_ram, process_memory_mb())
             transcript_chunks.append(ChunkTranscript(str(metadata["chunk_id"]), float(metadata["start_seconds"]), float(metadata["end_seconds"]), text))
