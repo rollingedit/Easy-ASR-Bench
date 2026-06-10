@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
+from subprocess import run as _subprocess_run
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -55,8 +56,8 @@ def environment_summary() -> dict:
 
 def git_state(root: Path = ROOT) -> dict:
     try:
-        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, text=True, capture_output=True, check=True).stdout.strip()
-        status = subprocess.run(["git", "status", "--porcelain"], cwd=root, text=True, capture_output=True, check=True).stdout
+        commit = _subprocess_run(["git", "rev-parse", "HEAD"], cwd=root, text=True, capture_output=True, check=True).stdout.strip()
+        status = _subprocess_run(["git", "status", "--porcelain"], cwd=root, text=True, capture_output=True, check=True).stdout
         return {
             "execution_git_commit": commit,
             "execution_git_dirty": bool(status.strip()),

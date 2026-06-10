@@ -64,6 +64,7 @@
 - Revalidated the v0.4.0 source/package gate on a Windows validation host with Python 3.12: release-file validation, physical-file validation, compileall, local setup dry-run, JSON setup dry-run, v0.4.0 ZIP build/metadata validation, ZIP physical validation, and the full pytest suite all passed (`597 passed`).
 - Bumped the active validation/release line to `v0.4.0`, extended `scripts/bump_version.py` so future bumps update installer metadata, checksum ZIP names, Sandbox release-smoke scripts, installer runtime rows, and release verification docs, then regenerated and validated the local `Easy-ASR-Bench-v0.4.0-win.zip` package metadata.
 - Fixed a syntax error in `qa/run_real_tiny_model_smoke.py` that prevented release validators from parsing the real faster-whisper smoke runner on the v0.4 validation machine; source, physical-file, and compile gates now pass after installing the validator's `PyYAML` dependency.
+- Stabilized the v0.4.0 validation harness after the security-audit hardening pass: runtime-matrix Git evidence collection now avoids row-local monkeypatch leakage, the dependency-accepted failure-isolation row exercises the consolidated batch dependency prompt, and the full pytest suite passed with `657 passed`.
 
 ## v0.3.9 candidate
 

@@ -197,12 +197,16 @@ def _dependency_accept(row_id: str, evidence_dir: Path) -> dict:
 
     original_adapter_for = main.adapter_for
     original_confirmation = main._dependency_install_confirmation
+    original_batch_confirmation = main._dependency_install_batch_confirmation
     original_missing = dependency_manager.missing_modules_for_config
     original_install = dependency_manager.install_group_for_config
     try:
         main.adapter_for = lambda candidate: _FakeAdapter()
         main._dependency_install_confirmation = lambda group, command: (
             confirmation_prompts.append({"group": group, "command": command}) or "install"
+        )
+        main._dependency_install_batch_confirmation = lambda groups, commands=None: (
+            confirmation_prompts.extend({"group": group, "command": (commands or {}).get(group, "")} for group in groups) or "install"
         )
 
         def fake_missing(group: str, config: dict) -> list[str]:
@@ -230,6 +234,7 @@ def _dependency_accept(row_id: str, evidence_dir: Path) -> dict:
     finally:
         main.adapter_for = original_adapter_for
         main._dependency_install_confirmation = original_confirmation
+        main._dependency_install_batch_confirmation = original_batch_confirmation
         dependency_manager.missing_modules_for_config = original_missing
         dependency_manager.install_group_for_config = original_install
 
